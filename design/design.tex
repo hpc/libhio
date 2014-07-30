@@ -1,0 +1,76 @@
+\documentclass{article}
+\usepackage{ragged2e}
+\usepackage{tikz} 
+
+% begin tikz stuff -- change me later
+\usetikzlibrary{calc,arrows}
+\newdimen\XCoord
+\newdimen\YCoord
+
+\newcommand*{\ExtractCoordinate}[1]{\path (#1);
+  \pgfgetlastxy{\XCoord}{\YCoord};}%
+% ============================= modify these for altered appearence
+\pgfmathsetmacro{\mintime}{0}
+\pgfmathsetmacro{\maxtime}{5}
+\newcommand{\timeunit}{Months}
+\pgfmathtruncatemacro{\timeintervals}{15}
+\pgfmathsetmacro{\scaleitemseparation}{2}
+\pgfmathsetmacro{\timenodewidth}{0.5cm}
+\newcounter{itemnumber}
+\setcounter{itemnumber}{0}
+\newcommand{\lastnode}{n-0}
+% ============================= 
+
+\newcommand{\timeentry}[2]{% time, description
+\stepcounter{itemnumber}
+\node[below right,minimum width=\timenodewidth, text
+  width=\timenodewidth-1mm] (n-\theitemnumber) at (\lastnode.south
+west) {#1};
+\node[right] at (n-\theitemnumber.east) {#2};
+
+\edef\lastnode{n-\theitemnumber}
+
+\expandafter\edef\csname nodetime\theitemnumber \endcsname{#1}
+}
+
+\newcommand{\drawtimeline}{%
+    \ExtractCoordinate{n-\theitemnumber.south}
+    \pgfmathsetmacro{\yposition}{\YCoord/28.452755}
+    \foreach \x in {1,...,\theitemnumber}
+    {
+      \pgfmathsetmacro{\timeposition}{\yposition/(\maxtime-\mintime)*\csname
+        nodetime\x \endcsname}
+        %\node[right] at (0,\timeposition) {\yposition};
+        \draw (0,\timeposition) -- (0.5,\timeposition) --
+        ($(n-\x.west)-(0.5,0)$) -- (n-\x.west);
+    }
+    \foreach \x in {0,...,\timeintervals}
+    {
+      \pgfmathsetmacro{\labelposition}{\yposition/(\maxtime-\mintime)*\x}
+        \node[left] (label-\x) at (-0.2,\labelposition)
+             {\x\ \timeunit};
+        \draw (label-\x.east) -- ++ (0.2,0);
+    }   
+}
+% end tikz stuff
+
+
+\begin{document}
+
+\include{chapters/intro.tex}
+
+\include{chapters/design.tex}
+
+\section{Milestones}
+\label{sec:milestones}
+\begin{tikzpicture}
+\node[inner sep=10] (n-0) at (\scaleitemseparation,0) {};
+\timeentry{2}{Complete initial API design}
+\timeentry{4}{Complete initial prototype using SCR or PFS}
+\timeentry{10}{Complete intial burst-buffer support for Trinity}
+\timeentry{15}{1.0 release of libhio}
+\drawtimeline
+\end{tikzpicture}
+
+
+\end{document}

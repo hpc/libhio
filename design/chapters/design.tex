@@ -1,0 +1,31 @@
+\section{Design}
+\label{sec:design}
+The high-level design goal of libhio is to provide a portable library
+that will hide implementation-specific details of the burst buffer on
+Trinity. The initial release of libhio will provide the following features:
+
+\begin{itemize}
+\item An iterface for querying if a checkpoint is recommended or
+  required. This will provide applications with the ability to
+  optimize their checkpoint frequency for the job size and current
+  machine statistics (failure rates, BB status, etc). Future versions
+  may hook into the resource manager to gather additional information
+  to optimize checkpoint speeds.
+\item Provide high-level APIs to for creating data sets and
+  files. More information on these concepts can be found in
+  \ref{sec:dataset} and \ref{sec:files}.
+\item Provide high-level APIs for reading and writing contiguous and
+  strided data.
+\item Support multiple backends. These backends and their relative
+  priorities will be configurable at run-time by the end
+  user. Backends will include (but not be limited to): SCR
+  (memory-backed), PFS (parallel file system), and BB.
+\item Support transparently falling back on another backend when
+  the requested backend fails. Examples include falling back on the
+  PFS on detection of burst buffer failure.
+\item Provide an interface to provide filesystems hints and
+  configuration options. This interface will ideally include support
+  for both per-file and per-context hints and options.
+\item Provide a flexible configuration interface that to allow libhio
+  options to be set by environment, file, or API calls.
+\end{itemize}
