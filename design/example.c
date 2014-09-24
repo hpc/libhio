@@ -1,3 +1,10 @@
+/* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
+/**
+ * @file example.c
+ * @brief Example usage of libhio
+ *
+ * This file demonstates the usage of libhio.
+ */
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -5,183 +12,155 @@
 
 #include <hio.h>
 
+#define PRINT_AND_EXIT(args...) {                  \
+    /* print out the error */                      \
+    (void) hio_err_print_all (hio_context, args);  \
+    MPI_Finalize ();                               \
+    exit (EXIT_FAILURE)                            \
+}
 
-int main (int argc, char *argv[]) {
-  MPI_Comm comm_world;
-  hio_context_t hio_context;
+hio_context_t hio_context;
+static int my_rank, nranks;
+
+int initialize_hio (MPI_Comm comm) {
   hio_return_t hrc;
-  char *err_string;
-  int rc;
 
-  /* initialize MPI state */
-  rc = MPI_Init (NULL, NULL);
-  if (MPI_SUCCESS != rc) {
-    exit (EXIT_FAILURE);
-  }
+  MPI_Comm_rank (comm, &my_rank);
+  MPI_Comm_size (comm, &nranks);
 
-  /* HIO needs a pointer to a communicator containing all processes that will
-   * participate in the IO. Since MPI_COMM_WORLD may be a #define we need to
-   * store the communicator. */
-  comm_world = MPI_COMM_WORLD;
-
-  /* initialize the hio state using mpi */
-  hrc = hio_init_mpi (&hio_context, &comm_world, "restart.data");
+  /* initialize the hio state using mpi using the file input.deck for configuration */
+  hrc = hio_init_mpi (&hio_context, &comm, "input.deck", "#HIO", "CFL");
   if (HIO_SUCCESS != hrc) {
     /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not initialize HIO context");
-
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
+    (void) hio_err_print_all (hio_context, args);
+    return -1;
   }
 
-  /* parse hio options from a file */
-  hrc = hio_config_parse_file (hio_context, "input.deck", "#HIO.");
-  if (HIO_SUCCESS != hrc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not parse HIO configuration options from input file");
+  return 0;
+}
 
-    hio_fini (&hio_context);
+void finalize_hio (void) {
+  hio_return_t hrc;
 
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
+  hrc = hio_fini (&hio_context);
+  if (HIO_SUCCESS != rc) {
+    PRINT_AND_EXIT("Error encountered when finalizing HIO context");
   }
+}
 
-  /* example of writing out a file per rank.
-   * file will appear on filesystem as restart.data.hio/rank.%d */
-  ret = asprintf (&filename, "step.%d", timestep);
-  if (0 > ret) {
-    (void) hio_fini (&hio_context);
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
+void checkpoint (void *data, size_t size, int timestep) {
+  hio_element_t hio_element;
+  hio_dataset_t hio_set;
+  hio_request_t hio_requests[3], master_request;
+  hio_return_t hrc;
+  int hint;
+
+  hio_should_checkpoint (hio_context, &hint);
+  if (HIO_SCP_NOT_NOW == hint) {
+    return;
   }
 
   /* Open the dataset associated with this timestep. The timestep can be used
    * later to ensure ordering when automatically rolling back to a prior
-   * timestep on data failure. */
-  hrc = hio_set_open (hio_context, &hio_set, filename, timestep, HIO_FLAG_CREAT);
+   * timestep on data failure. Specify that files in this dataset have unique
+   * offset spaces. */
+  hrc = hio_dataset_open (hio_context, &hio_set, "restart", timestep, HIO_FLAG_CREAT | HIO_FLAG_WRONLY,
+                          HIO_SET_FILE_UNIQUE);
   if (HIO_SUCCESS != hrc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not open data set %s", filename);
-    free (filename);
-    MPI_Finalize ();
-    exit (EXIT_FAILURE)
+    PRINT_AND_EXIT("Could not open data set \"restart\"");
   }
 
-  hrc = hio_set_hint (hio_set, "hio_stage_mode", "lazy");
+  /* Set the stage mode on the dataset */
+  hrc = hio_config_set_value (hio_set, "dataset_stage_mode", "lazy");
   if (HIO_SUCCESS != rc) {
     /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not set stage mode hint on HIO file");
+    (void) hio_err_print_last (hio_context, "Could not set stage mode configuration on HIO n-n dataset");
   }
 
-  /* example of writing out a file per rank.
-   * file will appear on filesystem as restart.data.hio/rank.%d */
-  ret = asprintf (&filename, "rank.%d", rank);
-  if (0 > ret) {
-    (void) hio_fini (&hio_context);
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
-  }
-
-  hrc = hio_open (hio_context, &hio_fh, filename, HIO_FLAG_CREAT |
-		  HIO_FLAG_EXCLUSIVE | HIO_FLAG_WRONLY | HIO_FLAG_NONBLOCK, 0644);
+  hrc = hio_config_set_value (hio_set, "dataset_stripe_width", "4096");
   if (HIO_SUCCESS != rc) {
     /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not open %s for writing");
-
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
+    (void) hio_err_print_last (hio_context, "Could not set stripe width configuration on HIO dataset");
   }
-  /* no longer need this */
-  free (filename);
 
-  hrc = hio_set_hint (hio_fh, "hio_stripe_width", "4096");
+  hrc = hio_open (hio_set, &hio_element, "data", HIO_FLAG_CREAT | HIO_FLAG_EXCLUSIVE | HIO_FLAG_WRONLY, 0644);
   if (HIO_SUCCESS != rc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not set stripe width hint on HIO file");
+    PRINT_AND_EXIT("Could not open element \"data\" for writing");
   }
 
-  hrc = hio_file_write (hio_fh, offset, HIO_OFFSET_BEGIN, &size, sizeof (size_t));
-  hrc = hio_file_write_strided (hio_fh, 0, HIO_OFFSET_LAST, data, size,
-                                sizeof (float), 16, size, sizeof (float), 0);
-  hrc = hio_file_write_strided (hio_fh, 0, HIO_OFFSET_LAST, (void *)((intptr_t) data +
-                                sizeof (float)), size, sizeof (int), 16, 0);
+  offset = 0;
+  hrc = hio_write (hio_element, offset, &size, sizeof (size_t));
+  if (hrc > 0) {
+    offset += hrc;
+  }
+
+  hrc = hio_write_strided (hio_element, offset, data, size, sizeof (float), 16);
+  if (hrc > 0) {
+    offset += hrc;
+  }
+
+  hrc = hio_write_strided (hio_element, offset, (void *)((intptr_t) data +
+                           sizeof (float)), size, sizeof (int), 16);
+  if (hrc > 0) {
+    offset += hrc;
+  }
   /* flush all data locally (not really needed here since the close will flush everything) */
-  hrc = hio_flush (hio_fh, HIO_FLUSH_MODE_LOCAL);
+  hrc = hio_flush (hio_element, HIO_FLUSH_MODE_LOCAL);
+  if (HIO_SUCCESS != hrc) {
+    PRINT_AND_EXIT("Error writing to HIO file");
+  }
 
   /* close the file and force all data to be written to the backing store */
-  hrc = hio_close (&hio_fh);
+  hrc = hio_close (&hio_element);
   if (HIO_SUCCESS != rc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Error when closing HIO file");
-
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
+    PRINT_AND_EXIT("Error when closing HIO file");
   }
 
-  /* example of writing out a shared file. file will show up on the
-   * filesystem as restart.data.hio/shared.* with a description at
-   * restart.data.hio/shared.layout.xml */
-  hrc = hio_open (hio_context, hio_set, &hio_fh, "shared", HIO_FLAG_CREAT |
-                  HIO_FLAG_SHARED | HIO_FLAG_WRONLY, 0644);
+  hrc = hio_dataset_close (&hio_set);
   if (HIO_SUCCESS != rc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not open shared for writing");
-
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
+    PRINT_AND_EXIT("Error when closing n-n HIO dataset");
   }
 
-  hrc = hio_set_hint (hio_fh, "hio_stripe_width", "4096");
-  if (HIO_SUCCESS != rc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not set stipe width hint for file");
+  /* Open the dataset associated with this timestep. The timestep can be used
+   * later to ensure ordering when automatically rolling back to a prior
+   * timestep on data failure. Specify that files in this dataset have shared
+   * offset spaces. */
+  hrc = hio_dataset_open (hio_context, &hio_set, "restartShared", timestep, HIO_FLAG_CREAT | HIO_FLAG_WRONLY,
+                          HIO_SET_FILE_SHARED);
+  if (HIO_SUCCESS != hrc) {
+    PRINT_AND_EXIT("Could not open data set \"restartShared\"");
   }
 
-  hrc = hio_set_hint (hio_fh, "hio_write_mode", "no_overlap");
+  /* example of writing out a shared file */
+  hrc = hio_open (hio_set, &hio_element, "shared", HIO_FLAG_CREAT | HIO_FLAG_SHARED | HIO_FLAG_WRONLY, 0644);
   if (HIO_SUCCESS != rc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Could not set write mode hint for file");
+    PRINT_AND_EXIT("Could not open element \"shared\" for writing");
   }
 
   offset = my_rank * sizeof (size_t);
-  hrc = hio_file_write_nb (hio_fh, offset, hio_requests, &size, sizeof (size_t));
+  hrc = hio_write_nb (hio_element, hio_requests, offset, &size, sizeof (size_t));
 
   offset = nranks * sizeof (size_t) + size * sizeof (float) * my_rank;
-  hrc = hio_file_write_strided_nb (hio_fh, offset, hio_requests + 1, data, size,
-                                   sizeof (float), 16, size, sizeof (float), 0);
+  hrc = hio_write_strided_nb (hio_element, hio_requests + 1, offset, data, size,
+                              sizeof (float), 16);
 
   offset = nranks * (sizeof (size_t) + size * sizeof (float)) + my_rank * size * sizeof (int);
-  hrc = hio_file_write_strided_nb (hio_fh, offset, hio_requests + 2, (void *)((intptr_t) data +
-                                   sizeof (float)), size, sizeof (int), 16, 0);
+  hrc = hio_write_strided_nb (hio_element, hio_requests + 2, offset, (void *)((intptr_t) data +
+                              sizeof (float)), size, sizeof (int), 16);
 
   hrc = hio_request_join (hio_requests, 3, &master_request);
 
   hrc = hio_wait (&master_request);
 
-  hrc = hio_close (&hio_fh);
+  hrc = hio_close (&hio_element);
   if (HIO_SUCCESS != rc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Error encountered when closing HIO file");
-
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
+    PRINT_AND_EXIT("Error encountered when closing HIO element");
   }
 
   hrc = hio_set_close (&hio_set);
   if (HIO_SUCCESS != rc) {
-    (void) hio_err_print_last (hio_context, "Error encountered when closing HIO data set");
+    (void) hio_err_print_last (hio_context, "Error encountered when closing HIO dataset");
   }
-
-  hrc = hio_fini (&hio_context);
-  if (HIO_SUCCESS != rc) {
-    /* print out the error */
-    (void) hio_err_print_last (hio_context, "Error encountered when finalizing HIO context");
-
-    MPI_Finalize ();
-    exit (EXIT_FAILURE);
-  }
-
-  MPI_Finalize ();
 
   return EXIT_SUCCESS;
 }
