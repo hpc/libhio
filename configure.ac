@@ -4,7 +4,7 @@
 
 AC_PREREQ([2.69])
 AC_INIT([libhio], [0.1], [hjelmn@lanl.gov])
-AC_CONFIG_SRCDIR([src/context.c])
+AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
