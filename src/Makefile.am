@@ -1,4 +1,3 @@
-subdirs=include
 all: libhio.la
 
 AUTOMAKE_OPTIONS = subdir-objects
