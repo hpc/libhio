@@ -93,7 +93,7 @@ static void hio_context_release (hio_context_t *contextp) {
 
   /* clean up any mpi resources */
 #if HIO_USE_MPI
-  if (context->context_comm) {
+  if (context->context_use_mpi) {
     int rc;
 
     rc = MPI_Comm_free (&context->context_comm);
@@ -266,6 +266,8 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
     hio_context_release(&context);
     return hio_err_mpi (rc);
   }
+
+  context->context_use_mpi = true;
 
   MPI_Comm_rank (context->context_comm, &context->context_rank);
   MPI_Comm_size (context->context_comm, &context->context_size);

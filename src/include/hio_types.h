@@ -88,6 +88,7 @@ struct hio_context_t {
 #if HIO_USE_MPI
   /** internal communicator for this context */
   MPI_Comm            context_comm;
+  bool                context_use_mpi;
 #endif
 
   /** my rank in the context */
@@ -277,9 +278,7 @@ int hioi_manifest_load (hio_dataset_t dataset, const char *path);
 
 static inline bool hioi_context_using_mpi (hio_context_t context) {
 #if HIO_USE_MPI
-  if (context->context_rank >= 0) {
-    return true;
-  }
+  return context->context_use_mpi;
 #endif
 
   return false;
