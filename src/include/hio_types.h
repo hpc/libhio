@@ -16,6 +16,10 @@
 #include "hio_internal.h"
 #include "hio_component.h"
 
+#if defined(HAVE_SYS_TIME_H)
+#include <sys/time.h>
+#endif
+
 /**
  * Simple lists
  */
@@ -60,6 +64,67 @@ typedef struct hio_list_t {
     (head).next->prev = &(item)->member;                      \
     (head).next = &(item)->member;                            \
   } while (0)
+
+struct hio_config_t;
+
+/**
+ * Base of all hio objects
+ */
+struct hio_object_t {
+  hio_object_type_t type;
+
+  /** identifer for this object (context, dataset, or element name) */
+  char             *identifier;
+
+  /** in hio configuration is done per context, dataset, or element.
+   * this part of the object stores all the registered configuration
+   * variables */
+  hio_config_t      configuration;
+};
+
+struct hio_context_t {
+  struct hio_object_t context_object;
+
+#if HIO_USE_MPI
+  /** internal communicator for this context */
+  MPI_Comm            context_comm;
+#endif
+
+  /** my rank in the context */
+  int                 context_rank;
+  /** numner of ranks using this context */
+  int                 context_size;
+
+  /** unreported errors on this context */
+  void               *context_error_stack;
+  /** threading lock */
+  pthread_mutex_t     context_lock;
+  /** comma-separated list of data roots available */
+  char               *context_data_roots;
+  /** expected checkpoint size */
+  uint64_t            context_checkpoint_size;
+  /** print statistics on close */
+  bool                context_print_statistics;
+  /** number of bytes written to this context (local) */
+  uint64_t            context_bytes_written;
+  /** number of bytes read from this context (local) */
+  uint64_t            context_bytes_read;
+  /** context verbosity */
+  uint32_t            context_verbose;
+  /** time of last dataset completion */
+  struct timeval      context_last_checkpoint;
+  /** file configuration for the context */
+  hio_config_kv_t    *context_file_configuration;
+  int                 context_file_configuration_count;
+  int                 context_file_configuration_size;
+
+  /** io modules (one for each data root) */
+  hio_module_t        *context_modules[HIO_MAX_DATA_ROOTS];
+  /** number of data roots */
+  int                  context_module_count;
+  /** current active data root */
+  int                  context_current_module;
+};
 
 struct hio_dataset_t {
   /** allows for type detection */
@@ -112,6 +177,8 @@ struct hio_element_t {
   bool                element_is_open;
 };
 
+/* context functions */
+
 /**
  * Allocate a new dataset object and populate it with common data (internal)
  *
@@ -150,6 +217,8 @@ void hioi_dataset_release (hio_dataset_t *set);
  */
 void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element);
 
+/* element functions */
+
 /**
  * Allocate and setup a new element object
  *
@@ -176,10 +245,47 @@ int hioi_element_add_segment (hio_element_t element, off_t file_offset, uint64_t
 int hioi_element_find_offset (hio_element_t element, uint64_t app_offset0, uint64_t app_offset1,
                               off_t *offset, size_t *length);
 
+/* manifest functions */
+
+/**
+ * @brief Serialize the manifest in the dataset
+ *
+ * @param[in]  dataset   dataset to serialize
+ * @param[out] data      serialized data
+ * @param[out] data_size size of serialized data
+ *
+ * This function serializes the local data associated with the dataset and returns a buffer
+ * containing the serialized data.
+ */
 int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size);
+
+/**
+ * @brief Serialize the manifest in the dataset and save it to the specified file
+ *
+ * @param[in]  dataset   dataset to serialize
+ * @param[in]  path      file to save the manifest into
+ *
+ * This function serializes the local data associated with the dataset and saves it
+ * to the specified file.
+ */
 int hioi_manifest_save (hio_dataset_t dataset, const char *path);
 
 int hioi_manifest_deserialize (hio_dataset_t dataset, unsigned char *data, size_t data_size);
 int hioi_manifest_load (hio_dataset_t dataset, const char *path);
+
+/* context functions */
+
+static inline bool hioi_context_using_mpi (hio_context_t context) {
+#if HIO_USE_MPI
+  if (context->context_rank >= 0) {
+    return true;
+  }
+#endif
+
+  return false;
+}
+
+hio_module_t *hioi_context_select_module (hio_context_t context);
+
 
 #endif /* !defined(HIO_TYPES_H) */

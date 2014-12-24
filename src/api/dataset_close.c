@@ -10,7 +10,6 @@
  */
 
 #include "hio_types.h"
-#include "hio_context.h"
 
 int hio_dataset_close (hio_dataset_t *set) {
   hio_module_t *module = (*set)->dataset_module;

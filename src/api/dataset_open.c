@@ -10,7 +10,6 @@
  */
 
 #include "hio_types.h"
-#include "hio_context.h"
 
 #include <stdlib.h>
 

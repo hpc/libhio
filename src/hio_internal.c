@@ -9,8 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_internal.h"
-#include "hio_context.h"
+#include "hio_types.h"
 
 #include <stdlib.h>
 #include <stdarg.h>

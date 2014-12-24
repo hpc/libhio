@@ -5,11 +5,15 @@ AUTOMAKE_OPTIONS = subdir-objects
 lib_LTLIBRARIES = libhio.la
 noinst_LIBRARIES = libconfig_parser.a
 
+include_HEADERS = include/hio.h
+nodist_include_HEADERS = include/config_parser.h include/hio_internal.h \
+	include/hio_types.h include/hio_config.h include/hio_module.h \
+	include/hio_component.h
+
 libhio_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS)
 libhio_la_LDFLAGS = $(LTLDFLAGS) $(XML_LIBS)
 libhio_la_LIBADD = libconfig_parser.a
-libhio_la_SOURCES = include/context.h include/hio.h context.c \
-	include/hio_component.h hio_component.c hio_config.c \
+libhio_la_SOURCES = hio_context.c hio_component.c hio_config.c \
 	hio_dataset.c hio_internal.c hio_request.c builtin-posix_component.c \
 	hio_manifest.c api/dataset_open.c api/dataset_close.c \
 	api/open.c api/close.c api/write.c api/read.c

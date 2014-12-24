@@ -14,7 +14,7 @@
  * @brief hio context implementation
  */
 
-#include "hio_context.h"
+#include "hio_types.h"
 
 #include <stdlib.h>
 #include <string.h>

@@ -10,7 +10,6 @@
  */
 
 #include "hio_types.h"
-#include "hio_context.h"
 
 int hio_open (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
               hio_flags_t flags) {

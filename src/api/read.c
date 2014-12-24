@@ -10,7 +10,6 @@
  */
 
 #include "hio_types.h"
-#include "hio_context.h"
 
 ssize_t hio_read (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
                   size_t count, size_t size) {

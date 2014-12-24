@@ -10,7 +10,6 @@
  */
 
 #include "hio_types.h"
-#include "hio_context.h"
 
 int hio_close (hio_element_t *element) {
   hio_dataset_t dataset = (*element)->element_dataset;

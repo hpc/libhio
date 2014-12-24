@@ -50,23 +50,6 @@ enum {
   HIO_VERBOSE_MAX        = 100,
 };
 
-struct hio_config_t;
-
-/**
- * Base of all hio objects
- */
-struct hio_object_t {
-  hio_object_type_t type;
-
-  /** identifer for this object (context, dataset, or element name) */
-  char             *identifier;
-
-  /** in hio configuration is done per context, dataset, or element.
-   * this part of the object stores all the registered configuration
-   * variables */
-  hio_config_t      configuration;
-};
-
 /**
  * @brief Push an hio error onto the hio error stack
  *
