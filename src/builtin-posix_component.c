@@ -21,6 +21,7 @@
 #include <string.h>
 #include <errno.h>
 
+#include <dirent.h>
 #include <unistd.h>
 
 #if defined(HAVE_SYS_STAT_H)
@@ -82,6 +83,55 @@ static int builtin_posix_create_dataset_dirs (struct hio_module_t *module, const
   }
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Successfully created dataset directories");
+
+  return HIO_SUCCESS;
+}
+
+int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *name,
+                                       int64_t **set_ids, int *set_id_count) {
+  hio_context_t context = module->context;
+  int num_set_ids = 0, set_id_index = 0;
+  struct dirent *dp;
+  char path[PATH_MAX];
+  DIR *dir;
+
+  *set_ids = NULL;
+  *set_id_count = 0;
+
+  snprintf (path, PATH_MAX, "%s/%s.hio/%s/", module->data_root,
+            context->context_object.identifier, name);
+
+  dir = opendir (path);
+  if (NULL == dir) {
+    return HIO_SUCCESS;
+  }
+
+  while (NULL != (dp = readdir (dir))) {
+    if (dp->d_name[0] != '.') {
+      num_set_ids++;
+    }
+  }
+
+  if (0 == num_set_ids) {
+    closedir (dir);
+    return HIO_SUCCESS;
+  }
+
+  rewinddir (dir);
+
+  *set_ids = calloc (num_set_ids, sizeof (uint64_t));
+  if (NULL == *set_ids) {
+    closedir (dir);
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  while (NULL != (dp = readdir (dir))) {
+    if (dp->d_name[0] != '.') {
+      set_ids[0][set_id_index++] = strtol (dp->d_name, NULL, 0);
+    }
+  }
+
+  *set_id_count = num_set_ids;
 
   return HIO_SUCCESS;
 }
@@ -371,6 +421,8 @@ hio_module_t builtin_posix_module_template = {
 
   .element_flush    = builtin_posix_module_element_flush,
   .element_complete = builtin_posix_module_element_complete,
+
+  .dataset_list     = builtin_posix_module_dataset_list,
 
   .fini             = builtin_posix_module_fini,
 };

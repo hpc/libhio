@@ -70,6 +70,10 @@ typedef int
 (*hio_module_element_close_fn_t) (struct hio_module_t *module,
 				  hio_element_t element_out);
 
+typedef int
+(*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name,
+                                 int64_t **set_ids, int *set_id_count);
+
 /**
  * Finalize a module and release all resources.
  *
@@ -93,6 +97,8 @@ typedef struct hio_module_t {
 
   hio_module_element_flush_fn_t     element_flush;
   hio_module_element_complete_fn_t  element_complete;
+
+  hio_module_dataset_list_fn_t      dataset_list;
 
   hio_module_fini_fn_t              fini;
 

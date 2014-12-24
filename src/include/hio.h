@@ -320,6 +320,12 @@ typedef struct hio_object_t *hio_object_t;
 #define HIO_CONFIG_FILE_DEFAULT (char *) -2
 
 /**
+ * @ingroup API
+ * @brief Highest available dataset id
+ */
+#define HIO_DATASET_ID_LAST (int64_t) -1
+
+/**
  * @ingroup errorhandling
  * @brief Error codes that may be returned by libhio routines
  *
@@ -576,7 +582,8 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  * names on all ranks when calling to hio_open(). This call is collective and must
  * be made by all ranks in the context. There is no restriction on the number
  * of elements opened by any rank. This number is only limited by the resources
- * available.
+ * available. If the special value HIO_DATASET_ID_LAST is specified in {set_id} libhio
+ * will attempt to open an existing dataset with the maximum id.
  *
  * libhio does not currently support opening an existing dataset, id pair with
  * a different mode than it was created with.
