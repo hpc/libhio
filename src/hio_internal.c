@@ -30,7 +30,6 @@ typedef struct hio_error_stack_item_t {
 static hio_error_stack_item_t *hio_error_stack_head = NULL;
 static pthread_mutex_t hio_error_stack_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-
 /**
  * @file Internal hio functions
  */
@@ -142,7 +141,7 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
     return;
   }
 
-  new_item->hrc = hio_err_mpi(hrc);
+  new_item->hrc = hio_err_mpi(mpirc);
 
   /* TODO -- Should probably do somthing smarter here */
   new_item->error_string = malloc (strlen (temp) + 3 + resultlen);

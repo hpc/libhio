@@ -94,9 +94,11 @@ static void hio_context_release (hio_context_t *contextp) {
   /* clean up any mpi resources */
 #if HIO_USE_MPI
   if (context->context_comm) {
+    int rc;
+
     rc = MPI_Comm_free (&context->context_comm);
     if (MPI_SUCCESS != rc) {
-      hio_err_push_mpi (HIO_ERR_OUT_OF_RESOURCE, NULL, NULL, rc, "Error freeing MPI communicator");
+      hio_err_push_mpi (rc, NULL, NULL, "Error freeing MPI communicator");
     }
   }
 #endif
@@ -258,10 +260,9 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 
   comm_in = comm ? *comm : MPI_COMM_WORLD;
 
-  rc = MPI_Comm_dup (comm_in, &contex->context_comm);
+  rc = MPI_Comm_dup (comm_in, &context->context_comm);
   if (NULL == context->context_comm) {
-    hio_err_push_mpi (HIO_ERR_OUT_OF_RESOURCE, context, NULL, rc,
-                      "Error duplicating MPI communicator");
+    hio_err_push_mpi (rc, context, NULL, "Error duplicating MPI communicator");
     hio_context_release(&context);
     return hio_err_mpi (rc);
   }

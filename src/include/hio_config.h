@@ -17,8 +17,13 @@
 #if !defined(HIO_CONFIG_H)
 #define HIO_CONFIG_H
 
-#include "hio.h"
 #include "config.h"
+
+#if HIO_USE_MPI
+#include <mpi.h>
+#endif
+
+#include "hio.h"
 
 #if defined(HAVE_STDINT_H)
 #include <stdint.h>

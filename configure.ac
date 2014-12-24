@@ -30,7 +30,16 @@ AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 
 AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [${CC}])
+
+if test ${MPICC} = "mpicc" ; then
+    hio_use_mpi=1
+else
+    hio_use_mpi=0
+fi
+
 CC=${MPICC}
+
+AC_DEFINE_UNQUOTED([HIO_USE_MPI], [$hio_use_mpi], [Whether to use mpi with hio])
 
 PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
 

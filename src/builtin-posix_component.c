@@ -193,7 +193,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
 #if HIO_USE_MPI
   if (hioi_context_using_mpi (context)) {
-    MPI_Allreduce (&rc, 1, MPI_INT, 0, context->context_comm);
+    MPI_Allreduce (MPI_IN_PLACE, &rc, 1, MPI_INT, MPI_MIN, context->context_comm);
   }
 #endif
 
