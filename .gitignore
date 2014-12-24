@@ -11,6 +11,7 @@ config.*
 *.dylib
 *.o
 *.lo
+*.dSYM
 stamp-h1
 install-sh
 libtool
@@ -27,3 +28,4 @@ missing
 libconfig_parser.a
 libconfig_parser_a-config_parser.c
 config_parser.c
+ylwrap
