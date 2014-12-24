@@ -294,7 +294,7 @@ typedef struct hio_request_t *hio_request_t;
 
 /**
  * @ingroup API
- * @brief hio object
+ * @brief hio object handle
  *
  * This type is used as a placeholder for any hio object including
  * hio_context_t, hio_dataset_t, and hio_element_t.
