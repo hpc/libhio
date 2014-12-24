@@ -6,7 +6,7 @@ lib_LTLIBRARIES = libhio.la
 noinst_LIBRARIES = libconfig_parser.a
 
 include_HEADERS = include/hio.h
-nodist_include_HEADERS = include/config_parser.h include/hio_internal.h \
+noinst_HEADERS = include/config_parser.h include/hio_internal.h \
 	include/hio_types.h include/hio_config.h include/hio_module.h \
 	include/hio_component.h
 
