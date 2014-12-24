@@ -115,7 +115,6 @@ void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element) {
 
 int hioi_element_add_segment (hio_element_t element, off_t file_offset, uint64_t app_offset0,
                               uint64_t app_offset1, size_t segment_length) {
-  hio_dataset_t dataset = element->element_dataset;
   hio_manifest_segment_t *segment = NULL;
 
   if (element->element_segment_list.prev != &element->element_segment_list) {

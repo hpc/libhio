@@ -85,8 +85,8 @@ static int builtin_posix_create_dataset_dirs (struct hio_module_t *module, const
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *name,
-                                       int64_t **set_ids, int *set_id_count) {
+static int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *name,
+                                              int64_t **set_ids, int *set_id_count) {
   hio_context_t context = module->context;
   int num_set_ids = 0, set_id_index = 0;
   struct dirent *dp;
@@ -134,14 +134,12 @@ int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_dataset_open (struct hio_module_t *module,
-				       hio_dataset_t *set_out, const char *name,
-				       int64_t set_id, hio_flags_t flags,
-				       hio_dataset_mode_t mode) {
-  builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
+static int builtin_posix_module_dataset_open (struct hio_module_t *module,
+                                              hio_dataset_t *set_out, const char *name,
+                                              int64_t set_id, hio_flags_t flags,
+                                              hio_dataset_mode_t mode) {
   hio_context_t context = module->context;
   builtin_posix_module_dataset_t *dataset;
-  struct stat statinfo;
   char path[PATH_MAX];
   int rc;
 
@@ -217,7 +215,7 @@ int builtin_posix_module_dataset_open (struct hio_module_t *module,
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_dataset_t dataset) {
+static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_dataset_t dataset) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   hio_context_t context = module->context;
   int rc;
@@ -245,7 +243,7 @@ int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_dataset
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
+static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
   char path[PATH_MAX];
   struct stat statinfo;
   int rc;
@@ -263,9 +261,9 @@ int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_element_open (struct hio_module_t *module, hio_dataset_t dataset,
-				       hio_element_t *element_out, const char *element_name,
-				       hio_flags_t flags) {
+static int builtin_posix_module_element_open (struct hio_module_t *module, hio_dataset_t dataset,
+                                              hio_element_t *element_out, const char *element_name,
+                                              hio_flags_t flags) {
   hio_element_t element;
 
   hioi_list_foreach (element, dataset->dataset_element_list, struct hio_element_t, element_list) {
@@ -291,14 +289,14 @@ int builtin_posix_module_element_open (struct hio_module_t *module, hio_dataset_
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_element_close (struct hio_module_t *module, hio_element_t element) {
+static int builtin_posix_module_element_close (struct hio_module_t *module, hio_element_t element) {
   element->element_is_open = false;
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_element_write_nb (struct hio_module_t *module, hio_element_t element,
-					   hio_request_t *request, off_t offset, void *ptr,
-					   size_t count, size_t size) {
+static int builtin_posix_module_element_write_nb (struct hio_module_t *module, hio_element_t element,
+                                                  hio_request_t *request, off_t offset, void *ptr,
+                                                  size_t count, size_t size) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) element->element_dataset;
   hio_context_t context = posix_dataset->base.dataset_context;
   hio_request_t new_request;
@@ -328,9 +326,9 @@ int builtin_posix_module_element_write_nb (struct hio_module_t *module, hio_elem
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_element_read_nb (struct hio_module_t *module, hio_element_t element,
-					  hio_request_t *request, off_t offset, void *ptr,
-					  size_t count, size_t size) {
+static int builtin_posix_module_element_read_nb (struct hio_module_t *module, hio_element_t element,
+                                                 hio_request_t *request, off_t offset, void *ptr,
+                                                 size_t count, size_t size) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) element->element_dataset;
   size_t bytes_read, bytes_available, bytes_requested = count * size;
   hio_context_t context = posix_dataset->base.dataset_context;
@@ -375,8 +373,8 @@ int builtin_posix_module_element_read_nb (struct hio_module_t *module, hio_eleme
   return rc;
 }
 
-int builtin_posix_module_element_flush (struct hio_module_t *module, hio_element_t element,
-					hio_flush_mode_t mode) {
+static int builtin_posix_module_element_flush (struct hio_module_t *module, hio_element_t element,
+                                               hio_flush_mode_t mode) {
   hio_dataset_t dataset = element->element_dataset;
 
   if (!(dataset->dataset_flags & HIO_FLAG_WRONLY)) {
@@ -386,7 +384,7 @@ int builtin_posix_module_element_flush (struct hio_module_t *module, hio_element
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_element_complete (struct hio_module_t *module, hio_element_t element) {
+static int builtin_posix_module_element_complete (struct hio_module_t *module, hio_element_t element) {
   hio_dataset_t dataset = element->element_dataset;
 
   if (!(dataset->dataset_flags & HIO_FLAG_RDONLY)) {
@@ -396,7 +394,7 @@ int builtin_posix_module_element_complete (struct hio_module_t *module, hio_elem
   return HIO_SUCCESS;
 }
 
-int builtin_posix_module_fini (struct hio_module_t *module) {
+static int builtin_posix_module_fini (struct hio_module_t *module) {
   hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Finalizing posix filesystem module for data root %s",
 	    module->data_root);
 

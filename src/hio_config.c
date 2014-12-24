@@ -25,7 +25,6 @@
 #include <sys/stat.h>
 
 static const char *hio_config_prefix = "HIO_";
-static const int   hio_config_prefix_length = 4;
 
 /**
  * Check if the variable exists in the context.
@@ -162,8 +161,6 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
   char env_name[256];
 
   if (HIO_OBJECT_TYPE_DATASET == object->type) {
-    hio_dataset_t dataset = (hio_dataset_t) object;
-
     /* check for dataset specific variables */
     snprintf (env_name, 256, "%sdataset_%s_%s_%s", hio_config_prefix, context->context_object.identifier,
               object->identifier, var->var_name);
@@ -319,11 +316,9 @@ static int hioi_config_kv_push (hio_context_t context, const char *identifier,
 }
 
 int hioi_config_parse (hio_context_t context, const char *config_file, const char *config_file_prefix) {
-  char *key, *value, *tmp, *lasts, *default_file = NULL, *buffer, *line, *lastl;
-  int prefix_len, data_size, fd, rc;
-  char section[1024];
+  char *key, *value, *default_file = NULL, *buffer, *line, *lastl;
+  int data_size = 0, fd, rc = HIO_SUCCESS;
   struct stat statinfo;
-  FILE *fh;
 
   if (NULL == config_file) {
     /* nothing to do */
@@ -388,13 +383,8 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
   }
 #endif
 
-  if (config_file_prefix) {
-    if (0 == strlen (config_file_prefix)) {
+  if (config_file_prefix && 0 == strlen (config_file_prefix)) {
       config_file_prefix = NULL;
-      prefix_len = 0;
-    } else {
-      prefix_len = strlen (config_file_prefix);
-    }
   }
 
   line = strtok_r (buffer, "\n", &lastl);
@@ -479,7 +469,7 @@ int hio_config_set_value (hio_object_t object, char *variable, char *value) {
 
 int hio_config_get_value (hio_object_t object, char *variable, char **value) {
   hio_config_var_t *var;
-  int config_index, rc;
+  int config_index, rc = HIO_SUCCESS;
 
   config_index = hioi_config_lookup (&object->configuration, variable);
   if (0 > config_index) {

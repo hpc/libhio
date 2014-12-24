@@ -67,7 +67,6 @@ static hio_context_t hio_context_alloc (const char *identifier) {
  */
 static void hio_context_release (hio_context_t *contextp) {
   hio_context_t context = *contextp;
-  int rc;
 
   /* clean up the context mutex */
   pthread_mutex_destroy (&context->context_lock);

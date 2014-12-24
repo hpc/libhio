@@ -51,7 +51,7 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
     module = hioi_context_select_module (context);
     if (NULL == module) {
       hio_err_push (HIO_ERROR, context, NULL, "Could not select hio module");
-      return rc;
+      return HIO_ERR_NOT_FOUND;
     }
   }
 

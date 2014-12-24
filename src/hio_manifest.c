@@ -42,7 +42,6 @@ static void hioi_manifest_set_number (xmlNodePtr node, const xmlChar *name, unsi
 
 static xmlNodePtr hioi_manifest_find_node (xmlNodePtr parent, const xmlChar *name) {
   xmlNodePtr cur;
-  xmlChar *identifier;
 
   cur = parent->xmlChildrenNode;
 
@@ -253,7 +252,7 @@ static int hioi_manifest_parse_segments_1_0 (hio_element_t element, xmlDocPtr xm
 static int hioi_manifest_parse_element_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc,
 					    xmlNodePtr element_node) {
   hio_element_t element;
-  xmlNodePtr segments_node, identifier_node;
+  xmlNodePtr segments_node;
   xmlChar *tmp_string;
   int rc;
 
