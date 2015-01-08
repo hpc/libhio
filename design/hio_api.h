@@ -35,9 +35,10 @@
  * increasing in complexity. libhio is designed to insulate applications from the
  * rapid evolution of IO systems by providing a simple, easy to integrate,
  * POSIX-like interface to provide applications with a smooth transition from parallel
- * file systems (Lustre, Panasas) to future IO architectures. libhio is
- * intended to improve IO of applications by implementing IO best practices once
- * instead of per-application.
+ * file systems (Lustre, Panasas) to future IO architectures. libhio is also
+ * intended to improve the IO performance of applications by implementing IO
+ * best practices in a library instead of requiring implementation in each
+ * application.
  *
  * An additional design goal of libhio is to be easily extensible to new IO
  * architectures, programming models, and higher-level languages. Support for
@@ -87,9 +88,9 @@
  *
  * @section iointerception IO Interception
  *
- * At this time libhio will not provide support for the interception and redirection
+ * At this time libhio does not provide support for the interception and redirection
  * of POSIX IO calls (open, close read, write). We are investigating providing this
- * capability in a future version.
+ * capability in a future release.
  *
  * @section namespace Namespace
  *

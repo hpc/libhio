@@ -169,13 +169,13 @@
        context_base_verbose = 10
    [global]
    # these are also global
-       context_data_roots = BB,PFS:/lscatch1,/lscratch2
+       data_roots = BB,PFS:/lscatch1,/lscratch2
    [context:foo]
    # apply only to context "foo"
-       context_data_roots = PFS:/lscratch1
+       data_roots = PFS:/lscratch1
    [dataset:restart]
    # apply to dataset "restart" in any context
-       dataset_stripe_width = 4M
+       stripe_width = 4M
 @endcode
  *
  * If desired an application can set a prefix for any line parsed by libhio. This allows the
@@ -183,11 +183,11 @@
  *
  * Example (Prefix HIO): @code
    HIO [global]
-   HIO     context_data_roots = BB,PFS:/lscatch1,/lscratch2
+   HIO     data_roots = BB,PFS:/lscatch1,/lscratch2
    HIO [context:foo]
-   HIO     context_data_roots = PFS:/lscratch1
+   HIO     data_roots = PFS:/lscratch1
    HIO [dataset:restart]
-   HIO     dataset_stripe_width = 4M
+   HIO     stripe_width = 4M
 @endcode
  *
  * Any characters appearing after a # character are treated as comments and
@@ -214,26 +214,26 @@
  *
  * @subsubsection subsubsec_configuration_context Context Specific Variables
  *
- * - @b context_data_roots - List of data roots to use for this context. This is a comma-delimited
+ * - @b data_roots - List of data roots to use for this context. This is a comma-delimited
  *   list including any of the following: BB (burst buffer), or PFS:path (parallel file
  *   system).
  *
- * - @b context_checkpoint_size - Expected size of checkpoint data. This is used to help libhio determine the
+ * - @b checkpoint_size - Expected size of checkpoint data. This is used to help libhio determine the
  *   appropriate checkpoint interval for the job.
  *
- * - @b context_print_statistics - Print IO statistics when hio_fini() is called.
+ * - @b print_statistics - Print IO statistics when hio_fini() is called.
  *
- * - @b context_base_verbose - Verbosity level of libhio (0-100). The default is a verbosity level of 0
+ * - @b context_verbose - Verbosity level of libhio (0-100). The default is a verbosity level of 0
  *   which outputs errors only from libhio. Higher levels will output more and more detailed
  *   debugging information.
  *
  * @subsubsection subsubsec_configuration_dataset Dataset Specific Variables
  *
- * - @b dataset_stage_mode - Mode to use for staging files to more permanent data stores (ex: BB \-\> PFS).
+ * - @b stage_mode - Mode to use for staging files to more permanent data stores (ex: BB \-\> PFS).
  *   Available modes: lazy (stage periodically or at end of job), immediate (stage when the dataset
  *   is closed).
  *
- * - @b dataset_stripe_width - Filesystem striping width. Passed to the underlying filesystem if supported.
+ * - @b stripe_width - Filesystem striping width. Passed to the underlying filesystem if supported.
  *
  * @page page_example Examples
  * @section sec_example_c C Example

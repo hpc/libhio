@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -24,7 +24,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-static const char *hio_config_prefix = "HIO_";
+static const char *hio_config_env_prefix = "HIO_";
 
 /**
  * Check if the variable exists in the context.
@@ -162,7 +162,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
 
   if (HIO_OBJECT_TYPE_DATASET == object->type) {
     /* check for dataset specific variables */
-    snprintf (env_name, 256, "%sdataset_%s_%s_%s", hio_config_prefix, context->context_object.identifier,
+    snprintf (env_name, 256, "%sdataset_%s_%s_%s", hio_config_env_prefix, context->context_object.identifier,
               object->identifier, var->var_name);
 
     string_value = getenv (env_name);
@@ -172,7 +172,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
       return hioi_config_set_value_internal (var, string_value);
     }
 
-    snprintf (env_name, 256, "%sdataset_%s_%s", hio_config_prefix, object->identifier, var->var_name);
+    snprintf (env_name, 256, "%sdataset_%s_%s", hio_config_env_prefix, object->identifier, var->var_name);
 
     string_value = getenv (env_name);
     if (NULL != string_value) {
@@ -182,7 +182,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     }
   }
 
-  snprintf (env_name, 256, "%scontext_%s_%s", hio_config_prefix, context->context_object.identifier,
+  snprintf (env_name, 256, "%scontext_%s_%s", hio_config_env_prefix, context->context_object.identifier,
             var->var_name);
 
   string_value = getenv (env_name);
@@ -192,8 +192,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     return hioi_config_set_value_internal (var, string_value);
   }
 
-  snprintf (env_name, 256, "%s%s_%s", hio_config_prefix, context->context_object.identifier,
-            var->var_name);
+  snprintf (env_name, 256, "%s%s", hio_config_env_prefix, var->var_name);
 
   string_value = getenv (env_name);
   if (NULL != string_value) {

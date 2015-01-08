@@ -188,16 +188,16 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
 
   /* data roots can not be changed after a context has been created */
   hioi_config_add (context, &context->context_object, &context->context_data_roots,
-                   "context_data_roots", HIO_CONFIG_TYPE_STRING, NULL,
+                   "data_roots", HIO_CONFIG_TYPE_STRING, NULL,
                    "Comma-separated list of data roots to use with this context",
                    HIO_VAR_FLAG_READONLY);
 
   hioi_config_add (context, &context->context_object, &context->context_checkpoint_size,
-                   "context_checkpoint_size", HIO_CONFIG_TYPE_UINT64, NULL,
+                   "checkpoint_size", HIO_CONFIG_TYPE_UINT64, NULL,
                    "hio hint for expected checkpoint size (default: 0 -- auto)", 0);
 
   hioi_config_add (context, &context->context_object, &context->context_print_statistics,
-                   "context_print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
+                   "print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
                    "to stdout when the context is closed (default: 0)", 0);
 
   if (context->context_verbose > HIO_VERBOSE_MAX) {
