@@ -19,6 +19,6 @@ libhio_la_SOURCES = hio_context.c hio_component.c hio_config.c \
 	api/element_open.c api/element_close.c api/element_write.c \
 	api/element_read.c
 
-libconfig_parser_a_CFLAGS = $(AM_CFLAGS)
+libconfig_parser_a_CFLAGS = $(AM_CFLAGS) -fPIC
 libconfig_parser_a_LFLAGS = --prefix=hioi_config_parser -o libconfig_parser_a-config_parser.c
 libconfig_parser_a_SOURCES = config_parser.l include/config_parser.h
