@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -32,6 +32,10 @@ int hio_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
   hio_dataset_t dataset = element->element_dataset;
   hio_module_t *module = dataset->dataset_module;
   int rc;
+
+  if (NULL == element) {
+    return HIO_ERR_BAD_PARAM;
+  }
 
   rc = module->element_write_nb (module, element, request, offset, ptr,
                                  count, size);
