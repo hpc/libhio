@@ -173,6 +173,12 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
     dataset->base.dataset_backing_file = strdup (path);
   }
 
+#if HIO_USE_MPI
+  if (hioi_context_using_mpi (context)) {
+    MPI_Allreduce (MPI_IN_PLACE, &rc, 1, MPI_INT, MPI_MIN, context->context_comm);
+  }
+#endif
+
   if (HIO_SUCCESS == rc) {
     const char *file_mode;
 
