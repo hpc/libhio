@@ -460,6 +460,7 @@ int hio_config_set_value (hio_object_t object, char *variable, char *value) {
   var = object->configuration.config_var + config_index;
 
   if (HIO_VAR_FLAG_READONLY & var->var_flags) {
+    hio_err_push (HIO_ERR_PERM, NULL, object, "could not set read-only parameter: %s", variable);
     return HIO_ERR_PERM;
   }
 
