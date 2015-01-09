@@ -18,6 +18,10 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
   hio_module_t *module;
   int rc;
 
+  if (NULL == context || NULL == set_out || NULL == name) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
   if (HIO_DATASET_ID_LAST == set_id) {
     hio_module_t *best_module = NULL;
     int64_t highest_id = 0, *set_ids;

@@ -15,6 +15,10 @@ int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const c
                       hio_flags_t flags) {
   hio_module_t *module;
 
+  if (NULL == dataset || NULL == element_out || NULL == element_name) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
   module = dataset->dataset_module;
 
   /* Several things need to be done here:

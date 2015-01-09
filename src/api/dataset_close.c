@@ -15,6 +15,10 @@ int hio_dataset_close (hio_dataset_t *set) {
   hio_module_t *module = (*set)->dataset_module;
   int rc;
 
+  if (NULL == set || NULL == *set) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
   rc = module->dataset_close (module, *set);
 
   hioi_dataset_release (set);
