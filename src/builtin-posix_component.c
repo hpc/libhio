@@ -55,6 +55,10 @@ static int builtin_posix_create_dataset_dirs (struct hio_module_t *module, const
   char path[PATH_MAX];
   int rc;
 
+  if (context->context_rank > 0) {
+    return HIO_SUCCESS;
+  }
+
   snprintf (path, PATH_MAX, "%s/%s.hio", module->data_root,
 	    context->context_object.identifier);
 
@@ -92,10 +96,6 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
   struct dirent *dp;
   char path[PATH_MAX];
   DIR *dir;
-
-  if (context->context_rank > 0) {
-    return HIO_SUCCESS;
-  }
 
   *set_ids = NULL;
   *set_id_count = 0;
