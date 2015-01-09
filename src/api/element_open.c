@@ -11,8 +11,8 @@
 
 #include "hio_types.h"
 
-int hio_open (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
-              hio_flags_t flags) {
+int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
+                      hio_flags_t flags) {
   hio_module_t *module;
 
   module = dataset->dataset_module;

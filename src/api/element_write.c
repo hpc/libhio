@@ -11,13 +11,13 @@
 
 #include "hio_types.h"
 
-ssize_t hio_write (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
+ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
                    size_t count, size_t size) {
   hio_request_t request = NULL;
   ssize_t bytes_transferred;
   int rc;
 
-  rc = hio_write_nb (element, &request, offset, reserved0, ptr, count, size);
+  rc = hio_element_write_nb (element, &request, offset, reserved0, ptr, count, size);
   if (HIO_SUCCESS != rc && NULL == request) {
       return rc;
   }
@@ -27,7 +27,7 @@ ssize_t hio_write (hio_element_t element, off_t offset, unsigned long reserved0,
   return bytes_transferred;
 }
 
-int hio_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
+int hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
                  unsigned long reserved0, void *ptr, size_t count, size_t size) {
   hio_dataset_t dataset = element->element_dataset;
   hio_module_t *module = dataset->dataset_module;
@@ -46,14 +46,14 @@ int hio_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
   return rc;
 }
 
-int hio_flush (hio_element_t element, hio_flush_mode_t mode) {
+int hio_element_flush (hio_element_t element, hio_flush_mode_t mode) {
   hio_dataset_t dataset = element->element_dataset;
   hio_module_t *module = dataset->dataset_module;
 
   return module->element_flush (module, element, mode);
 }
 
-int hio_flush_all (hio_dataset_t dataset, hio_flush_mode_t mode) {
+int hio_dataset_flush (hio_dataset_t dataset, hio_flush_mode_t mode) {
   hio_module_t *module = dataset->dataset_module;
   hio_element_t element;
   int rc;

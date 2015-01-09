@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -579,7 +579,7 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  * This function attempts to open/create an hio dataset. A dataset represents a
  * collection of one or more related elements. For example, a set of elements associated
  * with an n-n IO pattern. In the case of n-n the caller must specify different element
- * names on all ranks when calling to hio_open(). This call is collective and must
+ * names on all ranks when calling to hio_element_open(). This call is collective and must
  * be made by all ranks in the context. There is no restriction on the number
  * of elements opened by any rank. This number is only limited by the resources
  * available. If the special value HIO_DATASET_ID_LAST is specified in {set_id} libhio
@@ -635,12 +635,12 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id);
  * by a single or many files depending on the job size, number of writers, and
  * configuration. On return the element handle can be used even though the element
  * may not be open. If an error occurred during open it may be returned by another
- * call (hio_read, hio_write, etc). This call is not collective and can be called
+ * call (hio_element_read, hio_element_write, etc). This call is not collective and can be called
  * from any rank. Calls to open the same element from multiple ranks is allowed unless
  * exclusive access (see @ref HIO_FLAG_EXCL) is requested.
  */
-int hio_open (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
-              hio_flags_t flags);
+int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
+                      hio_flags_t flags);
 
 /**
  * @ingroup API
@@ -679,7 +679,7 @@ int hio_dataset_construct (hio_dataset_t dataset, const char *destination, int f
  * This function finalizes all outstanding I/O on an open element. On success
  * {hio_element} is set to HIO_ELEMENT_NULL.
  */
-int hio_close (hio_element_t *element);
+int hio_element_close (hio_element_t *element);
 
 /**
  * @ingroup blocking
@@ -699,8 +699,8 @@ int hio_close (hio_element_t *element);
  * longer needed by hio and is free to be modified. Completion of a write
  * does not guarantee the data has been written to the data store.
  */
-ssize_t hio_write (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
-                   size_t count, size_t size);
+ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
+                           size_t count, size_t size);
 
 
 /**
@@ -724,14 +724,14 @@ ssize_t hio_write (hio_element_t element, off_t offset, unsigned long reserved0,
  * {request}. The application is requires to call one of hio_test(), hio_wait(),
  * or hio_join() on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the write
- * will be reported by either hio_flush() or hio_flush_all().
+ * will be reported by either hio_element_flush() or hio_dataset_flush().
  * The hio implementation is free to return HIO_REQUEST_NULL if the write is complete.
  * In the context of writes a request is complete when the buffer specified by
  * {ptr} is free to be modified. Completion of a write request does not guarantee
  * the data has been written.
  */
-int hio_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                  unsigned long reserved0, void *ptr, size_t count, size_t size);
+int hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
+                          unsigned long reserved0, void *ptr, size_t count, size_t size);
 
 /**
  * @ingroup blocking
@@ -753,8 +753,8 @@ int hio_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
  * modified. Completion of a write does not guarantee the data has been
  * written to the data store.
  */
-int hio_write_strided (hio_element_t element, off_t offset, unsigned long reserved0,
-                       void *ptr, size_t count, size_t size, size_t stride);
+int hio_element_write_strided (hio_element_t element, off_t offset, unsigned long reserved0,
+                               void *ptr, size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking
@@ -779,14 +779,14 @@ int hio_write_strided (hio_element_t element, off_t offset, unsigned long reserv
  * {request}. The application is requires to call one of hio_test(), hio_wait(),
  * or hio_join() on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the write
- * will be reported by either hio_flush() or hio_flush_all().
+ * will be reported by either hio_element_flush() or hio_dataset_flush().
  * The hio implementation is free to return HIO_REQUEST_NULL if the write is complete.
  * In the context of writes a request is complete when the buffer specified by
  * {ptr} is free to be modified. Completion of a write request does not guarantee
  * the data has been written.
  */
-int hio_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                          unsigned long reserved0, void *ptr, size_t count, size_t size, size_t stride);
+int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
+                                  unsigned long reserved0, void *ptr, size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking
@@ -807,7 +807,7 @@ int hio_write_strided_nb (hio_element_t element, hio_request_t *request, off_t o
  * This function will return an error code if any write on the specified hio element
  * can not complete.
  */
-int hio_flush (hio_element_t element, hio_flush_mode_t mode);
+int hio_element_flush (hio_element_t element, hio_flush_mode_t mode);
 
 /**
  * @ingroup nonblocking
@@ -828,7 +828,7 @@ int hio_flush (hio_element_t element, hio_flush_mode_t mode);
  * This function will return an error code if any write on the dataset can not
  * complete.
  */
-int hio_flush_all (hio_dataset_t dataset, hio_flush_mode_t mode);
+int hio_dataset_flush (hio_dataset_t dataset, hio_flush_mode_t mode);
 
 /**
  * @ingroup blocking
@@ -848,8 +848,8 @@ int hio_flush_all (hio_dataset_t dataset, hio_flush_mode_t mode);
  * returns when the buffer pointed to by {ptr} contains the requested
  * data or the read failed.
  */
-ssize_t hio_read (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
-                  size_t count, size_t size);
+ssize_t hio_element_read (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
+                          size_t count, size_t size);
 
 /**
  * @ingroup nonblocking
@@ -879,8 +879,8 @@ ssize_t hio_read (hio_element_t element, off_t offset, unsigned long reserved0, 
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
  */
-int hio_read_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                 unsigned long reserved0, void *ptr, size_t count, size_t size);
+int hio_element_read_nb (hio_element_t element, hio_request_t *request, off_t offset,
+                         unsigned long reserved0, void *ptr, size_t count, size_t size);
 
 /**
  * @ingroup blocking
@@ -901,8 +901,8 @@ int hio_read_nb (hio_element_t element, hio_request_t *request, off_t offset,
  * and {stride}. This call returns when the buffer pointed to by {ptr}
  * contains the requested data or the read failed.
  */
-int hio_read_strided (hio_element_t element, off_t offset, unsigned long reserved0,
-                      void *ptr, size_t count, size_t size, size_t stride);
+int hio_element_read_strided (hio_element_t element, off_t offset, unsigned long reserved0,
+                              void *ptr, size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking
@@ -933,8 +933,8 @@ int hio_read_strided (hio_element_t element, off_t offset, unsigned long reserve
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
  */
-int hio_read_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                         unsigned long reserved0, void *ptr, size_t count, size_t size, size_t stride);
+int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
+                                 unsigned long reserved0, void *ptr, size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking
