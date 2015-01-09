@@ -966,7 +966,7 @@ ACTION_HAND(hio_hand) {
       DBG1("Invoking hio_element_write ofs:%lld size:%lld", offset, size);
       rc = hio_element_write (element, offset, 0, wbuf, 1, size);
       VERB2("hio_element_write rc:%d ofs:%lld size:%lld", rc, offset, size);
-      if (HIO_SUCCESS != rc) {
+      if (size != rc) {
         VERB0("hio_element_write failed rc:%d ofs:%lld size:%lld", rc, offset, size);
         hio_err_print_all(context, stderr, "hio_element_write error: ");
       }
