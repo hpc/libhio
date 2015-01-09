@@ -12,7 +12,7 @@ int main (int argc, char *argv[]) {
   hio_element_t element;
   int rc;
 
-  rc = hio_init_single (&context, "/tmp/foo.cfg", "#HIO.", "foo");
+  rc = hio_init_single (&context, argv[1], "#HIO.", "foo");
   if (HIO_SUCCESS != rc) { 
     fprintf (stderr, "Could not initialize hio\n");
     exit (EXIT_FAILURE);

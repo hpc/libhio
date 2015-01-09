@@ -12,6 +12,7 @@ config.*
 *.o
 *.lo
 *.dSYM
+*.x
 stamp-h1
 install-sh
 libtool
