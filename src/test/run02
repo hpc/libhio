@@ -1,7 +1,9 @@
 #! /bin/bash
 . ./run_setup
 
-cmd="v 2 d 1 mi hi ctx_name POSIX:$root hdo dsn_name 22 65 0 d 2 heo el_name 0 20Mi hew 0 12Mi hec hdc hf mf"
+cmdw="v 2 d 1 mi hi ctx_name POSIX:$root hdo dsn_name 22 65 0 d 2 heo el_name 0 20Mi hew 0 12Mi hec hdc hf mf"
+cmdr="v 2 d 1 mi hi ctx_name POSIX:$root hdo dsn_name 22 0  0 d 2 heo el_name 0 20Mi her 0 12Mi hec hdc hf mf"
 
 set -x
-mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmd
+mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmdw
+mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmdr

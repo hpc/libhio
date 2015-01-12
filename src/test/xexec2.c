@@ -970,6 +970,20 @@ ACTION_HAND(hio_hand) {
         hio_err_print_all(context, stderr, "hio_element_write error: ");
       }
     }
+  } else if (!strcmp(action, "her")) {
+    U64 offset = v0.u;
+    U64 size = v1.u;
+    if (!run) {
+      if (size > bufsz) ERRX("her: size > bufsz");
+    } else {
+      DBG1("Invoking hio_element_read ofs:%lld size:%lld", offset, size);
+      rc = hio_element_read (element, offset, 0, rbuf, 1, size);
+      VERB2("hio_element_read rc:%d ofs:%lld size:%lld", rc, offset, size);
+      if (size != rc) {
+        VERB0("hio_element_read failed rc:%d ofs:%lld size:%lld", rc, offset, size);
+        hio_err_print_all(context, stderr, "hio_element_read error: ");
+      }
+    }
   } else if (!strcmp(action, "hec")) {
     if (run) {
       DBG1("Invoking hio_element_close");
