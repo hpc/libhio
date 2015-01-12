@@ -1,10 +1,9 @@
-#! /bin/bash -x
-export DYLD_LIBRARY_PATH=$PWD/../.libs
+#! /bin/bash 
+. ./run_setup
 
-cfg_file="test01.cfg"
-test_dir="$PWD/test_root1"
-echo "#HIO.context_data_roots=POSIX:$PWD/$test_dir" > $cfg_file
-mkdir -p $test_dir
-rm -fR $test_dir/*
+cfg_file="$root/test01.cfg"
+
+set -x
+echo "#HIO.data_roots=POSIX:$root" > $cfg_file
 
 ./test01.x $cfg_file

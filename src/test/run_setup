@@ -1,0 +1,43 @@
+#
+# run_setup - commmon setup for hio test.  
+# Source this file from each test script.
+#
+# Env vars used for input:
+#   HIO_BUILD - location of HIO build tree, defaults to ../..
+#   HIO_ROOT  - location of data root directory for test, defaults to ./.test_root1
+#
+# BASH variables set that can be used by test script:
+#   root - data root for test, created or emptied
+#
+
+# Add .lib dir to library path
+build=${HIO_BUILD:=$PWD/../..}
+libs=$build/src/.libs
+
+if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
+elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
+else echo "run_setup: OSTYPE \"$OSTYPE\" not recognized"; exit; fi
+
+# Set data root and create or clean out directory
+root=${HIO_ROOT:=$PWD/.test_root1}
+if [ -e $root ]; then
+  if [ -d $root ]; then
+    if [ ! -w $root ]; then
+      echo "run_setup: Unable to write test root \"$root\""
+      exit
+    else
+      rm -fR $root/*
+    fi
+  else
+    echo "run_setup: Test root \"$root\" exists and is not a directory"
+    exit
+  fi
+else
+  mkdir -p $root
+fi
+
+echo "run_setup: build: \"$build\""
+echo "run_setup:  libs: \"$libs\""
+echo "run_setup:  root: \"$root\""
+
+# --- end of run_setup ---

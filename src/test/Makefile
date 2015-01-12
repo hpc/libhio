@@ -15,7 +15,7 @@ CC := mpicc
 
 HIO_BASE := ..
 
-CFLAGS := -g -Wall -Werror -std=c99 -I ${HIO_BASE}/include -DMPI -DHIO
+CFLAGS := -g -Wall -Werror -std=c99 -I ${HIO_BASE}/include -DMPI -DHIO -D_XOPEN_SOURCE=600 -D_GNU_SOURCE
 
 LDFLAGS := -g -L${HIO_BASE}/.libs -lhio 
 

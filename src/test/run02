@@ -1,14 +1,7 @@
-#! /bin/bash -x
+#! /bin/bash
+. ./run_setup
 
-#
+cmd="v 2 d 1 mi hi ctx_name POSIX:$root hdo dsn_name 22 65 0 d 2 heo el_name 0 20Mi hew 0 12Mi hec hdc hf mf"
 
-test_dir="$PWD/test_root1"
-cmd="v 2 d 1 mi hi ctx_name POSIX:$test_dir hdo dsn_name 22 65 0 d 2 heo el_name 0 20Mi hew 0 12Mi hec hdc hf mf"
-
-mkdir -p $test_dir
- 
-rm -fR $test_dir/*
-./xexec2.x $cmd
-
-rm -fR $test_dir/*
+set -x
 mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmd
