@@ -891,13 +891,12 @@ ACTION_HAND(hio_hand) {
       DBG2("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
       MPI_Comm myworld = MPI_COMM_WORLD;
       // workaround for read only context_data_root and no default context
-      char * ename;
-      asprintf(&ename, "HIO_context_%s_%s", context_name, root_var); 
+      char ename[255];
+      snprintf(ename, sizeof(ename), "HIO_context_%s_%s", context_name, root_var); 
       DBG2("setenv %s=%s", ename, data_root);
       rc = setenv(ename, data_root, 1);
       DBG2("setenv %s=%s rc:%d", ename, data_root, rc);
       DBG1("getenv(%s) returns \"%s\"", ename, getenv(ename));
-      free(ename); 
       // end workaround
       DBG1("Invoking hio_init_mpi context:%s root:%s", context_name, data_root);
       rc = hio_init_mpi(&context, &myworld, NULL, NULL, context_name);
@@ -966,7 +965,7 @@ ACTION_HAND(hio_hand) {
       DBG1("Invoking hio_element_write ofs:%lld size:%lld", offset, size);
       rc = hio_element_write (element, offset, 0, wbuf, 1, size);
       VERB2("hio_element_write rc:%d ofs:%lld size:%lld", rc, offset, size);
-      if (HIO_SUCCESS != rc) {
+      if (rc != size) {
         VERB0("hio_element_write failed rc:%d ofs:%lld size:%lld", rc, offset, size);
         hio_err_print_all(context, stderr, "hio_element_write error: ");
       }
