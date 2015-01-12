@@ -10,7 +10,7 @@ noinst_HEADERS = include/config_parser.h include/hio_internal.h \
 	include/hio_types.h include/hio_config.h include/hio_module.h \
 	include/hio_component.h
 
-libhio_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS)
+libhio_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS) -std=c99
 libhio_la_LDFLAGS = $(LTLDFLAGS) $(XML_LIBS)
 libhio_la_LIBADD = libconfig_parser.a
 libhio_la_SOURCES = hio_context.c hio_component.c hio_config.c \
