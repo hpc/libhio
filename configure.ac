@@ -45,6 +45,6 @@ PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
 
 # Checks for library functions.
 
-AC_CONFIG_FILES([Makefile design/Makefile src/Makefile])
+AC_CONFIG_FILES([Makefile design/Makefile src/Makefile tests/Makefile])
 
 AC_OUTPUT

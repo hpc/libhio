@@ -13,7 +13,7 @@ int main (int argc, char *argv[]) {
   int rc;
 
   rc = hio_init_single (&context, argv[1], "#HIO.", "foo");
-  if (HIO_SUCCESS != rc) { 
+  if (HIO_SUCCESS != rc) {
     fprintf (stderr, "Could not initialize hio\n");
     exit (EXIT_FAILURE);
   }

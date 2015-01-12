@@ -29,14 +29,14 @@
 //----------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------
-// Features to add: mpi sr swap, file write & read, 
+// Features to add: mpi sr swap, file write & read,
 // flap seq validation, more flexible fr striding
 //----------------------------------------------------------------------------
 
-char * help = 
+char * help =
   "xexec - universal testing executable.  Processes command line arguments\n"
   "        in sequence to control actions.\n"
-  "        Version 0.8.4 " __DATE__ " " __TIME__ "\n" 
+  "        Version 0.8.4 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
   "\n"
@@ -52,20 +52,20 @@ char * help =
   #ifdef MPI
   "  ls <seconds>  like lt, but synchronized via MPI_Bcast from rank 0\n"
   #endif
-  "  le            loop end; loops may be nested up to 16 deep\n"            
+  "  le            loop end; loops may be nested up to 16 deep\n"
   "  o <count>     write <count> lines to stdout\n"
   "  e <count>     write <count> lines to stderr\n"
   "  s <seconds>   sleep for <seconds>\n"
   "  va <bytes>    malloc <bytes> of memory\n"
   "  vt <stride>   touch most recently allocated memory every <stride> bytes\n"
-  "  vf            free most recently allocated memory\n"  
+  "  vf            free most recently allocated memory\n"
   #ifdef MPI
-  "  mi            issue MPI_Init()\n" 
+  "  mi            issue MPI_Init()\n"
   "  msr <size> <stride>\n"
   "                issue MPI_Sendreceive with specified buffer <size> to and\n"
-  "                from ranks <stride> above and below this rank\n"  
-  "  mb            issue MPI_Barrier()\n" 
-  "  mf            issue MPI_Finalize()\n" 
+  "                from ranks <stride> above and below this rank\n"
+  "  mb            issue MPI_Barrier()\n"
+  "  mf            issue MPI_Finalize()\n"
   #endif
   "  fi <size> <count>\n"
   "                Creates <count> blocks of <size> doubles each.  All\n"
@@ -164,25 +164,25 @@ typedef unsigned long long int U64;
   #define DBG1(...) if (debug >= 1) msg(stderr, "Debug: " __VA_ARGS__);
 #else
   #define DBG1(...)
-#endif  
+#endif
 
 #if DBGLEV >= 2
   #define DBG2(...) if (debug >= 2) msg(stderr, "Debug: " __VA_ARGS__);
 #else
   #define DBG2(...)
-#endif  
+#endif
 
 #if DBGLEV >= 3
   #define DBG3(...) if (debug >= 3) msg(stderr, "Debug: " __VA_ARGS__);
 #else
   #define DBG3(...)
-#endif  
+#endif
 
 #if DBGLEV >= 4
   #define DBG4(...) if (debug >= 4) msg(stderr, "Debug: " __VA_ARGS__);
 #else
   #define DBG4(...)
-#endif  
+#endif
 
 #define MAX_VERBOSE 2
 #define VERB0(...) msg(stdout, __VA_ARGS__);
@@ -205,7 +205,7 @@ typedef unsigned long long int U64;
   }
 #endif
 
-// Serialize execution of all MPI ranks              
+// Serialize execution of all MPI ranks
 #ifdef MPI
   #define RANK_SERIALIZE_START                           \
     if (mpi_size > 0 && myrank != 0) {                   \
@@ -237,7 +237,7 @@ void msg(FILE * file, const char * format, ...) {
 
   va_start(args, format);
   msg_len = vsnprintf(msg_buf, sizeof(msg_buf), format, args);
-  va_end(args); 
+  va_end(args);
   fprintf(file, "%s %s%s\n", time_str, id_string, msg_buf);
 }
 
@@ -247,24 +247,24 @@ void msg(FILE * file, const char * format, ...) {
   void timer_start(void) {
     if (clock_gettime(CLOCK_REALTIME, &timer_start_time)) ERRX("clock_gettime() failed: %s", strerror(errno));
   }
-  double timer_end(void) { 
+  double timer_end(void) {
     if (clock_gettime(CLOCK_REALTIME, &timer_end_time)) ERRX("clock_gettime() failed: %s", strerror(errno));
-    return (double)(timer_end_time.tv_sec - timer_start_time.tv_sec) + 
+    return (double)(timer_end_time.tv_sec - timer_start_time.tv_sec) +
              (1E-9 * (double) (timer_end_time.tv_nsec - timer_start_time.tv_nsec));
   }
-#else 
-  // Silly Mac OS doesn't support clock_gettime :-( 
+#else
+  // Silly Mac OS doesn't support clock_gettime :-(
   static struct timeval timer_start_time, timer_end_time;
   void timer_start(void) {
     if (gettimeofday(&timer_start_time, NULL)) ERRX("gettimeofday() failed: %s", strerror(errno));
   }
-  double timer_end(void) { 
+  double timer_end(void) {
     if (gettimeofday(&timer_end_time, NULL)) ERRX("gettimeofday() failed: %s", strerror(errno));
-    return (double)(timer_end_time.tv_sec - timer_start_time.tv_sec) + 
+    return (double)(timer_end_time.tv_sec - timer_start_time.tv_sec) +
              (1E-6 * (double) (timer_end_time.tv_usec - timer_start_time.tv_usec));
   }
 #endif
-  
+
 void get_id() {
   char * p;
   char tmp_id[sizeof(id_string)];
@@ -393,8 +393,8 @@ ACTION_HAND(imbed_hand) {
       add2actv(1, &a);
       a = strtok(NULL, sep);
     }
-   
-    // append remainder of old actc / actv to new 
+
+    // append remainder of old actc / actv to new
     add2actv(old_actc - *pactn - 1, &old_actv[*pactn + 1]);
     free(old_actv);
   } else {
@@ -411,7 +411,7 @@ struct loop_ctl {
   struct timeval start;
   struct timeval end;
 } lctl[MAX_LOOP+1];
-struct loop_ctl * lcur = &lctl[0]; 
+struct loop_ctl * lcur = &lctl[0];
 
 ACTION_HAND(loop_hand) {
   if (!strcmp(action, "lc")) {
@@ -421,7 +421,7 @@ ACTION_HAND(loop_hand) {
       lcur->type = COUNT;
       lcur->count = v0.u;
       lcur->top = *pactn;
-    } 
+    }
   } else if (!strcmp(action, "lt")) {
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
@@ -430,7 +430,7 @@ ACTION_HAND(loop_hand) {
       lcur->top = *pactn;
       if (gettimeofday(&lcur->end, NULL)) ERRX("loop time start: gettimeofday() failed: %s", strerror(errno));
       lcur->end.tv_sec += v0.u;  // Save future time of loop end
-    } 
+    }
   #ifdef MPI
   } else if (!strcmp(action, "ls")) {
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
@@ -442,8 +442,8 @@ ACTION_HAND(loop_hand) {
       if (myrank == 0) {
         if (gettimeofday(&lcur->end, NULL)) ERRX("loop time start: gettimeofday() failed: %s", strerror(errno));
         lcur->end.tv_sec += v0.u;  // Save future time of loop end
-      } 
-    } 
+      }
+    }
   #endif
   } else if (!strcmp(action, "le")) {
     if (lcur <= lctl) ERRX("loop end when no loop active - more loop ends than loop starts");
@@ -481,7 +481,7 @@ ACTION_HAND(loop_hand) {
             time2stop = 1;
           } else {
             VERB1("loop sync rank 0 end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
-          }  
+          }
         }
         MPI_CK(MPI_Bcast(&time2stop, 1, MPI_INT, 0, MPI_COMM_WORLD));
         if (time2stop) {
@@ -499,23 +499,23 @@ ACTION_HAND(loop_hand) {
 }
 
 ACTION_HAND(stdout_hand) {
-  if (run) {  
+  if (run) {
     U64 line;
     for (line = 1; line <= v0.u; line++) {
       // Message padded to exactly 100 bytes long.
       msg(stdout, "action %-4u stdout line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
     }
-  } 
+  }
 }
 
 ACTION_HAND(stderr_hand) {
-  if (run) {  
+  if (run) {
     U64 line;
     for (line = 1; line <= v0.u; line++) {
       // Message padded to exactly 100 bytes long.
       msg(stderr, "action %-4u stderr line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
     }
-  } 
+  }
 }
 
 ACTION_HAND(sleep_hand) {
@@ -530,7 +530,7 @@ ACTION_HAND(mem_hand) {
     size_t size;
     struct memblk * prev;
   };
-  static struct memblk * memptr;  
+  static struct memblk * memptr;
   static int memcount;
 
   DBG1("mem_hand start; action: %s memcount: %d", action, memcount);
@@ -550,7 +550,7 @@ ACTION_HAND(mem_hand) {
         msg(stdout, "Warning, malloc returned NULL");
         memcount--;
       }
-    }     
+    }
   } else if (!strcmp(action, "vt")) { // vt - touch memory
     U64 stride = v0.u;
     if (!run) {
@@ -571,7 +571,7 @@ ACTION_HAND(mem_hand) {
       } else {
         msg(stdout, "Warning, no memory allocation to touch");
       }
-    } 
+    }
   } else if (!strcmp(action, "vf")) { // vf - free memory
     if (!run) {
       if (memcount-- <= 0) ERRX("Free without cooresponding allocate");
@@ -588,7 +588,7 @@ ACTION_HAND(mem_hand) {
       }
     }
   } else ERRX("internal error mem_hand invalid action: %s", action);
-}       
+}
 
 #ifdef MPI
 ACTION_HAND(mpi_hand) {
@@ -604,9 +604,9 @@ static size_t mpi_buf_len;
       int stride = v1.u;
       MPI_Status status;
       if (mpi_buf_len != len) {
-        mpi_sbuf = realloc(mpi_sbuf, len);     
+        mpi_sbuf = realloc(mpi_sbuf, len);
         if (!mpi_sbuf) ERRX("msr realloc %d error: %s", len, strerror(errno));
-        mpi_rbuf = realloc(mpi_rbuf, len);     
+        mpi_rbuf = realloc(mpi_rbuf, len);
         if (!mpi_rbuf) ERRX("msr realloc %d error: %s", len, strerror(errno));
         mpi_buf_len = len;
       }
@@ -633,7 +633,7 @@ ACTION_HAND(flap_hand) {
   U64 i, iv;
 
   if (!strcmp(action, "fi")) {
-    size = v0.u; 
+    size = v0.u;
     count = v1.u;
     DBG1("flapper init starting; size: %llu count: %llu", size, count);
     if (size<2) ERRX("flapper: size must be at least 2");
@@ -644,16 +644,16 @@ ACTION_HAND(flap_hand) {
 
       rc = posix_memalign((void * *)&nums, 4096, N * sizeof(double));
       if (rc) ERRX("flapper: posix_memalign %d doubles failed: %s", N, strerror(rc));
-  
+
       iv = 0;
       for (i=0; i<N; ++i) {
-        if (i%size != 0) { 
+        if (i%size != 0) {
           nums[i] = (double) ++iv;
           DBG4("nums[%d] = %d", i, iv);
         }
       }
 
-    } 
+    }
   } else if (!strcmp(action, "fr")) {
     U64 rep = v0.u;
     U64 stride = v1.u;
@@ -661,13 +661,13 @@ ACTION_HAND(flap_hand) {
     if (!size) ERRX("fr without prior fi");
     if ((count-1)%stride != 0) ERRX("flapper: count-1 must equal a multiple of stride");
     if (rep<1) ERRX("flapper: rep must be at least 1");
-  
+
     if (run) {
       double sum, delta_t, predicted;
-      U64 b, ba, r, d, fp_add_ct, max_val; 
+      U64 b, ba, r, d, fp_add_ct, max_val;
       U64 N = size * count;
       DBG1("flapper run starting; rep: %llu stride: %llu", rep, stride);
-      
+
       max_val = (size-1) * count;
       predicted = (pow((double) max_val, 2.0) + (double) max_val ) / 2 * (double)rep;
       DBG1("v: %d predicted: %f", max_val, predicted);
@@ -692,18 +692,18 @@ ACTION_HAND(flap_hand) {
           for (d=d_first; d<d_lastp1; ++d) {
             sum += nums[d];
             DBG3("val: %f sum: %f", nums[d], sum)
-          }  
+          }
           nums[d_sum] = sum;
         }
-      }  
+      }
 
       sum = 0.0;
       for (d=0; d<count*size; d+=size) {
         sum += nums[d];
-      } 
+      }
 
       delta_t = timer_end();
- 
+
       VERB1("flapper done; predicted: %e sum: %e delta: %e", predicted, sum, sum - predicted);
       VERB1("FP Adds: %llu, time: %f Seconds, MFLAPS: %e", fp_add_ct, delta_t, (double)fp_add_ct / delta_t / 1000000.0);
     }
@@ -759,8 +759,8 @@ ACTION_HAND(heap_hand) {
     }
 
     // Do allocations
-    for (i=0; i<count; ++i) { 
-      
+    for (i=0; i<count; ++i) {
+
       n = random()%blocks;
       if (blk[n].ptr) {
         VERB2("heapx: total: %llu; free %td bytes", total, blk[n].size);
@@ -801,8 +801,8 @@ ACTION_HAND(heap_hand) {
       total += blk[n].size;
       stat[b].count++;
       memset(blk[n].ptr, 0xA5, blk[n].size);
-    } 
-  
+    }
+
     // Clean up remainder
     for (n=0; n<blocks; ++n) {
       if (blk[n].ptr) {
@@ -847,7 +847,7 @@ ACTION_HAND(dl_hand) {
         VERB0("dlopen failed: %s", dlerror());
         dl_num--;
       }
-    }  
+    }
   } else if (!strcmp(action, "dls")) {
     char * symbol = v0.s;
     if (dl_num < 0) ERRX("No currently open dynamic library");
@@ -866,10 +866,10 @@ ACTION_HAND(dl_hand) {
       int rc = dlclose(handle[dl_num]);
       VERB2("dlclose() returns %d", rc);
       if (rc) VERB0("dlclose error: %s", dlerror());
-    } 
+    }
     dl_num--;
   } else ERRX("internal error dl_hand invalid action: %s", action);
-}  
+}
 #endif
 
 
@@ -913,12 +913,12 @@ ACTION_HAND(hio_hand) {
         VERB2("hio_config_get_value rc:%d, var:%s value=\"%s\"", rc, root_var, tmp_str);
         if (HIO_SUCCESS == rc) {
           free(tmp_str);
-        } else {  
+        } else {
           VERB0("hio_config_get_value failed, rc:%d var:%s", rc, root_var);
           hio_err_print_all(context, stderr, "hio_config_get_value error: ");
         }
       }
-    }  
+    }
   } else if (!strcmp(action, "hdo")) {
     char * ds_name = v0.s;
     U64 ds_id = v1.u;
@@ -948,12 +948,12 @@ ACTION_HAND(hio_hand) {
 
       DBG1("Invoking malloc(%d)", bufsz);
       wbuf = malloc(bufsz);
-      VERB2("malloc(%d) returns %p", bufsz, wbuf); 
+      VERB2("malloc(%d) returns %p", bufsz, wbuf);
       if (!wbuf) VERB0("malloc(%d) failed", bufsz);
 
       DBG1("Invoking malloc(%d)", bufsz);
       rbuf = malloc(bufsz);
-      VERB2("malloc(%d) returns %p", bufsz, rbuf); 
+      VERB2("malloc(%d) returns %p", bufsz, rbuf);
       if (!wbuf) VERB0("malloc(%d) failed", bufsz);
     }
   } else if (!strcmp(action, "hew")) {
@@ -1022,7 +1022,7 @@ ACTION_HAND(hio_hand) {
       }
     }
   } else ERRX("internal error hio_hand invalid action: %s", action);
-}  
+}
 #endif
 
 ACTION_HAND(raise_hand) {
@@ -1047,8 +1047,8 @@ enum ptype { UINT, PINT, STR, NONE };
 struct parse {
   char * action;
   enum ptype param[MAX_PARAM];
-  action_hand * handler;  
-} parse[] = { 
+  action_hand * handler;
+} parse[] = {
   {"v",   {UINT, NONE, NONE, NONE, NONE}, verbose_hand},
   {"d",   {UINT, NONE, NONE, NONE, NONE}, debug_hand},
   {"im",  {STR,  NONE, NONE, NONE, NONE}, imbed_hand},
@@ -1102,10 +1102,10 @@ void parse_and_dispatch(int run) {
   pval vals[MAX_PARAM];
 
   verbose = debug = 0;
-  
+
   #ifdef DLFCN
     dl_num = -1;
-  #endif  
+  #endif
 
   while ( ++a < actc ) {
     for (i = 0; i < DIM1(parse); ++i) {
@@ -1154,7 +1154,7 @@ int main(int argc, char * * argv) {
 
   get_id();
 
-  add2actv(argc, argv); // Make initial copy of argv so im works 
+  add2actv(argc, argv); // Make initial copy of argv so im works
 
   // Make two passes through args, first to check, second to run.
   parse_and_dispatch(0);
