@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#include <ctype.h>
 #ifdef DLFCN
 #include <dlfcn.h>
 #endif
@@ -36,7 +37,7 @@
 char * help =
   "xexec - universal testing executable.  Processes command line arguments\n"
   "        in sequence to control actions.\n"
-  "        Version 0.8.4 " __DATE__ " " __TIME__ "\n"
+  "        Version 0.9.0 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
   "\n"
@@ -94,8 +95,9 @@ char * help =
   "  hi  <name> <data_root>  Init hio context\n"
   "  hdo <name> <id> <flags> <mode> Dataset open\n"
   "  heo <name> <flags> Element open\n"
-  "  hew <offset> <size> Element write\n"
-  "  her <offset> <size> Element read\n"
+  "  hxc <0|1>     Enable read data checking\n"
+  "  hew <offset> <size> Element write - if offset negative, auto increment\n"
+  "  her <offset> <size> Element read - if offset negative, auto increment\n"
   "  hec <name> <flags> Element close\n"
   "  hdc           Dataset close\n"
   "  hf            Fini\n"
@@ -127,7 +129,9 @@ char * help =
   #endif
 ;
 
+//----------------------------------------------------------------------------
 // Global variables
+//----------------------------------------------------------------------------
 char id_string[256] = "";
 int id_string_len = 0;
 #ifdef MPI
@@ -138,8 +142,11 @@ int debug = 0;
 int actc = 0;
 char * * actv = NULL;
 typedef unsigned long long int U64;
+typedef   signed long long int I64;
 
+//----------------------------------------------------------------------------
 // Common subroutines and macros
+//----------------------------------------------------------------------------
 #define ERRX(...) {                     \
   msg(stderr, "Error: " __VA_ARGS__);   \
   exit(12);                             \
@@ -295,14 +302,17 @@ void get_id() {
   id_string_len = strlen(id_string);
 }
 
-U64 getU64(char * num, int actn) {
+enum ptype { SINT, UINT, PINT, STR, NONE };
+
+U64 getI64(char * num, enum ptype type, int actn) {
   long long int n;
   char * endptr;
-  DBG3("getU64 num: %s", num);
+  DBG3("getI64 num: %s", num);
   errno = 0;
   n = strtoll(num, &endptr, 0);
   if (errno != 0) ERRX("action %d, invalid integer \"%s\"", actn, num);
-  if (n < 0) ERRX("action %d, negative integer \"%s\"", actn, num);
+  if (type == UINT && n < 0) ERRX("action %d, negative integer \"%s\"", actn, num);
+  if (type == PINT && n <= 0) ERRX("action %d, non-positive integer \"%s\"", actn, num);
   if (*endptr == '\0');
   else if (!strcmp("k",  endptr)) n *= 1000;
   else if (!strcmp("K",  endptr)) n *= 1024;
@@ -317,6 +327,138 @@ U64 getU64(char * num, int actn) {
   else if (!strcmp("Pi", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
   else ERRX("action %d, invalid integer \"%s\"", actn, num);
   return n;
+}
+
+//----------------------------------------------------------------------------
+// hex_dump - dumps size bytes of *data to stdout. Looks like:
+//    [0000] 75 6E 6B 6E 6F 77 6E 20  30 FF 00 00 00 00 39 00 unknown 0.....9.
+//----------------------------------------------------------------------------
+void hex_dump(void *data, int size) {
+    unsigned char *p = data;
+    unsigned char c;
+    int n;
+    char bytestr[4] = {0};
+    char addrstr[10] = {0};
+    char hexstr[ 16*3 + 5] = {0};
+    char hexprev[ 16*3 + 5] = {0};
+    char charstr[16*1 + 5] = {0};
+    int skipped = 0; 
+    for(n=1;n<=size;n++) {
+        if (n%16 == 1) {
+            /* store address for this line */
+            snprintf(addrstr, sizeof(addrstr), "%.4lx", p-(unsigned char *)data);
+        }
+            
+        c = *p;
+        if (isalnum(c) == 0) {
+            c = '.';
+        }
+
+        /* store hex str (for left side) */
+        snprintf(bytestr, sizeof(bytestr), "%02X ", *p);
+        strncat(hexstr, bytestr, sizeof(hexstr)-strlen(hexstr)-1);
+
+        /* store char str (for right side) */
+        snprintf(bytestr, sizeof(bytestr), "%c", c);
+        strncat(charstr, bytestr, sizeof(charstr)-strlen(charstr)-1);
+
+        if(n%16 == 0) { 
+            /* line completed */
+            if (!strcmp(hexstr, hexprev) && n< size) { 
+              skipped++;
+            } else {
+              if (skipped > 0) {
+                printf("        %d identical lines skipped\n", skipped);
+                skipped = 0;
+              }
+              printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
+              strcpy(hexprev, hexstr);
+            } 
+            hexstr[0] = 0;
+            charstr[0] = 0;
+        } else if(n%8 == 0) {
+            /* half line: add whitespaces */
+            strncat(hexstr, "  ", sizeof(hexstr)-strlen(hexstr)-1);
+            strncat(charstr, " ", sizeof(charstr)-strlen(charstr)-1);
+        }
+        p++; /* next byte */
+    }
+
+    if (strlen(hexstr) > 0) {
+        if (skipped > 0) {
+           printf("        %d identical lines skipped\n", skipped);
+           skipped = 0;
+        }
+        /* print rest of buffer if not empty */
+        printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
+    }
+}
+
+//----------------------------------------------------------------------------
+// lfsr_22_byte - bytewise 22 bit linear feedback shift register.
+// Taps at bits 21 & 22 (origin 1) to provide 2^22-1 repeat cycle.
+//----------------------------------------------------------------------------
+static unsigned char lfsr_state[23]; // One extra byte to hold shift out
+
+#define LFSR_22_CYCLE (4 * 1024 * 1024 - 1)
+
+void lfsr_22_byte(unsigned char * p, U64 len) {
+  while (len--) {
+    memmove(lfsr_state+1, lfsr_state, sizeof(lfsr_state) - 1);
+    lfsr_state[0] = lfsr_state[21] ^ lfsr_state[22] ^ 0xFF; 
+    *p++ = lfsr_state[22];
+  }
+}
+
+void lfsr_22_byte_init(void) {
+  // Use a very simp PRNG to initialize lfsr_state
+  int prime = 15485863; // The 1 millionth prime
+  lfsr_state[0] = 0xA5;
+  for (int i = 1; i<sizeof(lfsr_state); ++i) {
+    lfsr_state[i] = (lfsr_state[i-1] * prime) % 256;
+  } 
+
+  // Cycle a few times to mix things up
+  unsigned char t[1000];
+  lfsr_22_byte(t, sizeof(t)); 
+}
+
+void lfsr_test(void) {
+  // A few tests for lfsr properties
+  U64 size = 8 * 1024 * 1024;
+  unsigned char * buf = malloc(size);
+
+  lfsr_22_byte_init();
+
+  printf("lfsr_state:\n");
+  hex_dump(lfsr_state, sizeof(lfsr_state));
+
+  lfsr_22_byte(buf, size);
+
+  printf("buf:\n");
+  hex_dump(buf, 64);
+
+  printf("buf + %d:\n", LFSR_22_CYCLE);
+  hex_dump(buf+LFSR_22_CYCLE, 64);
+
+  #if 0
+  for (int j=0; j<100; ++j) {
+    int sum = 0;
+    for (int i=0; i<100; ++i) {
+      sum += buf[j*1000+i];
+    }
+    printf("sum: %d sum/100: %f\n", sum, sum/100.0);
+  }
+
+  for (int i = 0; i<4*1024*1024; ++i) {
+    if (0 == i%1000) printf("i=%d\n", i);
+    for (int j = i+1; j<4*1024*1024; ++j) {
+      if (!memcmp(buf+i, buf+j, 8)) {
+        printf("match at %d, %d\n", i, j);
+      } 
+     }
+  }
+  #endif
 }
 
 
@@ -334,7 +476,7 @@ typedef union pval {
 typedef ACTION_HAND(action_hand);
 
 //----------------------------------------------------------------------------
-// Action handler functions
+// v, d (verbose, debug) action handlers
 //----------------------------------------------------------------------------
 ACTION_HAND(verbose_hand) {
   verbose = v0.u;
@@ -344,12 +486,20 @@ ACTION_HAND(verbose_hand) {
 
 ACTION_HAND(debug_hand) {
   debug = v0.u;
+
+  if (debug == 5) {
+    lfsr_test(); 
+  }
+
   if (debug > DBGLEV) ERRX("debug level %d > maximum %d."
                             " Rebuild with -DDBGLEV=<n> to increase"
                             " (see comments in source.)", debug, DBGLEV);
   msg(stdout, "Debug message level is now %d; run: %d", debug, run);
 }
 
+//----------------------------------------------------------------------------
+// im (imbed) action handler
+//----------------------------------------------------------------------------
 void add2actv(int n, char * * newact) {
   if (n == 0) return;
   actv = realloc(actv, (actc + n) * sizeof(char *));
@@ -402,6 +552,10 @@ ACTION_HAND(imbed_hand) {
   }
 }
 
+
+//----------------------------------------------------------------------------
+// lc, lt, ls, le (looping) action handlers
+//----------------------------------------------------------------------------
 #define MAX_LOOP 16
 enum looptype {COUNT, TIME, SYNC};
 struct loop_ctl {
@@ -498,6 +652,9 @@ ACTION_HAND(loop_hand) {
   } else ERRX("internal error loop_hand invalid action: %s", action);
 }
 
+//----------------------------------------------------------------------------
+// o, e (stdout, stderr) action handlers
+//----------------------------------------------------------------------------
 ACTION_HAND(stdout_hand) {
   if (run) {
     U64 line;
@@ -518,6 +675,9 @@ ACTION_HAND(stderr_hand) {
   }
 }
 
+//----------------------------------------------------------------------------
+// s (sleep) action handler
+//----------------------------------------------------------------------------
 ACTION_HAND(sleep_hand) {
   if (run) {
     VERB1("Sleeping for %llu seconds", v0.u);
@@ -525,6 +685,9 @@ ACTION_HAND(sleep_hand) {
   }
 }
 
+//----------------------------------------------------------------------------
+// va, vt, vf (memory allocate, touch, free) action handlers
+//----------------------------------------------------------------------------
 ACTION_HAND(mem_hand) {
   struct memblk {
     size_t size;
@@ -590,6 +753,10 @@ ACTION_HAND(mem_hand) {
   } else ERRX("internal error mem_hand invalid action: %s", action);
 }
 
+
+//----------------------------------------------------------------------------
+// mi, mb, mf (MPI init, barrier, finalize) action handlers
+//----------------------------------------------------------------------------
 #ifdef MPI
 ACTION_HAND(mpi_hand) {
 static void *mpi_sbuf, *mpi_rbuf;
@@ -627,6 +794,9 @@ static size_t mpi_buf_len;
 #endif
 
 
+//----------------------------------------------------------------------------
+// fi, fr, ff (floating point addition init, run, free) action handlers
+//----------------------------------------------------------------------------
 ACTION_HAND(flap_hand) {
   static double * nums;
   static U64 size, count;
@@ -716,6 +886,9 @@ ACTION_HAND(flap_hand) {
 }
 
 
+//----------------------------------------------------------------------------
+// hx (heap exercisor) action handler
+//----------------------------------------------------------------------------
 ACTION_HAND(heap_hand) {
   U64 min = v0.u;
   U64 max = v1.u;
@@ -831,6 +1004,9 @@ ACTION_HAND(heap_hand) {
 }
 
 
+//----------------------------------------------------------------------------
+// dlo, dls, dlc (dl open, sym, close) action handlers
+//----------------------------------------------------------------------------
 #ifdef DLFCN
 static int dl_num = -1;
 ACTION_HAND(dl_hand) {
@@ -872,13 +1048,17 @@ ACTION_HAND(dl_hand) {
 }
 #endif
 
-
+//----------------------------------------------------------------------------
+// hi, hdo, heo, hew, her, hec, hdc, hf (HIO) action handlers
+//----------------------------------------------------------------------------
 #ifdef HIO
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
 static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
+static int hio_check = 0;
+static U64 hew_ofs, her_ofs;
 ACTION_HAND(hio_hand) {
   int rc;
   if (!strcmp(action, "hi")) {
@@ -890,7 +1070,7 @@ ACTION_HAND(hio_hand) {
       DBG2("HIO_SET_ELEMENT_UNIQUE: %lld", HIO_SET_ELEMENT_UNIQUE);
       DBG2("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
       MPI_Comm myworld = MPI_COMM_WORLD;
-      // workaround for read only context_data_root and no default context
+      // Workaround for read only context_data_root and no default context
       char ename[255];
       snprintf(ename, sizeof(ename), "HIO_context_%s_%s", context_name, root_var); 
       DBG2("setenv %s=%s", ename, data_root);
@@ -947,41 +1127,73 @@ ACTION_HAND(hio_hand) {
       }
 
       DBG1("Invoking malloc(%d)", bufsz);
-      wbuf = malloc(bufsz);
-      VERB2("malloc(%d) returns %p", bufsz, wbuf);
-      if (!wbuf) VERB0("malloc(%d) failed", bufsz);
+      wbuf = malloc(bufsz+LFSR_22_CYCLE);
+      VERB2("malloc(%d) returns %p", bufsz+LFSR_22_CYCLE, wbuf);
+      if (!wbuf) ERRX("malloc(%d) failed", bufsz+LFSR_22_CYCLE);
+      lfsr_22_byte_init();
+      lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE); 
 
       DBG1("Invoking malloc(%d)", bufsz);
       rbuf = malloc(bufsz);
       VERB2("malloc(%d) returns %p", bufsz, rbuf);
-      if (!wbuf) VERB0("malloc(%d) failed", bufsz);
+      if (!wbuf) ERRX("malloc(%d) failed", bufsz);
+      hew_ofs = her_ofs = 0;
+    }
+  } else if (!strcmp(action, "hxc")) {
+    I64 flag = v0.u;
+    if (run) {
+      if (flag) {
+        hio_check = 1;
+      } else {
+        hio_check = 0;
+      }
+      VERB1("HIO read data checking is now %s", hio_check?"on": "off"); 
     }
   } else if (!strcmp(action, "hew")) {
-    U64 offset = v0.u;
+    I64 p_ofs = v0.u;
     U64 size = v1.u;
+    U64 a_ofs;
     if (!run) {
       if (size > bufsz) ERRX("hew: size > bufsz");
     } else {
-      DBG1("Invoking hio_element_write ofs:%lld size:%lld", offset, size);
-      rc = hio_element_write (element, offset, 0, wbuf, 1, size);
-      VERB2("hio_element_write rc:%d ofs:%lld size:%lld", rc, offset, size);
+      if (p_ofs < 0) { 
+        a_ofs = hew_ofs;
+        hew_ofs += -p_ofs;
+      } else {
+        a_ofs = p_ofs;
+      }
+      DBG1("Invoking hio_element_write ofs:%lld size:%lld", a_ofs, size);
+      rc = hio_element_write (element, a_ofs, 0, wbuf + (a_ofs%LFSR_22_CYCLE), 1, size);
+      VERB2("hio_element_write rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
       if (size != rc) {
-        VERB0("hio_element_write failed rc:%d ofs:%lld size:%lld", rc, offset, size);
+        VERB0("hio_element_write failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
         hio_err_print_all(context, stderr, "hio_element_write error: ");
       }
     }
   } else if (!strcmp(action, "her")) {
-    U64 offset = v0.u;
+    I64 p_ofs = v0.u;
     U64 size = v1.u;
+    U64 a_ofs;
     if (!run) {
       if (size > bufsz) ERRX("her: size > bufsz");
     } else {
-      DBG1("Invoking hio_element_read ofs:%lld size:%lld", offset, size);
-      rc = hio_element_read (element, offset, 0, rbuf, 1, size);
-      VERB2("hio_element_read rc:%d ofs:%lld size:%lld", rc, offset, size);
+      if (p_ofs < 0) { 
+        a_ofs = her_ofs;
+        her_ofs += -p_ofs;
+      } else {
+        a_ofs = p_ofs;
+      }
+      DBG1("Invoking hio_element_read ofs:%lld size:%lld", a_ofs, size);
+      rc = hio_element_read (element, a_ofs, 0, rbuf, 1, size);
+      VERB2("hio_element_read rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
       if (size != rc) {
-        VERB0("hio_element_read failed rc:%d ofs:%lld size:%lld", rc, offset, size);
+        VERB0("hio_element_read failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
         hio_err_print_all(context, stderr, "hio_element_read error: ");
+      }
+      if (hio_check) {
+        if (memcmp(rbuf, wbuf + (a_ofs%LFSR_22_CYCLE), size)) {
+          VERB0("Error: hio_element_read data miscompare ofs:%lld size:%lld", a_ofs, size);
+        }
       }
     }
   } else if (!strcmp(action, "hec")) {
@@ -1025,6 +1237,9 @@ ACTION_HAND(hio_hand) {
 }
 #endif
 
+//----------------------------------------------------------------------------
+// k, x (signal, exit) action handlers
+//----------------------------------------------------------------------------
 ACTION_HAND(raise_hand) {
   if (run) {
     VERB1("Raising signal %d", v0.u);
@@ -1042,8 +1257,6 @@ ACTION_HAND(exit_hand) {
 //----------------------------------------------------------------------------
 // Argument string parsing table
 //----------------------------------------------------------------------------
-enum ptype { UINT, PINT, STR, NONE };
-
 struct parse {
   char * action;
   enum ptype param[MAX_PARAM];
@@ -1083,9 +1296,10 @@ struct parse {
   #ifdef HIO
   {"hi",  {STR,  STR,  NONE, NONE, NONE}, hio_hand},
   {"hdo", {STR,  UINT, UINT, UINT, NONE}, hio_hand},
+  {"hxc", {UINT, NONE, NONE, NONE, NONE}, hio_hand},
   {"heo", {STR,  UINT, UINT, NONE, NONE}, hio_hand},
-  {"hew", {UINT, UINT, NONE, NONE, NONE}, hio_hand},
-  {"her", {UINT, UINT, NONE, NONE, NONE}, hio_hand},
+  {"hew", {SINT, UINT, NONE, NONE, NONE}, hio_hand},
+  {"her", {SINT, UINT, NONE, NONE, NONE}, hio_hand},
   {"hec", {NONE, NONE, NONE, NONE, NONE}, hio_hand},
   {"hdc", {NONE, NONE, NONE, NONE, NONE}, hio_hand},
   {"hf",  {NONE, NONE, NONE, NONE, NONE}, hio_hand},
@@ -1116,14 +1330,11 @@ void parse_and_dispatch(int run) {
           if (parse[i].param[j] == NONE) break;
           if (actc - a <= 1) ERRX("action %d \"%s\" missing param %d", aa, actv[aa], j+1);
           switch (parse[i].param[j]) {
+            case SINT:
             case UINT:
-              a++;
-              vals[j].u = getU64(actv[a], a);
-              break;
             case PINT:
               a++;
-              vals[j].u = getU64(actv[a], a);
-              if (0 == vals[j].u) ERRX("action %d \"%s\" param %d \"%s\" must be > 0", aa, actv[aa], j+1, actv[a]);
+              vals[j].u = getI64(actv[a], parse[i].param[j], a);
               break;
             case STR:
               vals[j].s = actv[++a];

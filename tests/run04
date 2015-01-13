@@ -1,0 +1,11 @@
+#! /bin/bash
+. ./run_setup
+
+# Read and write test case with read data value checking.  240 MB written 
+
+cmdw="v 2 d 1 mi hi ctx_name POSIX:$root hdo dsn_name 22 65 0 d 2 heo el_name 0 20Mi       lc 20 hew -12Mi 12Mi le hec hdc hf mf"
+cmdr="v 2 d 1 mi hi ctx_name POSIX:$root hdo dsn_name 22 0  0 d 2 heo el_name 0 20Mi hxc 1 lc 20 her -12Mi 12Mi le hec hdc hf mf"
+
+set -x
+mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmdw
+mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmdr
