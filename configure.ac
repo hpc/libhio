@@ -19,7 +19,7 @@ AC_PROG_LEX
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdlib.h sys/types.h sys/time.h pthread.h])
+AC_CHECK_HEADERS([stdlib.h strings.h sys/types.h sys/time.h pthread.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
@@ -40,6 +40,7 @@ fi
 CC=${MPICC}
 
 AC_DEFINE_UNQUOTED([HIO_USE_MPI], [$hio_use_mpi], [Whether to use mpi with hio])
+AC_DEFINE_UNQUOTED([_GNU_SOURCE], [1], [Set gcc features])
 
 PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
 
