@@ -1,5 +1,6 @@
 LDADD = ../src/libhio.la
-AM_CFLAGS = -I../src/include
+AM_CPPFLAGS = -I../src/include
+EXTRA_DIST = run01 run02 run03
 
 clean-local:
 	-rm -rf .test_root1
