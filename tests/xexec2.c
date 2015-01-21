@@ -37,7 +37,7 @@
 char * help =
   "xexec - universal testing executable.  Processes command line arguments\n"
   "        in sequence to control actions.\n"
-  "        Version 0.9.0 " __DATE__ " " __TIME__ "\n"
+  "        Version 0.9.1 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
   "\n"
@@ -1059,6 +1059,7 @@ static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
 static int hio_check = 0;
 static U64 hew_ofs, her_ofs;
+static U64 rw_count[2];
 ACTION_HAND(hio_hand) {
   int rc;
   if (!strcmp(action, "hi")) {
@@ -1105,7 +1106,10 @@ ACTION_HAND(hio_hand) {
     U64 flags = v2.u;
     U64 mode = v3.u;
     if (run) {
+      rw_count[0] = rw_count[1] = 0;
       DBG1("Invoking hio_dataset_open name:%s id:%lld flags:%lld mode:%lld", ds_name, ds_id, flags, mode);
+      MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
+      timer_start();
       rc = hio_dataset_open (context, &dataset, ds_name, ds_id, flags, mode);
       VERB2("hio_dataset_open rc:%d name:%s id:%lld flags:%lld mode:%lld", rc, ds_name, ds_id, flags, mode);
       if (HIO_SUCCESS != rc) {
@@ -1168,6 +1172,8 @@ ACTION_HAND(hio_hand) {
       if (size != rc) {
         VERB0("hio_element_write failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
         hio_err_print_all(context, stderr, "hio_element_write error: ");
+      } else {
+        rw_count[1] += size;
       }
     }
   } else if (!strcmp(action, "her")) {
@@ -1189,6 +1195,8 @@ ACTION_HAND(hio_hand) {
       if (size != rc) {
         VERB0("hio_element_read failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
         hio_err_print_all(context, stderr, "hio_element_read error: ");
+      } else {
+        rw_count[0] += size;
       }
       if (hio_check) {
         if (memcmp(rbuf, wbuf + (a_ofs%LFSR_22_CYCLE), size)) {
@@ -1217,11 +1225,18 @@ ACTION_HAND(hio_hand) {
     if (run) {
       DBG1("Invoking hio_dataset_close");
       rc = hio_dataset_close(&dataset);
+      MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
+      double time = timer_end();
       VERB2("hio_datset_close rc:%d", rc);
       if (HIO_SUCCESS != rc) {
         VERB0("hio_datset_close failed rc:%d", rc);
         hio_err_print_all(context, stderr, "hio_dataset_close error: ");
       }
+      U64 rw_count_sum[2];
+      MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD));
+      if (myrank == 0)
+        VERB1("R/W bytes: %lld %lld time:%f R/W speed: %f %f GB/S", rw_count_sum[0], rw_count_sum[1], time, 
+               rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
     }
   } else if (!strcmp(action, "hf")) {
     if (run) {
