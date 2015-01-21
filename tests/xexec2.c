@@ -44,7 +44,18 @@ char * help =
   "  Where valid actions and their parameters are:"
   "\n"
   "  v <level>     set verbosity level\n"
+  "                0 = program start and end, failures\n"
+  "                1 = 0 + summary performance messages\n"
+  "                2 = 1 + detailed performance messages\n"
+  "                3 = 2 + API result messages\n"
   "  d <level>     set debug message level\n"
+  "                0 = no debug messages\n"
+  "                1 = Action start messages\n"
+  "                2 = 1 + API pre-call messages\n"
+  "                3 = 2 + action parsing messages\n"
+  "                4 = 3 + detailed action progress messages\n"
+  "                5 = 4 + detailed repetitive action progress messages - if\n"
+  "                enabled at compile time which will impact performance.\n"  
   "  im <file>     imbed a file of actions at this point, - means stdin\n"
   "  lc <count>    loop start; repeat the following actions (up to the matching\n"
   "                loop end) <count> times\n"
@@ -154,17 +165,17 @@ typedef   signed long long int I64;
 
 //----------------------------------------------------------------------------
 // DBGLEV controls which debug messages are compiled into the program.
-// Set via compile option -DDBGLEV=<n>, where <n> is 0, 1, 2, or 3.
+// Set via compile option -DDBGLEV=<n>, where <n> is 0 through 5.
 // Even when compiled in, debug messages are only issued if the current
 // debug message level is set via the "d <n>" action to the level of the
-// individual debug message.  Compiling in all debug messages via -DDBGLEV=3
+// individual debug message.  Compiling in all debug messages via -DDBGLEV=5
 // will noticeably impact the performance of high speed loops such as
 // "vt" or "fr" due to the time required to repeatedly test the debug level.
 // You have been warned !
 //----------------------------------------------------------------------------
 
 #ifndef DBGLEV
-  #define DBGLEV 2
+  #define DBGLEV 4
 #endif
 
 #if DBGLEV >= 1
@@ -191,18 +202,25 @@ typedef   signed long long int I64;
   #define DBG4(...)
 #endif
 
-#define MAX_VERBOSE 2
+#if DBGLEV >= 5
+  #define DBG5(...) if (debug >= 5) msg(stderr, "Debug: " __VA_ARGS__);
+#else
+  #define DBG5(...)
+#endif
+
+#define MAX_VERBOSE 3
 #define VERB0(...) msg(stdout, __VA_ARGS__);
 #define VERB1(...) if (verbose >= 1) msg(stdout, __VA_ARGS__);
 #define VERB2(...) if (verbose >= 2) msg(stdout, __VA_ARGS__);
+#define VERB3(...) if (verbose >= 3) msg(stdout, __VA_ARGS__);
 #define DIM1(array) ( sizeof(array) / sizeof(array[0]) )
 
 #ifdef MPI
   #define MPI_CK(API) {                              \
     int mpi_rc;                                      \
-    VERB1("Calling " #API);                          \
+    DBG2("Calling " #API);                           \
     mpi_rc = (API);                                  \
-    VERB2(#API " rc: %d", mpi_rc);                   \
+    VERB3(#API " rc: %d", mpi_rc);                   \
     if (mpi_rc != MPI_SUCCESS) {                     \
       char str[256];                                 \
       int len;                                       \
@@ -481,7 +499,7 @@ typedef ACTION_HAND(action_hand);
 ACTION_HAND(verbose_hand) {
   verbose = v0.u;
   if (verbose > MAX_VERBOSE) ERRX("Verbosity level %d > maximum %d", verbose, MAX_VERBOSE);
-  if (run) msg(stdout, "Verbosity level is now %d", verbose);
+  if (run) VERB0("Verbosity level is now %d", verbose);
 }
 
 ACTION_HAND(debug_hand) {
@@ -494,7 +512,7 @@ ACTION_HAND(debug_hand) {
   if (debug > DBGLEV) ERRX("debug level %d > maximum %d."
                             " Rebuild with -DDBGLEV=<n> to increase"
                             " (see comments in source.)", debug, DBGLEV);
-  msg(stdout, "Debug message level is now %d; run: %d", debug, run);
+  VERB0("Debug message level is now %d; run: %d", debug, run);
 }
 
 //----------------------------------------------------------------------------
@@ -509,7 +527,7 @@ void add2actv(int n, char * * newact) {
 }
 
 ACTION_HAND(imbed_hand) {
-  DBG1("imbed_hand fn: \"%s\"", v0.s);
+  DBG1("Starting %s fn: \"%s\"", action, v0.s);
   if (!run) {
     // Open file and read into buffer
     FILE * file;
@@ -521,7 +539,7 @@ ACTION_HAND(imbed_hand) {
     if (!p) ERRX("malloc error: %s", strerror(errno));
     size_t size;
     size = fread(p, 1, BUFSZ, file);
-    DBG1("fread %s returns %d", v0.s, size);
+    DBG4("fread %s returns %d", v0.s, size);
     if (ferror(file)) ERRX("error reading file %s %d %s", v0.s, ferror(file), strerror(ferror(file)));
     if (!feof(file)) ERRX("imbed file %s larger than buffer (%d bytes)", v0.s, BUFSZ);
     fclose(file);
@@ -539,7 +557,7 @@ ACTION_HAND(imbed_hand) {
     char * sep = " \t\n\f\r";
     char * a = strtok(p, sep);
     while (a) {
-      DBG2("add tok: \"%s\" actc: %d", a, actc);
+      DBG4("imbed_hand add tok: \"%s\" actc: %d", a, actc);
       add2actv(1, &a);
       a = strtok(NULL, sep);
     }
@@ -568,10 +586,11 @@ struct loop_ctl {
 struct loop_ctl * lcur = &lctl[0];
 
 ACTION_HAND(loop_hand) {
+  DBG1("Starting %s count: %lld", action, v0.u);
   if (!strcmp(action, "lc")) {
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
-      VERB1("loop count start; depth: %d top actn: %d count: %d", lcur-lctl, *pactn, v0.u);
+      DBG4("loop count start; depth: %d top actn: %d count: %d", lcur-lctl, *pactn, v0.u);
       lcur->type = COUNT;
       lcur->count = v0.u;
       lcur->top = *pactn;
@@ -579,7 +598,7 @@ ACTION_HAND(loop_hand) {
   } else if (!strcmp(action, "lt")) {
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
-      VERB1("loop time start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, v0.u);
+      DBG4("loop time start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, v0.u);
       lcur->type = TIME;
       lcur->top = *pactn;
       if (gettimeofday(&lcur->end, NULL)) ERRX("loop time start: gettimeofday() failed: %s", strerror(errno));
@@ -590,7 +609,7 @@ ACTION_HAND(loop_hand) {
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
 
-      VERB1("loop sync start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, v0.u);
+      DBG4("loop sync start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, v0.u);
       lcur->type = SYNC;
       lcur->top = *pactn;
       if (myrank == 0) {
@@ -607,9 +626,9 @@ ACTION_HAND(loop_hand) {
       if (lcur->type == COUNT) { // Count loop
         if (--lcur->count > 0) {
           *pactn = lcur->top;
-          VERB2("loop count end, not done; depth: %d top actn: %d count: %d", lcur-lctl, lcur->top, lcur->count);
+          DBG4("loop count end, not done; depth: %d top actn: %d count: %d", lcur-lctl, lcur->top, lcur->count);
         } else {
-          VERB1("loop count end, done; depth: %d top actn: %d count: %d", lcur-lctl, lcur->top, lcur->count);
+          DBG4("loop count end, done; depth: %d top actn: %d count: %d", lcur-lctl, lcur->top, lcur->count);
           lcur--;
         }
       } else if (lcur->type == TIME) { // timed loop
@@ -617,11 +636,11 @@ ACTION_HAND(loop_hand) {
         if (gettimeofday(&now, NULL)) ERRX("loop end: gettimeofday() failed: %s", strerror(errno));
         if (now.tv_sec > lcur->end.tv_sec ||
              (now.tv_sec == lcur->end.tv_sec && now.tv_usec >= lcur->end.tv_usec) ) {
-          VERB1("loop time end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
+          DBG4("loop time end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
           lcur--;
         } else {
           *pactn = lcur->top;
-          VERB2("loop time end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
+          DBG4("loop time end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
         }
       #ifdef MPI
       } else { // Sync loop
@@ -631,10 +650,10 @@ ACTION_HAND(loop_hand) {
           if (gettimeofday(&now, NULL)) ERRX("loop end: gettimeofday() failed: %s", strerror(errno));
           if (now.tv_sec > lcur->end.tv_sec ||
                (now.tv_sec == lcur->end.tv_sec && now.tv_usec >= lcur->end.tv_usec) ) {
-            VERB1("loop sync rank 0 end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
+            DBG4("loop sync rank 0 end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
             time2stop = 1;
           } else {
-            VERB1("loop sync rank 0 end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
+            DBG4("loop sync rank 0 end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
           }
         }
         MPI_CK(MPI_Bcast(&time2stop, 1, MPI_INT, 0, MPI_COMM_WORLD));
@@ -643,7 +662,7 @@ ACTION_HAND(loop_hand) {
           lcur--;
         } else {
           *pactn = lcur->top;
-          VERB2("loop sync end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
+          DBG4("loop sync end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
         }
       #endif
       }
@@ -680,7 +699,7 @@ ACTION_HAND(stderr_hand) {
 //----------------------------------------------------------------------------
 ACTION_HAND(sleep_hand) {
   if (run) {
-    VERB1("Sleeping for %llu seconds", v0.u);
+    DBG1("Sleeping for %llu seconds", v0.u);
     sleep(v0.u);
   }
 }
@@ -702,15 +721,15 @@ ACTION_HAND(mem_hand) {
     if (run) {
       size_t len = v0.u;
       struct memblk * p;
-      VERB1("Calling malloc(%lld)", len);
+      DBG2("Calling malloc(%lld)", len);
       p = (struct memblk *)malloc(len);
-      VERB2("malloc returns %p", p);
+      VERB3("malloc returns %p", p);
       if (p) {
         p->size = len;
         p->prev = memptr;
         memptr = p;
       } else {
-        msg(stdout, "Warning, malloc returned NULL");
+        VERB0("mem_hand - Warning: malloc returned NULL");
         memcount--;
       }
     }
@@ -723,16 +742,16 @@ ACTION_HAND(mem_hand) {
       if (memcount > 0) {
         p = (char*)memptr;
         end_p1 = p + memptr->size;
-        VERB1("Touching memory at %p, length 0x%llx, stride: %lld", p, memptr->size, stride);
+        DBG4("Touching memory at %p, length 0x%llx, stride: %lld", p, memptr->size, stride);
         while (p < end_p1) {
           if (p - (char *)memptr >= sizeof(struct memblk)) {
-            DBG4("touch memptr: %p memlen: 0x%llx: end_p1: %p p: %p", memptr, memptr->size, end_p1, p);
+            DBG5("touch memptr: %p memlen: 0x%llx: end_p1: %p p: %p", memptr, memptr->size, end_p1, p);
             *p = 'x';
           }
           p += stride;
         }
       } else {
-        msg(stdout, "Warning, no memory allocation to touch");
+        VERB0("mem_hand - Warning: no memory allocation to touch");
       }
     }
   } else if (!strcmp(action, "vf")) { // vf - free memory
@@ -742,12 +761,12 @@ ACTION_HAND(mem_hand) {
       if (memcount > 0) {
         struct memblk * p;
         p = memptr->prev;
-        VERB1("Calling free(%p)", memptr);
+        DBG2("Calling free(%p)", memptr);
         free(memptr);
         memptr = p;
         memcount--;
       } else {
-        msg(stdout, "Warning, no memory allocation to free");
+        VERB0("mem_hand - Warning: no memory allocation to free");
       }
     }
   } else ERRX("internal error mem_hand invalid action: %s", action);
@@ -763,6 +782,7 @@ static void *mpi_sbuf, *mpi_rbuf;
 static size_t mpi_buf_len;
 
   if (run) {
+    DBG1("Starting %s", action);
     if (!strcmp(action, "mi")) {
       MPI_CK(MPI_Init(NULL, NULL));
       get_id();
@@ -802,6 +822,7 @@ ACTION_HAND(flap_hand) {
   static U64 size, count;
   U64 i, iv;
 
+  DBG1("Starting %s", action);
   if (!strcmp(action, "fi")) {
     size = v0.u;
     count = v1.u;
@@ -848,7 +869,7 @@ ACTION_HAND(flap_hand) {
           DBG3("nums[%d] = %d", i, 0);
       }
 
-      VERB1("flapper starting; size: %llu count: %llu rep: %llu stride: %llu", size, count, rep, stride);
+      DBG1("flapper starting; size: %llu count: %llu rep: %llu stride: %llu", size, count, rep, stride);
       timer_start();
 
       for (b=0; b<count; ++b) {
@@ -874,8 +895,8 @@ ACTION_HAND(flap_hand) {
 
       delta_t = timer_end();
 
-      VERB1("flapper done; predicted: %e sum: %e delta: %e", predicted, sum, sum - predicted);
-      VERB1("FP Adds: %llu, time: %f Seconds, MFLAPS: %e", fp_add_ct, delta_t, (double)fp_add_ct / delta_t / 1000000.0);
+      VERB2("flapper done; predicted: %e sum: %e delta: %e", predicted, sum, sum - predicted);
+      VERB2("FP Adds: %llu, time: %f Seconds, MFLAPS: %e", fp_add_ct, delta_t, (double)fp_add_ct / delta_t / 1000000.0);
     }
   } else if (!strcmp(action, "ff")) {
     if (!size) ERRX("ff without prior fi");
@@ -896,6 +917,7 @@ ACTION_HAND(heap_hand) {
   U64 limit = v3.u;
   U64 count = v4.u;
 
+  DBG1("Starting %s", action);
   if (!run) {
     if (min < 1) ERRX("heapx: min < 1");
     if (min > max) ERRX("heapx: min > max");
@@ -936,7 +958,7 @@ ACTION_HAND(heap_hand) {
 
       n = random()%blocks;
       if (blk[n].ptr) {
-        VERB2("heapx: total: %llu; free %td bytes", total, blk[n].size);
+        DBG4("heapx: total: %llu; free %td bytes", total, blk[n].size);
         b = (int) log2(blk[n].size);
         timer_start();
         free(blk[n].ptr);
@@ -954,7 +976,7 @@ ACTION_HAND(heap_hand) {
       while (blk[n].size + total > limit) {
         k = random()%blocks;
         if (blk[k].ptr) {
-          VERB2("heapx: total: %llu; free %td bytes", total, blk[k].size);
+          DBG4("heapx: total: %llu; free %td bytes", total, blk[k].size);
           b = (int) log2(blk[k].size);
           timer_start();
           free(blk[k].ptr);
@@ -979,7 +1001,7 @@ ACTION_HAND(heap_hand) {
     // Clean up remainder
     for (n=0; n<blocks; ++n) {
       if (blk[n].ptr) {
-        VERB2("heapx: total: %llu; free %td bytes", total, blk[n].size);
+        DBG4("heapx: total: %llu; free %td bytes", total, blk[n].size);
         b = (int) log2(blk[n].size);
         timer_start();
         free(blk[n].ptr);
@@ -994,7 +1016,7 @@ ACTION_HAND(heap_hand) {
     RANK_SERIALIZE_START
     for (b=0; b<sizeof(stat)/sizeof(struct stat); ++b) {
       if (stat[b].count > 0) {
-        VERB1("heapx: bucket start: %lld count: %lld alloc_time: %.3f uS free_time %.3f uS", (long)exp2(b),
+        VERB2("heapx: bucket start: %lld count: %lld alloc_time: %.3f uS free_time %.3f uS", (long)exp2(b),
         stat[b].count, stat[b].atime*1e6/(double)stat[b].count, stat[b].ftime*1e6/(double)stat[b].count);
       }
     }
@@ -1012,13 +1034,14 @@ static int dl_num = -1;
 ACTION_HAND(dl_hand) {
   static void * handle[100];
 
+  DBG1("Starting %s", action);
   if (!strcmp(action, "dlo")) {
     char * name = v0.s;
     if (++dl_num >= DIM1(handle)) ERRX("Too many dlo commands, limit is %d", DIM1(handle));
     if (run) {
-      DBG1("dlo name: %s dl_num: %d", name, dl_num);
+      DBG2("dlo name: %s dl_num: %d", name, dl_num);
       handle[dl_num] = dlopen(name, RTLD_NOW);
-      VERB2("dlopen(%s) returns %p", name, handle[dl_num]);
+      VERB3("dlopen(%s) returns %p", name, handle[dl_num]);
       if (!handle[dl_num]) {
         VERB0("dlopen failed: %s", dlerror());
         dl_num--;
@@ -1031,7 +1054,7 @@ ACTION_HAND(dl_hand) {
       char * error = dlerror();
       DBG1("dls symbol: %s dl_num: %d handle[dl_num]: %p", symbol, dl_num, handle[dl_num]);
       void * sym = dlsym(handle[dl_num], symbol);
-      VERB2("dlsym(%s) returns %p", symbol, sym);
+      VERB3("dlsym(%s) returns %p", symbol, sym);
       error = dlerror();
       if (error) VERB0("dlsym error: %s", error);
     }
@@ -1040,7 +1063,7 @@ ACTION_HAND(dl_hand) {
     if (run) {
       DBG1("dlc dl_num: %d handle[dl_num]: %p", dl_num, handle[dl_num]);
       int rc = dlclose(handle[dl_num]);
-      VERB2("dlclose() returns %d", rc);
+      VERB3("dlclose() returns %d", rc);
       if (rc) VERB0("dlclose error: %s", dlerror());
     }
     dl_num--;
@@ -1068,20 +1091,20 @@ ACTION_HAND(hio_hand) {
     char * tmp_str;
     char * root_var = "data_roots";
     if (run) {
-      DBG2("HIO_SET_ELEMENT_UNIQUE: %lld", HIO_SET_ELEMENT_UNIQUE);
-      DBG2("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
+      DBG4("HIO_SET_ELEMENT_UNIQUE: %lld", HIO_SET_ELEMENT_UNIQUE);
+      DBG4("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
       MPI_Comm myworld = MPI_COMM_WORLD;
       // Workaround for read only context_data_root and no default context
       char ename[255];
       snprintf(ename, sizeof(ename), "HIO_context_%s_%s", context_name, root_var); 
-      DBG2("setenv %s=%s", ename, data_root);
+      DBG4("setenv %s=%s", ename, data_root);
       rc = setenv(ename, data_root, 1);
-      DBG2("setenv %s=%s rc:%d", ename, data_root, rc);
-      DBG1("getenv(%s) returns \"%s\"", ename, getenv(ename));
+      DBG4("setenv %s=%s rc:%d", ename, data_root, rc);
+      DBG4("getenv(%s) returns \"%s\"", ename, getenv(ename));
       // end workaround
       DBG1("Invoking hio_init_mpi context:%s root:%s", context_name, data_root);
       rc = hio_init_mpi(&context, &myworld, NULL, NULL, context_name);
-      VERB2("hio_init_mpi rc:%d context_name:%s", rc, context_name);
+      VERB3("hio_init_mpi rc:%d context_name:%s", rc, context_name);
       if (HIO_SUCCESS != rc) {
         VERB0("hio_init_mpi failed rc:%d", rc);
         hio_err_print_all(context, stderr, "hio_init_mpi error: ");
@@ -1091,7 +1114,7 @@ ACTION_HAND(hio_hand) {
         //VERB2("hio_config_set_value rc:%d var:%s val:%s", rc, root_var, data_root);
         DBG1("Invoking hio_config_get_value var:%s", root_var);
         rc = hio_config_get_value((hio_object_t)context, root_var, &tmp_str);
-        VERB2("hio_config_get_value rc:%d, var:%s value=\"%s\"", rc, root_var, tmp_str);
+        VERB3("hio_config_get_value rc:%d, var:%s value=\"%s\"", rc, root_var, tmp_str);
         if (HIO_SUCCESS == rc) {
           free(tmp_str);
         } else {
@@ -1111,7 +1134,7 @@ ACTION_HAND(hio_hand) {
       MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
       timer_start();
       rc = hio_dataset_open (context, &dataset, ds_name, ds_id, flags, mode);
-      VERB2("hio_dataset_open rc:%d name:%s id:%lld flags:%lld mode:%lld", rc, ds_name, ds_id, flags, mode);
+      VERB3("hio_dataset_open rc:%d name:%s id:%lld flags:%lld mode:%lld", rc, ds_name, ds_id, flags, mode);
       if (HIO_SUCCESS != rc) {
         VERB0("hio_dataset_open failed rc:%d name:%s id:%lld flags:%lld mode:%lld", rc, ds_name, ds_id, flags, mode);
         hio_err_print_all(context, stderr, "hio_dataset_open error: ");
@@ -1124,7 +1147,7 @@ ACTION_HAND(hio_hand) {
     if (run) {
       DBG1("Invoking hio_element_open name:%s flags:%lld", el_name, flags);
       rc = hio_element_open (dataset, &element, el_name, flags);
-      VERB2("hio_element_open rc:%d name:%s flags:%lld", rc, el_name, flags);
+      VERB3("hio_element_open rc:%d name:%s flags:%lld", rc, el_name, flags);
       if (HIO_SUCCESS != rc) {
         VERB0("hio_elememt_open failed rc:%d name:%s flags:%lld", rc, el_name, flags);
         hio_err_print_all(context, stderr, "hio_element_open error: ");
@@ -1132,14 +1155,14 @@ ACTION_HAND(hio_hand) {
 
       DBG1("Invoking malloc(%d)", bufsz);
       wbuf = malloc(bufsz+LFSR_22_CYCLE);
-      VERB2("malloc(%d) returns %p", bufsz+LFSR_22_CYCLE, wbuf);
+      VERB3("malloc(%d) returns %p", bufsz+LFSR_22_CYCLE, wbuf);
       if (!wbuf) ERRX("malloc(%d) failed", bufsz+LFSR_22_CYCLE);
       lfsr_22_byte_init();
       lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE); 
 
       DBG1("Invoking malloc(%d)", bufsz);
       rbuf = malloc(bufsz);
-      VERB2("malloc(%d) returns %p", bufsz, rbuf);
+      VERB3("malloc(%d) returns %p", bufsz, rbuf);
       if (!wbuf) ERRX("malloc(%d) failed", bufsz);
       hew_ofs = her_ofs = 0;
     }
@@ -1151,7 +1174,7 @@ ACTION_HAND(hio_hand) {
       } else {
         hio_check = 0;
       }
-      VERB1("HIO read data checking is now %s", hio_check?"on": "off"); 
+      VERB0("HIO read data checking is now %s", hio_check?"on": "off"); 
     }
   } else if (!strcmp(action, "hew")) {
     I64 p_ofs = v0.u;
@@ -1168,7 +1191,7 @@ ACTION_HAND(hio_hand) {
       }
       DBG1("Invoking hio_element_write ofs:%lld size:%lld", a_ofs, size);
       rc = hio_element_write (element, a_ofs, 0, wbuf + (a_ofs%LFSR_22_CYCLE), 1, size);
-      VERB2("hio_element_write rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
+      VERB3("hio_element_write rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
       if (size != rc) {
         VERB0("hio_element_write failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
         hio_err_print_all(context, stderr, "hio_element_write error: ");
@@ -1191,7 +1214,7 @@ ACTION_HAND(hio_hand) {
       }
       DBG1("Invoking hio_element_read ofs:%lld size:%lld", a_ofs, size);
       rc = hio_element_read (element, a_ofs, 0, rbuf, 1, size);
-      VERB2("hio_element_read rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
+      VERB3("hio_element_read rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
       if (size != rc) {
         VERB0("hio_element_read failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
         hio_err_print_all(context, stderr, "hio_element_read error: ");
@@ -1208,7 +1231,7 @@ ACTION_HAND(hio_hand) {
     if (run) {
       DBG1("Invoking hio_element_close");
       rc = hio_element_close(&element);
-      VERB2("hio_element_close rc:%d", rc);
+      VERB3("hio_element_close rc:%d", rc);
       if (HIO_SUCCESS != rc) {
         VERB0("hio_close element_failed rc:%d", rc);
         hio_err_print_all(context, stderr, "hio_element_close error: ");
@@ -1227,7 +1250,7 @@ ACTION_HAND(hio_hand) {
       rc = hio_dataset_close(&dataset);
       MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
       double time = timer_end();
-      VERB2("hio_datset_close rc:%d", rc);
+      VERB3("hio_datset_close rc:%d", rc);
       if (HIO_SUCCESS != rc) {
         VERB0("hio_datset_close failed rc:%d", rc);
         hio_err_print_all(context, stderr, "hio_dataset_close error: ");
@@ -1242,7 +1265,7 @@ ACTION_HAND(hio_hand) {
     if (run) {
       DBG1("Invoking hio_fini");
       rc = hio_fini(&context);
-      VERB2("hio_fini rc:%d", rc);
+      VERB3("hio_fini rc:%d", rc);
       if (rc != HIO_SUCCESS) {
         VERB0("hio_fini failed, rc:%d", rc);
         hio_err_print_all(context, stderr, "hio_fini error: ");
@@ -1257,14 +1280,14 @@ ACTION_HAND(hio_hand) {
 //----------------------------------------------------------------------------
 ACTION_HAND(raise_hand) {
   if (run) {
-    VERB1("Raising signal %d", v0.u);
+    VERB0("Raising signal %d", v0.u);
     raise(v0.u);
   }
 }
 
 ACTION_HAND(exit_hand) {
   if (run) {
-    VERB1("Exiting with status %d", v0.u);
+    VERB0("Exiting with status %d", v0.u);
     exit(v0.u);
   }
 }
@@ -1386,6 +1409,7 @@ int main(int argc, char * * argv) {
   parse_and_dispatch(0);
   parse_and_dispatch(1);
 
+  VERB0("Returning from main rc: 0");
   return 0;
 }
 // --- end of xexec.c ---
