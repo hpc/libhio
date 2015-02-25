@@ -1,5 +1,5 @@
 # -*- Autoconf -*-
-# Copyright 2014      Los Alamos National Security, LLC. All rights
+# Copyright 2014-2015 Los Alamos National Security, LLC. All rights
 #                     reserved.
 
 AC_PREREQ([2.69])
@@ -10,6 +10,16 @@ AC_CONFIG_MACRO_DIR([m4])
 
 AM_INIT_AUTOMAKE
 LT_INIT
+
+AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [${CC}])
+
+if test ${MPICC} = "mpicc" ; then
+    hio_use_mpi=1
+else
+    hio_use_mpi=0
+fi
+
+CC=${MPICC}
 
 # Checks for programs.
 AC_PROG_CC_C99
@@ -29,18 +39,8 @@ AC_TYPE_OFF_T
 AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 
-AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [${CC}])
-
-if test ${MPICC} = "mpicc" ; then
-    hio_use_mpi=1
-else
-    hio_use_mpi=0
-fi
-
-CC=${MPICC}
-
 AC_DEFINE_UNQUOTED([HIO_USE_MPI], [$hio_use_mpi], [Whether to use mpi with hio])
-AC_DEFINE_UNQUOTED([_GNU_SOURCE], [1], [Set gcc features])
+AC_DEFINE([_GNU_SOURCE], [1], [Define _GNU_SOURCE feature macro])
 
 PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
 
