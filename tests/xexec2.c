@@ -464,8 +464,8 @@ struct loop_ctl {
 struct loop_ctl * lcur = &lctl[0];
 
 ACTION_HAND(loop_hand) {
-  DBG1("Starting %s count: %lld", action, v0.u);
   if (!strcmp(action, "lc")) {
+    DBG1("Starting lc count: %lld", v0.u);
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
       DBG4("loop count start; depth: %d top actn: %d count: %d", lcur-lctl, *pactn, v0.u);
@@ -474,6 +474,7 @@ ACTION_HAND(loop_hand) {
       lcur->top = *pactn;
     }
   } else if (!strcmp(action, "lt")) {
+    DBG1("Starting lt seconds: %lld", v0.u);
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
       DBG4("loop time start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, v0.u);
@@ -484,6 +485,7 @@ ACTION_HAND(loop_hand) {
     }
   #ifdef MPI
   } else if (!strcmp(action, "ls")) {
+    DBG1("Starting ls seconds: %lld", v0.u);
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
 
@@ -497,6 +499,7 @@ ACTION_HAND(loop_hand) {
     }
   #endif
   } else if (!strcmp(action, "le")) {
+  DBG1("Starting le");
     if (lcur <= lctl) ERRX("loop end when no loop active - more loop ends than loop starts");
     if (!run) {
       lcur--;
