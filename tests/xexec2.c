@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
-#include <ctype.h>
 #ifdef DLFCN
 #include <dlfcn.h>
 #endif
@@ -18,6 +17,21 @@
 #ifdef HIO
 #include "hio.h"
 #endif
+//----------------------------------------------------------------------------
+// DBGMAXLEV controls which debug messages are compiled into the program.
+// Set via compile option -DDBGMAXLEV=<n>, where <n> is 0 through 5.
+// DBGMAXLEV is used by cw_misc.h to control the expansion of DBGx macros.
+// Even when compiled in, debug messages are only issued if the current
+// debug message level is set via the "d <n>" action to the level of the
+// individual debug message.  Compiling in all debug messages via -DDBGLEV=5
+// will noticeably impact the performance of high speed loops such as
+// "vt" or "fr" due to the time required to repeatedly test the debug level.
+// You have been warned !
+//----------------------------------------------------------------------------
+#ifndef DBGMAXLEV
+  #define DBGMAXLEV 4
+#endif
+#include "cw_misc.h"
 
 //----------------------------------------------------------------------------
 // To build:    cc -O3       xexec.c -o xexec
@@ -37,7 +51,7 @@
 char * help =
   "xexec - universal testing executable.  Processes command line arguments\n"
   "        in sequence to control actions.\n"
-  "        Version 0.9.1 " __DATE__ " " __TIME__ "\n"
+  "        Version 0.9.2 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
   "\n"
@@ -109,7 +123,7 @@ char * help =
   "  hxc <0|1>     Enable read data checking\n"
   "  hew <offset> <size> Element write - if offset negative, auto increment\n"
   "  her <offset> <size> Element read - if offset negative, auto increment\n"
-  "  hec <name> <flags> Element close\n"
+  "  hec <name>    Element close\n"
   "  hdc           Dataset close\n"
   "  hf            Fini\n"
   #endif
@@ -148,73 +162,14 @@ int id_string_len = 0;
 #ifdef MPI
 int myrank, mpi_size = 0;
 #endif
-int verbose = 0;
-int debug = 0;
 int actc = 0;
 char * * actv = NULL;
-typedef unsigned long long int U64;
-typedef   signed long long int I64;
+MSG_CONTEXT my_msg_context;
+#define MY_MSG_CTX (&my_msg_context)
 
 //----------------------------------------------------------------------------
 // Common subroutines and macros
 //----------------------------------------------------------------------------
-#define ERRX(...) {                     \
-  msg(stderr, "Error: " __VA_ARGS__);   \
-  exit(12);                             \
-}
-
-//----------------------------------------------------------------------------
-// DBGLEV controls which debug messages are compiled into the program.
-// Set via compile option -DDBGLEV=<n>, where <n> is 0 through 5.
-// Even when compiled in, debug messages are only issued if the current
-// debug message level is set via the "d <n>" action to the level of the
-// individual debug message.  Compiling in all debug messages via -DDBGLEV=5
-// will noticeably impact the performance of high speed loops such as
-// "vt" or "fr" due to the time required to repeatedly test the debug level.
-// You have been warned !
-//----------------------------------------------------------------------------
-
-#ifndef DBGLEV
-  #define DBGLEV 4
-#endif
-
-#if DBGLEV >= 1
-  #define DBG1(...) if (debug >= 1) msg(stderr, "Debug: " __VA_ARGS__);
-#else
-  #define DBG1(...)
-#endif
-
-#if DBGLEV >= 2
-  #define DBG2(...) if (debug >= 2) msg(stderr, "Debug: " __VA_ARGS__);
-#else
-  #define DBG2(...)
-#endif
-
-#if DBGLEV >= 3
-  #define DBG3(...) if (debug >= 3) msg(stderr, "Debug: " __VA_ARGS__);
-#else
-  #define DBG3(...)
-#endif
-
-#if DBGLEV >= 4
-  #define DBG4(...) if (debug >= 4) msg(stderr, "Debug: " __VA_ARGS__);
-#else
-  #define DBG4(...)
-#endif
-
-#if DBGLEV >= 5
-  #define DBG5(...) if (debug >= 5) msg(stderr, "Debug: " __VA_ARGS__);
-#else
-  #define DBG5(...)
-#endif
-
-#define MAX_VERBOSE 3
-#define VERB0(...) msg(stdout, __VA_ARGS__);
-#define VERB1(...) if (verbose >= 1) msg(stdout, __VA_ARGS__);
-#define VERB2(...) if (verbose >= 2) msg(stdout, __VA_ARGS__);
-#define VERB3(...) if (verbose >= 3) msg(stdout, __VA_ARGS__);
-#define DIM1(array) ( sizeof(array) / sizeof(array[0]) )
-
 #ifdef MPI
   #define MPI_CK(API) {                              \
     int mpi_rc;                                      \
@@ -249,22 +204,6 @@ typedef   signed long long int I64;
   #define RANK_SERIALIZE_START
   #define RANK_SERIALIZE_END
 #endif
-
-void msg(FILE * file, const char * format, ...) {
-  va_list args;
-  char msg_buf[1024];
-  char time_str[64];
-  time_t now;
-  size_t time_len, msg_len;
-
-  now = time(0);
-  time_len = strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", localtime(&now));
-
-  va_start(args, format);
-  msg_len = vsnprintf(msg_buf, sizeof(msg_buf), format, args);
-  va_end(args);
-  fprintf(file, "%s %s%s\n", time_str, id_string, msg_buf);
-}
 
 // Simple non-threadsafe timer start/stop routines
 #ifdef CLOCK_REALTIME
@@ -318,9 +257,10 @@ void get_id() {
   strcat(tmp_id, " ");
   strcpy(id_string, tmp_id);
   id_string_len = strlen(id_string);
+  MY_MSG_CTX->id_string=id_string;
 }
 
-enum ptype { SINT, UINT, PINT, STR, NONE };
+enum ptype { SINT, UINT, PINT, STR, HFLG, HDSM, NONE };
 
 U64 getI64(char * num, enum ptype type, int actn) {
   long long int n;
@@ -345,71 +285,6 @@ U64 getI64(char * num, enum ptype type, int actn) {
   else if (!strcmp("Pi", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
   else ERRX("action %d, invalid integer \"%s\"", actn, num);
   return n;
-}
-
-//----------------------------------------------------------------------------
-// hex_dump - dumps size bytes of *data to stdout. Looks like:
-//    [0000] 75 6E 6B 6E 6F 77 6E 20  30 FF 00 00 00 00 39 00 unknown 0.....9.
-//----------------------------------------------------------------------------
-void hex_dump(void *data, int size) {
-    unsigned char *p = data;
-    unsigned char c;
-    int n;
-    char bytestr[4] = {0};
-    char addrstr[10] = {0};
-    char hexstr[ 16*3 + 5] = {0};
-    char hexprev[ 16*3 + 5] = {0};
-    char charstr[16*1 + 5] = {0};
-    int skipped = 0; 
-    for(n=1;n<=size;n++) {
-        if (n%16 == 1) {
-            /* store address for this line */
-            snprintf(addrstr, sizeof(addrstr), "%.4lx", p-(unsigned char *)data);
-        }
-            
-        c = *p;
-        if (isalnum(c) == 0) {
-            c = '.';
-        }
-
-        /* store hex str (for left side) */
-        snprintf(bytestr, sizeof(bytestr), "%02X ", *p);
-        strncat(hexstr, bytestr, sizeof(hexstr)-strlen(hexstr)-1);
-
-        /* store char str (for right side) */
-        snprintf(bytestr, sizeof(bytestr), "%c", c);
-        strncat(charstr, bytestr, sizeof(charstr)-strlen(charstr)-1);
-
-        if(n%16 == 0) { 
-            /* line completed */
-            if (!strcmp(hexstr, hexprev) && n< size) { 
-              skipped++;
-            } else {
-              if (skipped > 0) {
-                printf("        %d identical lines skipped\n", skipped);
-                skipped = 0;
-              }
-              printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
-              strcpy(hexprev, hexstr);
-            } 
-            hexstr[0] = 0;
-            charstr[0] = 0;
-        } else if(n%8 == 0) {
-            /* half line: add whitespaces */
-            strncat(hexstr, "  ", sizeof(hexstr)-strlen(hexstr)-1);
-            strncat(charstr, " ", sizeof(charstr)-strlen(charstr)-1);
-        }
-        p++; /* next byte */
-    }
-
-    if (strlen(hexstr) > 0) {
-        if (skipped > 0) {
-           printf("        %d identical lines skipped\n", skipped);
-           skipped = 0;
-        }
-        /* print rest of buffer if not empty */
-        printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
-    }
 }
 
 //----------------------------------------------------------------------------
@@ -483,9 +358,10 @@ void lfsr_test(void) {
 //----------------------------------------------------------------------------
 // Action handler definitions
 //----------------------------------------------------------------------------
-typedef union pval {
+typedef struct pval {
   U64 u;
   char * s;
+  int i;  // Use for enums 
 } pval;
 
 // Many action handlers, use macro to keep function defs in sync
@@ -497,21 +373,23 @@ typedef ACTION_HAND(action_hand);
 // v, d (verbose, debug) action handlers
 //----------------------------------------------------------------------------
 ACTION_HAND(verbose_hand) {
-  verbose = v0.u;
+  int verbose = v0.u;
   if (verbose > MAX_VERBOSE) ERRX("Verbosity level %d > maximum %d", verbose, MAX_VERBOSE);
+  msg_context_set_verbose(MY_MSG_CTX, verbose);
   if (run) VERB0("Verbosity level is now %d", verbose);
 }
 
 ACTION_HAND(debug_hand) {
-  debug = v0.u;
+  int debug = v0.u;
 
   if (debug == 5) {
     lfsr_test(); 
   }
 
-  if (debug > DBGLEV) ERRX("debug level %d > maximum %d."
-                            " Rebuild with -DDBGLEV=<n> to increase"
-                            " (see comments in source.)", debug, DBGLEV);
+  if (debug > DBGMAXLEV) ERRX("requested debug level %d > maximum %d."
+                            " Rebuild with -DDBGMAXLEV=<n> to increase"
+                            " (see comments in source.)", debug, DBGMAXLEV);
+  msg_context_set_debug(MY_MSG_CTX, debug);
   VERB0("Debug message level is now %d; run: %d", debug, run);
 }
 
@@ -679,7 +557,7 @@ ACTION_HAND(stdout_hand) {
     U64 line;
     for (line = 1; line <= v0.u; line++) {
       // Message padded to exactly 100 bytes long.
-      msg(stdout, "action %-4u stdout line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
+      MSG("action %-4u stdout line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
     }
   }
 }
@@ -689,7 +567,7 @@ ACTION_HAND(stderr_hand) {
     U64 line;
     for (line = 1; line <= v0.u; line++) {
       // Message padded to exactly 100 bytes long.
-      msg(stderr, "action %-4u stderr line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
+      MSGE("action %-4u stderr line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
     }
   }
 }
@@ -1126,30 +1004,33 @@ ACTION_HAND(hio_hand) {
   } else if (!strcmp(action, "hdo")) {
     char * ds_name = v0.s;
     U64 ds_id = v1.u;
-    U64 flags = v2.u;
-    U64 mode = v3.u;
+    int flag_i = v2.i;
+    char * flag_s = v2.s;
+    int mode_i = v3.i;
+    char * mode_s = v3.s;
     if (run) {
       rw_count[0] = rw_count[1] = 0;
-      DBG1("Invoking hio_dataset_open name:%s id:%lld flags:%lld mode:%lld", ds_name, ds_id, flags, mode);
+      DBG1("Invoking hio_dataset_open name:%s id:%lld flags:%s mode:%s", ds_name, ds_id, flag_s, mode_s);
       MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
       timer_start();
-      rc = hio_dataset_open (context, &dataset, ds_name, ds_id, flags, mode);
-      VERB3("hio_dataset_open rc:%d name:%s id:%lld flags:%lld mode:%lld", rc, ds_name, ds_id, flags, mode);
+      rc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
+      VERB3("hio_dataset_open rc:%d name:%s id:%lld flags:%s mode:%s", rc, ds_name, ds_id, flag_s, mode_s);
       if (HIO_SUCCESS != rc) {
-        VERB0("hio_dataset_open failed rc:%d name:%s id:%lld flags:%lld mode:%lld", rc, ds_name, ds_id, flags, mode);
+        VERB0("hio_dataset_open failed rc:%d name:%s id:%lld flag_s:%s mode:%s", rc, ds_name, ds_id, flag_s, mode_s);
         hio_err_print_all(context, stderr, "hio_dataset_open error: ");
       }
     }
   } else if (!strcmp(action, "heo")) {
     char * el_name = v0.s;
-    U64 flags = v1.u;
+    int flag_i = v1.i;
+    char * flag_s = v1.s;
     bufsz = v2.u;
     if (run) {
-      DBG1("Invoking hio_element_open name:%s flags:%lld", el_name, flags);
-      rc = hio_element_open (dataset, &element, el_name, flags);
-      VERB3("hio_element_open rc:%d name:%s flags:%lld", rc, el_name, flags);
+      DBG1("Invoking hio_element_open name:%s flags:%s", el_name, flag_s);
+      rc = hio_element_open (dataset, &element, el_name, flag_i);
+      VERB3("hio_element_open rc:%d name:%s flags:%s", rc, el_name, flag_s);
       if (HIO_SUCCESS != rc) {
-        VERB0("hio_elememt_open failed rc:%d name:%s flags:%lld", rc, el_name, flags);
+        VERB0("hio_elememt_open failed rc:%d name:%s flags:%s", rc, el_name, flag_s);
         hio_err_print_all(context, stderr, "hio_element_open error: ");
       }
 
@@ -1224,6 +1105,8 @@ ACTION_HAND(hio_hand) {
       if (hio_check) {
         if (memcmp(rbuf, wbuf + (a_ofs%LFSR_22_CYCLE), size)) {
           VERB0("Error: hio_element_read data miscompare ofs:%lld size:%lld", a_ofs, size);
+        } else {
+          VERB3("hio data read check successful");
         }
       }
     }
@@ -1293,6 +1176,22 @@ ACTION_HAND(exit_hand) {
 }
 
 //----------------------------------------------------------------------------
+// Enum conversion tables
+//----------------------------------------------------------------------------
+ENUM_START(etab_hflg)
+ENUM_NAME("RDONLY", HIO_FLAG_RDONLY)
+ENUM_NAME("WRONLY", HIO_FLAG_WRONLY)
+ENUM_NAME("CREAT",  HIO_FLAG_CREAT)
+ENUM_NAME("TRUNC",  HIO_FLAG_TRUNC)
+ENUM_NAME("APPEND", HIO_FLAG_APPEND)
+ENUM_END(etab_hflg, 1, ",")
+
+ENUM_START(etab_hdsm)  // hio dataset mode
+ENUM_NAME("UNIQUE",  HIO_SET_ELEMENT_UNIQUE)
+ENUM_NAME("SHARED",  HIO_SET_ELEMENT_SHARED)
+ENUM_END(etab_hdsm, 0, NULL)
+
+//----------------------------------------------------------------------------
 // Argument string parsing table
 //----------------------------------------------------------------------------
 struct parse {
@@ -1333,9 +1232,9 @@ struct parse {
   #endif
   #ifdef HIO
   {"hi",  {STR,  STR,  NONE, NONE, NONE}, hio_hand},
-  {"hdo", {STR,  UINT, UINT, UINT, NONE}, hio_hand},
+  {"hdo", {STR,  UINT, HFLG, HDSM, NONE}, hio_hand},
   {"hxc", {UINT, NONE, NONE, NONE, NONE}, hio_hand},
-  {"heo", {STR,  UINT, UINT, NONE, NONE}, hio_hand},
+  {"heo", {STR,  HFLG, UINT, NONE, NONE}, hio_hand},
   {"hew", {SINT, UINT, NONE, NONE, NONE}, hio_hand},
   {"her", {SINT, UINT, NONE, NONE, NONE}, hio_hand},
   {"hec", {NONE, NONE, NONE, NONE, NONE}, hio_hand},
@@ -1350,10 +1249,11 @@ struct parse {
 // Argument string parser - calls action handlers
 //----------------------------------------------------------------------------
 void parse_and_dispatch(int run) {
-  int a = 0, aa, i, j;
+  int a = 0, aa, i, j, rc;
   pval vals[MAX_PARAM];
 
-  verbose = debug = 0;
+  msg_context_set_verbose(MY_MSG_CTX, 0); 
+  msg_context_set_debug(MY_MSG_CTX, 0); 
 
   #ifdef DLFCN
     dl_num = -1;
@@ -1376,6 +1276,21 @@ void parse_and_dispatch(int run) {
               break;
             case STR:
               vals[j].s = actv[++a];
+              break;
+            case HFLG:
+              a++; 
+              rc = str2enum(MY_MSG_CTX, &etab_hflg, actv[a], &vals[j].i); 
+              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", aa, actv[aa], actv[a]);
+              rc = enum2str(MY_MSG_CTX, &etab_hflg, vals[j].i, &vals[j].s); 
+              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", aa, actv[aa], actv[a]);
+              break;
+            case HDSM:
+              a++; 
+              rc = str2enum(MY_MSG_CTX, &etab_hdsm, actv[a], &vals[j].i); 
+              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", aa, actv[aa], actv[a]);
+              rc = enum2str(MY_MSG_CTX, &etab_hdsm, vals[j].i, &vals[j].s); 
+              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", aa, actv[aa], actv[a]);
+              break;
             case NONE:
               break;
             default:
@@ -1401,7 +1316,8 @@ int main(int argc, char * * argv) {
     return 1;
   }
 
-  get_id();
+  msg_context_init(MY_MSG_CTX, 0, 0);
+  get_id();  
 
   add2actv(argc, argv); // Make initial copy of argv so im works
 
