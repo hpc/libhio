@@ -51,7 +51,7 @@
 char * help =
   "xexec - universal testing executable.  Processes command line arguments\n"
   "        in sequence to control actions.\n"
-  "        Version 0.9.2 " __DATE__ " " __TIME__ "\n"
+  "        Version 0.9.3 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
   "\n"
