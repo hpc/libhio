@@ -153,6 +153,7 @@ typedef struct enum_table {
 
 #define ENUM_START(etname) ENUM_NAME_VAL_PAIR etname##__name_val[] = {
 #define ENUM_NAME(name, value) { name, value },
+#define ENUM_NAMP(prefix, name) { #name, prefix##name },
 #define ENUM_END(etname, multiple, delim) {NULL} }; ENUM_TABLE etname = {multiple, delim, -1, etname##__name_val};
 
 // Sets *name to point to a string containing the enum name.  Caller must free.

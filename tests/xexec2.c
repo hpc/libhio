@@ -956,6 +956,19 @@ ACTION_HAND(dl_hand) {
 // hi, hdo, heo, hew, her, hec, hdc, hf (HIO) action handlers
 //----------------------------------------------------------------------------
 #ifdef HIO
+ENUM_START(etab_herr)  // hio error codes
+ENUM_NAMP(HIO_, SUCCESS)
+ENUM_NAMP(HIO_, ERROR)
+ENUM_NAMP(HIO_, ERR_PERM)
+ENUM_NAMP(HIO_, ERR_TRUNCATE)
+ENUM_NAMP(HIO_, ERR_OUT_OF_RESOURCE)
+ENUM_NAMP(HIO_, ERR_NOT_FOUND)
+ENUM_NAMP(HIO_, ERR_NOT_AVAILABLE)
+ENUM_NAMP(HIO_, ERR_BAD_PARAM)
+ENUM_NAMP(HIO_, ERR_IO_TEMPORARY)
+ENUM_NAMP(HIO_, ERR_IO_PERMANENT)
+ENUM_END(etab_herr, 0, NULL)
+
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
@@ -1019,7 +1032,10 @@ ACTION_HAND(hio_hand) {
       rc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
       VERB3("hio_dataset_open rc:%d name:%s id:%lld flags:%s mode:%s", rc, ds_name, ds_id, flag_s, mode_s);
       if (HIO_SUCCESS != rc) {
-        VERB0("hio_dataset_open failed rc:%d name:%s id:%lld flag_s:%s mode:%s", rc, ds_name, ds_id, flag_s, mode_s);
+        char * herr;
+        enum2str(MY_MSG_CTX, &etab_herr, rc, &herr);
+        VERB0("hio_dataset_open failed rc:%d(%s) name:%s id:%lld flag_s:%s mode:%s", rc, herr, ds_name, ds_id, flag_s, mode_s);
+        free(herr);
         hio_err_print_all(context, stderr, "hio_dataset_open error: ");
       }
     }
@@ -1182,16 +1198,16 @@ ACTION_HAND(exit_hand) {
 // Enum conversion tables
 //----------------------------------------------------------------------------
 ENUM_START(etab_hflg)
-ENUM_NAME("RDONLY", HIO_FLAG_RDONLY)
-ENUM_NAME("WRONLY", HIO_FLAG_WRONLY)
-ENUM_NAME("CREAT",  HIO_FLAG_CREAT)
-ENUM_NAME("TRUNC",  HIO_FLAG_TRUNC)
-ENUM_NAME("APPEND", HIO_FLAG_APPEND)
+ENUM_NAMP(HIO_FLAG_, RDONLY)
+ENUM_NAMP(HIO_FLAG_, WRONLY)
+ENUM_NAMP(HIO_FLAG_, CREAT)
+ENUM_NAMP(HIO_FLAG_, TRUNC)
+ENUM_NAMP(HIO_FLAG_, APPEND)
 ENUM_END(etab_hflg, 1, ",")
 
 ENUM_START(etab_hdsm)  // hio dataset mode
-ENUM_NAME("UNIQUE",  HIO_SET_ELEMENT_UNIQUE)
-ENUM_NAME("SHARED",  HIO_SET_ELEMENT_SHARED)
+ENUM_NAMP(HIO_SET_ELEMENT_, UNIQUE)
+ENUM_NAMP(HIO_SET_ELEMENT_, SHARED)
 ENUM_END(etab_hdsm, 0, NULL)
 
 //----------------------------------------------------------------------------
