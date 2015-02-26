@@ -1,8 +1,27 @@
 #! /bin/bash
 . ./run_setup
 
-cmdw="v 2 d 1 mi hi ctx_name POSIX:$root hxc 1 hdo dsn_name 22 WRONLY,CREAT UNIQUE heo el_name WRONLY,CREAT 20Mi hew 0 12Mi hec hdc hf mf"
-cmdr="v 3 d 1 mi hi ctx_name POSIX:$root hxc 1 hdo dsn_name 22 RDONLY       UNIQUE heo el_name RDONLY       20Mi her 0 12Mi hec hdc hf mf"
+# Small read and write test case with read data value checking.  
+# 2 ranks, 12 MB per rank written 
+
+cmdw="
+  v 2 d 1 mi 0
+  hi ctx_name POSIX:$root
+  hdo dsn_name 22 WRONLY,CREAT UNIQUE 
+  heo el_name WRONLY,CREAT 20Mi
+  hck on 
+  hew 0 12Mi 
+  hec hdc hf mf
+"
+cmdr="
+  v 3 d 1 mi 0
+  hi ctx_name POSIX:$root 
+  hdo dsn_name 22 RDONLY       UNIQUE
+  heo el_name RDONLY       20Mi
+  hck on 
+  her 0 12Mi
+  hec hdc hf mf
+"
 
 set -x
 mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmdw

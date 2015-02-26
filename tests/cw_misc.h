@@ -5,6 +5,8 @@
 #ifndef CW_MISC_H_INCLUDED
 #define CW_MISC_H_INCLUDED
 #include <stdio.h>
+#include <time.h>
+#include <sys/time.h>
 
 // Common typedefs and macros
 typedef unsigned long long int U64;
@@ -119,8 +121,8 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...);
 //----------------------------------------------------------------------------
 void *mallocx(MSG_CONTEXT *msgctx, const char *context, size_t size);
 void *reallocx(MSG_CONTEXT *msgctx, const char *context, void *ptr, size_t size);
-void freex(MSG_CONTEXT *msgctx, const char *context, void *ptr);
-char *strndupx(MSG_CONTEXT *msgctx, const char *context, const char *s1, size_t n);
+void *freex(MSG_CONTEXT *msgctx, const char *context, void *ptr);
+char *strdupx(MSG_CONTEXT *msgctx, const char *context, const char *s1);
 char *strcatrx(MSG_CONTEXT *msgctx, const char *context, const char *s1, const char *s2);
 char *alloc_printf(MSG_CONTEXT *msgctx, const char *context, const char *format, ...);
 
@@ -131,7 +133,7 @@ char *alloc_printf(MSG_CONTEXT *msgctx, const char *context, const char *format,
 #define MALLOCX(size) mallocx((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (size))
 #define REALLOCX(ptr, size) reallocx((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (ptr), (size))
 #define FREEX(ptr) freex((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (ptr))
-#define STRNDUPX(s1, n) strndupx((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (s1), (n))
+#define STRDUPX(s1) strdupx((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (s1))
 #define STRCATRX(s1, s2) strcatrx((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (s1), (s2))
 #define ALLOC_PRINTF(...) alloc_printf((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, __VA_ARGS__)
 
@@ -153,13 +155,21 @@ typedef struct enum_table {
 
 #define ENUM_START(etname) ENUM_NAME_VAL_PAIR etname##__name_val[] = {
 #define ENUM_NAME(name, value) { name, value },
+#define ENUM_NAMP(prefix, name) { #name, prefix##name },
 #define ENUM_END(etname, multiple, delim) {NULL} }; ENUM_TABLE etname = {multiple, delim, -1, etname##__name_val};
 
 // Sets *name to point to a string containing the enum name.  Caller must free.
 int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name);
 
+// Returns a pointer to a string containing the enum name. Not valid for multiple.
+char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val);
+
 // Sets *val to an enum value or OR of values for multiple types
 int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * val);
+
+// Returns a list of enum names prefixed by "one of" or "one or more of".  List 
+// must be freed by caller.
+char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr);
 
 //----------------------------------------------------------------------------
 // hex_dump - dumps size bytes of *data to stdout. Looks like:
@@ -167,5 +177,26 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * val);
 //----------------------------------------------------------------------------
 void hex_dump(void *data, int size);
 
+//----------------------------------------------------------------------------
+// Simple timer start/stop routines - returns floating point seconds
+//----------------------------------------------------------------------------
+typedef struct etimer {
+  #if defined(CLOCK_REALTIME) && defined(USE_REALTIME)
+    struct timespec start, end;
+  #else
+    struct timeval start, end;
+  #endif
+} ETIMER;
+
+void etimer_start(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp);
+double etimer_elapsed(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp);
+
+#define ETIMER_START(tmr) etimer_start((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (tmr))
+#define ETIMER_ELAPSED(tmr) etimer_elapsed((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, (tmr))
+
 #endif
+
+// Sleep for floating point seconds and fractions
+void fsleep(double seconds);
+ 
 // --- end of cw_misc.h ---
