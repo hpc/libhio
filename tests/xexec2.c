@@ -162,8 +162,41 @@ int id_string_len = 0;
 #ifdef MPI
 int myrank, mpi_size = 0;
 #endif
+int tokc = 0;
+char * * tokv = NULL;
+
+typedef struct pval {
+  U64 u;
+  char * s;
+  int i;  // Use for enums 
+} PVAL;
+
+#define MAX_PARAM 5
+
+struct action;
+
+// Many action handlers, use macro to keep function defs in sync
+#define ACTION_HAND(name) void (name)(int run, char * cmd, int * ptokn, int * pactn, PVAL v0, PVAL v1, PVAL v2, PVAL v3, PVAL v4)
+typedef ACTION_HAND(action_hand);
+
+#define ACTION_CHECK(name) void (name)(int run, char * cmd, int * ptokn, int * pactn, PVAL v0, PVAL v1, PVAL v2, PVAL v3, PVAL v4)
+typedef ACTION_CHECK(action_check);
+
+#define ACTION_RUN(name) void (name)(struct action *act, int *pactn)
+typedef ACTION_RUN(action_run);
+
+typedef struct action {
+  int tokn;             // Index of first token for action
+  char * action;        // Action name
+  char * args;          // Action arguments
+  action_hand * handler;
+  action_run * runner;
+  PVAL val[MAX_PARAM];  // Action values
+} ACTION;
+
 int actc = 0;
-char * * actv = NULL;
+ACTION * actv;
+  
 MSG_CONTEXT my_msg_context;
 #define MY_MSG_CTX (&my_msg_context)
 
@@ -358,16 +391,7 @@ void lfsr_test(void) {
 //----------------------------------------------------------------------------
 // Action handler definitions
 //----------------------------------------------------------------------------
-typedef struct pval {
-  U64 u;
-  char * s;
-  int i;  // Use for enums 
-} pval;
 
-// Many action handlers, use macro to keep function defs in sync
-#define MAX_PARAM 5
-#define ACTION_HAND(name) void (name)(int run, char * action, int * pactn, pval v0, pval v1, pval v2, pval v3, pval v4)
-typedef ACTION_HAND(action_hand);
 
 //----------------------------------------------------------------------------
 // v, d (verbose, debug) action handlers
@@ -396,16 +420,23 @@ ACTION_HAND(debug_hand) {
 //----------------------------------------------------------------------------
 // im (imbed) action handler
 //----------------------------------------------------------------------------
-void add2actv(int n, char * * newact) {
-  if (n == 0) return;
-  actv = realloc(actv, (actc + n) * sizeof(char *));
+void add2actv(ACTION * newact) {
+  actv = realloc(actv, (actc + 1) * sizeof(ACTION));
   if (!actv) ERRX("actv realloc error: %s", strerror(errno));
-  memcpy(actv + actc, newact, n * sizeof(char *));
-  actc += n;
+  memcpy(actv+actc, newact, sizeof(ACTION));
+  actc++;
+}
+
+void add2tokv(int n, char * * newtok) {
+  if (n == 0) return;
+  tokv = realloc(tokv, (tokc + n) * sizeof(char *));
+  if (!tokv) ERRX("tokv realloc error: %s", strerror(errno));
+  memcpy(tokv + tokc, newtok, n * sizeof(char *));
+  tokc += n;
 }
 
 ACTION_HAND(imbed_hand) {
-  DBG1("Starting %s fn: \"%s\"", action, v0.s);
+  DBG1("Starting %s fn: \"%s\"", cmd, v0.s);
   if (!run) {
     // Open file and read into buffer
     FILE * file;
@@ -424,25 +455,25 @@ ACTION_HAND(imbed_hand) {
     p = realloc(p, size);
     if (!p) ERRX("realloc error: %s", strerror(errno));
 
-    // Save old actc / actv, copy up through current action into new actc / actv
-    int old_actc = actc;
-    char * * old_actv = actv;
-    actc = 0;
-    actv = NULL;
-    add2actv(*pactn+1, old_actv);
+    // Save old tokc / tokv, copy up through current action into new tokc / tokv
+    int old_tokc = tokc;
+    char * * old_tokv = tokv;
+    tokc = 0;
+    tokv = NULL;
+    add2tokv(*ptokn+1, old_tokv);
 
-    // tokenize buffer, append to actc / actv
+    // tokenize buffer, append to tokc / tokv
     char * sep = " \t\n\f\r";
     char * a = strtok(p, sep);
     while (a) {
-      DBG4("imbed_hand add tok: \"%s\" actc: %d", a, actc);
-      add2actv(1, &a);
+      DBG4("imbed_hand add tok: \"%s\" tokc: %d", a, tokc);
+      add2tokv(1, &a);
       a = strtok(NULL, sep);
     }
 
-    // append remainder of old actc / actv to new
-    add2actv(old_actc - *pactn - 1, &old_actv[*pactn + 1]);
-    free(old_actv);
+    // append remainder of old tokc / tokv to new
+    add2tokv(old_tokc - *ptokn - 1, &old_tokv[*ptokn + 1]);
+    free(old_tokv);
   } else {
     VERB1("Imbed %s", v0.s);
   }
@@ -464,32 +495,32 @@ struct loop_ctl {
 struct loop_ctl * lcur = &lctl[0];
 
 ACTION_HAND(loop_hand) {
-  if (!strcmp(action, "lc")) {
+  if (!strcmp(cmd, "lc")) {
     DBG1("Starting lc count: %lld", v0.u);
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
-      DBG4("loop count start; depth: %d top actn: %d count: %d", lcur-lctl, *pactn, v0.u);
+      DBG4("loop count start; depth: %d top actn: %d count: %d", lcur-lctl, *ptokn, v0.u);
       lcur->type = COUNT;
       lcur->count = v0.u;
       lcur->top = *pactn;
     }
-  } else if (!strcmp(action, "lt")) {
+  } else if (!strcmp(cmd, "lt")) {
     DBG1("Starting lt seconds: %lld", v0.u);
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
-      DBG4("loop time start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, v0.u);
+      DBG4("loop time start; depth: %d top actn: %d time: %d", lcur - lctl, *ptokn, v0.u);
       lcur->type = TIME;
       lcur->top = *pactn;
       if (gettimeofday(&lcur->end, NULL)) ERRX("loop time start: gettimeofday() failed: %s", strerror(errno));
       lcur->end.tv_sec += v0.u;  // Save future time of loop end
     }
   #ifdef MPI
-  } else if (!strcmp(action, "ls")) {
+  } else if (!strcmp(cmd, "ls")) {
     DBG1("Starting ls seconds: %lld", v0.u);
     if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
     if (run) {
 
-      DBG4("loop sync start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, v0.u);
+      DBG4("loop sync start; depth: %d top actn: %d time: %d", lcur - lctl, *ptokn, v0.u);
       lcur->type = SYNC;
       lcur->top = *pactn;
       if (myrank == 0) {
@@ -498,7 +529,7 @@ ACTION_HAND(loop_hand) {
       }
     }
   #endif
-  } else if (!strcmp(action, "le")) {
+  } else if (!strcmp(cmd, "le")) {
   DBG1("Starting le");
     if (lcur <= lctl) ERRX("loop end when no loop active - more loop ends than loop starts");
     if (!run) {
@@ -520,7 +551,7 @@ ACTION_HAND(loop_hand) {
           DBG4("loop time end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
           lcur--;
         } else {
-          *pactn = lcur->top;
+          *ptokn = lcur->top;
           DBG4("loop time end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
         }
       #ifdef MPI
@@ -542,26 +573,24 @@ ACTION_HAND(loop_hand) {
           VERB1("loop sync end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
           lcur--;
         } else {
-          *pactn = lcur->top;
+          *ptokn = lcur->top;
           DBG4("loop sync end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
         }
       #endif
       }
     }
 
-  } else ERRX("internal error loop_hand invalid action: %s", action);
+  } else ERRX("internal error loop_hand invalid action: %s", cmd);
 }
 
 //----------------------------------------------------------------------------
 // o, e (stdout, stderr) action handlers
 //----------------------------------------------------------------------------
-ACTION_HAND(stdout_hand) {
-  if (run) {
-    U64 line;
-    for (line = 1; line <= v0.u; line++) {
-      // Message padded to exactly 100 bytes long.
-      MSG("action %-4u stdout line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
-    }
+ACTION_RUN(stdout_run) {
+  U64 line;
+  for (line = 1; line <= act->val[0].u; line++) {
+    // Message padded to exactly 100 bytes long.
+    MSG("action %-4u stdout line %-8lu of %-8lu %*s", *ptokn - 1, line, act->val[0].u, 34 - id_string_len, "");
   }
 }
 
@@ -570,7 +599,7 @@ ACTION_HAND(stderr_hand) {
     U64 line;
     for (line = 1; line <= v0.u; line++) {
       // Message padded to exactly 100 bytes long.
-      MSGE("action %-4u stderr line %-8lu of %-8lu %*s", *pactn - 1, line, v0.u, 34 - id_string_len, "");
+      MSGE("action %-4u stderr line %-8lu of %-8lu %*s", *ptokn - 1, line, v0.u, 34 - id_string_len, "");
     }
   }
 }
@@ -596,8 +625,8 @@ ACTION_HAND(mem_hand) {
   static struct memblk * memptr;
   static int memcount;
 
-  DBG1("mem_hand start; action: %s memcount: %d", action, memcount);
-  if (!strcmp(action, "va")) { // va - allocate memory
+  DBG1("mem_hand start; action: %s memcount: %d", cmd, memcount);
+  if (!strcmp(cmd, "va")) { // va - allocate memory
     memcount++;
     if (run) {
       size_t len = v0.u;
@@ -614,7 +643,7 @@ ACTION_HAND(mem_hand) {
         memcount--;
       }
     }
-  } else if (!strcmp(action, "vt")) { // vt - touch memory
+  } else if (!strcmp(cmd, "vt")) { // vt - touch memory
     U64 stride = v0.u;
     if (!run) {
       if (memcount <= 0) ERRX("Touch without cooresponding allocate");
@@ -635,7 +664,7 @@ ACTION_HAND(mem_hand) {
         VERB0("mem_hand - Warning: no memory allocation to touch");
       }
     }
-  } else if (!strcmp(action, "vf")) { // vf - free memory
+  } else if (!strcmp(cmd, "vf")) { // vf - free memory
     if (!run) {
       if (memcount-- <= 0) ERRX("Free without cooresponding allocate");
     } else {
@@ -650,7 +679,7 @@ ACTION_HAND(mem_hand) {
         VERB0("mem_hand - Warning: no memory allocation to free");
       }
     }
-  } else ERRX("internal error mem_hand invalid action: %s", action);
+  } else ERRX("internal error mem_hand invalid action: %s", cmd);
 }
 
 
@@ -663,11 +692,11 @@ static void *mpi_sbuf, *mpi_rbuf;
 static size_t mpi_buf_len;
 
   if (run) {
-    DBG1("Starting %s", action);
-    if (!strcmp(action, "mi")) {
+    DBG1("Starting %s", cmd);
+    if (!strcmp(cmd, "mi")) {
       MPI_CK(MPI_Init(NULL, NULL));
       get_id();
-    } else if (!strcmp(action, "msr")) {
+    } else if (!strcmp(cmd, "msr")) {
       int len = v0.u;
       int stride = v1.u;
       MPI_Status status;
@@ -684,12 +713,12 @@ static size_t mpi_buf_len;
       MPI_CK(MPI_Sendrecv(mpi_sbuf, len, MPI_BYTE, dest, 0,
                           mpi_rbuf, len, MPI_BYTE, source, 0,
                           MPI_COMM_WORLD, &status));
-    } else if (!strcmp(action, "mb")) {
+    } else if (!strcmp(cmd, "mb")) {
       MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
-    } else if (!strcmp(action, "mf")) {
+    } else if (!strcmp(cmd, "mf")) {
       MPI_CK(MPI_Finalize());
       get_id();
-    } else ERRX("internal error mpi_hand invalid action: %s", action);
+    } else ERRX("internal error mpi_hand invalid action: %s", cmd);
   }
 }
 #endif
@@ -703,8 +732,8 @@ ACTION_HAND(flap_hand) {
   static U64 size, count;
   U64 i, iv;
 
-  DBG1("Starting %s", action);
-  if (!strcmp(action, "fi")) {
+  DBG1("Starting %s", cmd);
+  if (!strcmp(cmd, "fi")) {
     size = v0.u;
     count = v1.u;
     DBG1("flapper init starting; size: %llu count: %llu", size, count);
@@ -726,7 +755,7 @@ ACTION_HAND(flap_hand) {
       }
 
     }
-  } else if (!strcmp(action, "fr")) {
+  } else if (!strcmp(cmd, "fr")) {
     U64 rep = v0.u;
     U64 stride = v1.u;
 
@@ -779,11 +808,11 @@ ACTION_HAND(flap_hand) {
       VERB2("flapper done; predicted: %e sum: %e delta: %e", predicted, sum, sum - predicted);
       VERB2("FP Adds: %llu, time: %f Seconds, MFLAPS: %e", fp_add_ct, delta_t, (double)fp_add_ct / delta_t / 1000000.0);
     }
-  } else if (!strcmp(action, "ff")) {
+  } else if (!strcmp(cmd, "ff")) {
     if (!size) ERRX("ff without prior fi");
     size = 0;
     if (run) free(nums);
-  } else ERRX("internal error flap_hand invalid action: %s", action);
+  } else ERRX("internal error flap_hand invalid action: %s", cmd);
 
 }
 
@@ -798,7 +827,7 @@ ACTION_HAND(heap_hand) {
   U64 limit = v3.u;
   U64 count = v4.u;
 
-  DBG1("Starting %s", action);
+  DBG1("Starting %s", cmd);
   if (!run) {
     if (min < 1) ERRX("heapx: min < 1");
     if (min > max) ERRX("heapx: min > max");
@@ -915,8 +944,8 @@ static int dl_num = -1;
 ACTION_HAND(dl_hand) {
   static void * handle[100];
 
-  DBG1("Starting %s", action);
-  if (!strcmp(action, "dlo")) {
+  DBG1("Starting %s", cmd);
+  if (!strcmp(cmd, "dlo")) {
     char * name = v0.s;
     if (++dl_num >= DIM1(handle)) ERRX("Too many dlo commands, limit is %d", DIM1(handle));
     if (run) {
@@ -928,7 +957,7 @@ ACTION_HAND(dl_hand) {
         dl_num--;
       }
     }
-  } else if (!strcmp(action, "dls")) {
+  } else if (!strcmp(cmd, "dls")) {
     char * symbol = v0.s;
     if (dl_num < 0) ERRX("No currently open dynamic library");
     if (run) {
@@ -939,7 +968,7 @@ ACTION_HAND(dl_hand) {
       error = dlerror();
       if (error) VERB0("dlsym error: %s", error);
     }
-  } else if (!strcmp(action, "dlc")) {
+  } else if (!strcmp(cmd, "dlc")) {
     if (dl_num < 0) ERRX("No currently open dynamic library");
     if (run) {
       DBG1("dlc dl_num: %d handle[dl_num]: %p", dl_num, handle[dl_num]);
@@ -948,7 +977,7 @@ ACTION_HAND(dl_hand) {
       if (rc) VERB0("dlclose error: %s", dlerror());
     }
     dl_num--;
-  } else ERRX("internal error dl_hand invalid action: %s", action);
+  } else ERRX("internal error dl_hand invalid action: %s", cmd);
 }
 #endif
 
@@ -979,7 +1008,7 @@ static U64 hew_ofs, her_ofs;
 static U64 rw_count[2];
 ACTION_HAND(hio_hand) {
   int rc;
-  if (!strcmp(action, "hi")) {
+  if (!strcmp(cmd, "hi")) {
     char * context_name = v0.s;
     char * data_root = v1.s;
     char * tmp_str;
@@ -1017,7 +1046,7 @@ ACTION_HAND(hio_hand) {
         }
       }
     }
-  } else if (!strcmp(action, "hdo")) {
+  } else if (!strcmp(cmd, "hdo")) {
     char * ds_name = v0.s;
     U64 ds_id = v1.u;
     int flag_i = v2.i;
@@ -1039,7 +1068,7 @@ ACTION_HAND(hio_hand) {
         hio_err_print_all(context, stderr, "hio_dataset_open error: ");
       }
     }
-  } else if (!strcmp(action, "heo")) {
+  } else if (!strcmp(cmd, "heo")) {
     char * el_name = v0.s;
     int flag_i = v1.i;
     char * flag_s = v1.s;
@@ -1066,7 +1095,7 @@ ACTION_HAND(hio_hand) {
       if (!wbuf) ERRX("malloc(%d) failed", bufsz);
       hew_ofs = her_ofs = 0;
     }
-  } else if (!strcmp(action, "hxc")) {
+  } else if (!strcmp(cmd, "hxc")) {
     I64 flag = v0.u;
     if (run) {
       if (flag) {
@@ -1076,7 +1105,7 @@ ACTION_HAND(hio_hand) {
       }
       VERB0("HIO read data checking is now %s", hio_check?"on": "off"); 
     }
-  } else if (!strcmp(action, "hew")) {
+  } else if (!strcmp(cmd, "hew")) {
     I64 p_ofs = v0.u;
     U64 size = v1.u;
     U64 a_ofs;
@@ -1099,7 +1128,7 @@ ACTION_HAND(hio_hand) {
         rw_count[1] += size;
       }
     }
-  } else if (!strcmp(action, "her")) {
+  } else if (!strcmp(cmd, "her")) {
     I64 p_ofs = v0.u;
     U64 size = v1.u;
     U64 a_ofs;
@@ -1129,7 +1158,7 @@ ACTION_HAND(hio_hand) {
         }
       }
     }
-  } else if (!strcmp(action, "hec")) {
+  } else if (!strcmp(cmd, "hec")) {
     if (run) {
       DBG1("Invoking hio_element_close");
       rc = hio_element_close(&element);
@@ -1146,7 +1175,7 @@ ACTION_HAND(hio_hand) {
       rbuf = NULL;
       bufsz = 0;
     }
-  } else if (!strcmp(action, "hdc")) {
+  } else if (!strcmp(cmd, "hdc")) {
     if (run) {
       DBG1("Invoking hio_dataset_close");
       rc = hio_dataset_close(&dataset);
@@ -1163,7 +1192,7 @@ ACTION_HAND(hio_hand) {
         VERB1("R/W bytes: %lld %lld time:%f R/W speed: %f %f GB/S", rw_count_sum[0], rw_count_sum[1], time, 
                rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
     }
-  } else if (!strcmp(action, "hf")) {
+  } else if (!strcmp(cmd, "hf")) {
     if (run) {
       DBG1("Invoking hio_fini");
       rc = hio_fini(&context);
@@ -1173,7 +1202,7 @@ ACTION_HAND(hio_hand) {
         hio_err_print_all(context, stderr, "hio_fini error: ");
       }
     }
-  } else ERRX("internal error hio_hand invalid action: %s", action);
+  } else ERRX("internal error hio_hand invalid action: %s", cmd);
 }
 #endif
 
@@ -1197,6 +1226,7 @@ ACTION_HAND(exit_hand) {
 //----------------------------------------------------------------------------
 // Enum conversion tables
 //----------------------------------------------------------------------------
+#ifdef HIO
 ENUM_START(etab_hflg)
 ENUM_NAMP(HIO_FLAG_, RDONLY)
 ENUM_NAMP(HIO_FLAG_, WRONLY)
@@ -1209,67 +1239,142 @@ ENUM_START(etab_hdsm)  // hio dataset mode
 ENUM_NAMP(HIO_SET_ELEMENT_, UNIQUE)
 ENUM_NAMP(HIO_SET_ELEMENT_, SHARED)
 ENUM_END(etab_hdsm, 0, NULL)
+#endif
 
 //----------------------------------------------------------------------------
 // Argument string parsing table
 //----------------------------------------------------------------------------
 struct parse {
-  char * action;
+  char * cmd;
   enum ptype param[MAX_PARAM];
   action_hand * handler;
+  action_check * checker;
+  action_run * runner;
 } parse[] = {
-  {"v",   {UINT, NONE, NONE, NONE, NONE}, verbose_hand},
-  {"d",   {UINT, NONE, NONE, NONE, NONE}, debug_hand},
-  {"im",  {STR,  NONE, NONE, NONE, NONE}, imbed_hand},
-  {"lc",  {UINT, NONE, NONE, NONE, NONE}, loop_hand},
-  {"lt",  {UINT, NONE, NONE, NONE, NONE}, loop_hand},
+  {"v",   {UINT, NONE, NONE, NONE, NONE}, verbose_hand, NULL, NULL},
+  {"d",   {UINT, NONE, NONE, NONE, NONE}, debug_hand, NULL, NULL},
+  {"im",  {STR,  NONE, NONE, NONE, NONE}, imbed_hand, NULL, NULL},
+  {"lc",  {UINT, NONE, NONE, NONE, NONE}, loop_hand, NULL, NULL},
+  {"lt",  {UINT, NONE, NONE, NONE, NONE}, loop_hand, NULL, NULL},
   #ifdef MPI
-  {"ls",  {UINT, NONE, NONE, NONE, NONE}, loop_hand},
+  {"ls",  {UINT, NONE, NONE, NONE, NONE}, loop_hand, NULL, NULL},
   #endif
-  {"le",  {NONE, NONE, NONE, NONE, NONE}, loop_hand},
-  {"o",   {UINT, NONE, NONE, NONE, NONE}, stdout_hand},
-  {"e",   {UINT, NONE, NONE, NONE, NONE}, stderr_hand},
-  {"s",   {UINT, NONE, NONE, NONE, NONE}, sleep_hand},
-  {"va",  {UINT, NONE, NONE, NONE, NONE}, mem_hand},
-  {"vt",  {PINT, NONE, NONE, NONE, NONE}, mem_hand},
-  {"vf",  {NONE, NONE, NONE, NONE, NONE}, mem_hand},
+  {"le",  {NONE, NONE, NONE, NONE, NONE}, loop_hand, NULL, NULL},
+  {"o",   {UINT, NONE, NONE, NONE, NONE}, NULL,      stdout_run, NULL, NULL},
+  {"e",   {UINT, NONE, NONE, NONE, NONE}, stderr_hand, NULL, NULL},
+  {"s",   {UINT, NONE, NONE, NONE, NONE}, sleep_hand, NULL, NULL},
+  {"va",  {UINT, NONE, NONE, NONE, NONE}, mem_hand, NULL, NULL},
+  {"vt",  {PINT, NONE, NONE, NONE, NONE}, mem_hand, NULL, NULL},
+  {"vf",  {NONE, NONE, NONE, NONE, NONE}, mem_hand, NULL, NULL},
   #ifdef MPI
-  {"mi",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand},
-  {"msr", {PINT, PINT, NONE, NONE, NONE}, mpi_hand},
-  {"mb",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand},
-  {"mb",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand},
-  {"mf",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand},
+  {"mi",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand, NULL, NULL},
+  {"msr", {PINT, PINT, NONE, NONE, NONE}, mpi_hand, NULL, NULL},
+  {"mb",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand, NULL, NULL},
+  {"mb",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand, NULL, NULL},
+  {"mf",  {NONE, NONE, NONE, NONE, NONE}, mpi_hand, NULL, NULL},
   #endif
-  {"fi",  {UINT, PINT, NONE, NONE, NONE}, flap_hand},
-  {"fr",  {PINT, PINT, NONE, NONE, NONE}, flap_hand},
-  {"ff",  {NONE, NONE, NONE, NONE, NONE}, flap_hand},
-  {"hx",  {UINT, UINT, UINT, UINT, UINT}, heap_hand},
+  {"fi",  {UINT, PINT, NONE, NONE, NONE}, flap_hand, NULL, NULL},
+  {"fr",  {PINT, PINT, NONE, NONE, NONE}, flap_hand, NULL, NULL},
+  {"ff",  {NONE, NONE, NONE, NONE, NONE}, flap_hand, NULL, NULL},
+  {"hx",  {UINT, UINT, UINT, UINT, UINT}, heap_hand, NULL, NULL},
   #ifdef DLFCN
-  {"dlo", {STR,  NONE, NONE, NONE, NONE}, dl_hand},
-  {"dls", {STR,  NONE, NONE, NONE, NONE}, dl_hand},
-  {"dlc", {NONE, NONE, NONE, NONE, NONE}, dl_hand},
+  {"dlo", {STR,  NONE, NONE, NONE, NONE}, dl_hand, NULL, NULL},
+  {"dls", {STR,  NONE, NONE, NONE, NONE}, dl_hand, NULL, NULL},
+  {"dlc", {NONE, NONE, NONE, NONE, NONE}, dl_hand, NULL, NULL},
   #endif
   #ifdef HIO
-  {"hi",  {STR,  STR,  NONE, NONE, NONE}, hio_hand},
-  {"hdo", {STR,  UINT, HFLG, HDSM, NONE}, hio_hand},
-  {"hxc", {UINT, NONE, NONE, NONE, NONE}, hio_hand},
-  {"heo", {STR,  HFLG, UINT, NONE, NONE}, hio_hand},
-  {"hew", {SINT, UINT, NONE, NONE, NONE}, hio_hand},
-  {"her", {SINT, UINT, NONE, NONE, NONE}, hio_hand},
-  {"hec", {NONE, NONE, NONE, NONE, NONE}, hio_hand},
-  {"hdc", {NONE, NONE, NONE, NONE, NONE}, hio_hand},
-  {"hf",  {NONE, NONE, NONE, NONE, NONE}, hio_hand},
+  {"hi",  {STR,  STR,  NONE, NONE, NONE}, hio_hand, NULL, NULL},
+  {"hdo", {STR,  UINT, HFLG, HDSM, NONE}, hio_hand, NULL, NULL},
+  {"hxc", {UINT, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
+  {"heo", {STR,  HFLG, UINT, NONE, NONE}, hio_hand, NULL, NULL},
+  {"hew", {SINT, UINT, NONE, NONE, NONE}, hio_hand, NULL, NULL},
+  {"her", {SINT, UINT, NONE, NONE, NONE}, hio_hand, NULL, NULL},
+  {"hec", {NONE, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
+  {"hdc", {NONE, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
+  {"hf",  {NONE, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
   #endif
-  {"k",   {UINT, NONE, NONE, NONE, NONE}, raise_hand},
-  {"x",   {UINT, NONE, NONE, NONE, NONE}, exit_hand}
+  {"k",   {UINT, NONE, NONE, NONE, NONE}, raise_hand, NULL, NULL},
+  {"x",   {UINT, NONE, NONE, NONE, NONE}, exit_hand, NULL, NULL},
 };
 
 //----------------------------------------------------------------------------
 // Argument string parser - calls action handlers
 //----------------------------------------------------------------------------
-void parse_and_dispatch(int run) {
-  int a = 0, aa, i, j, rc;
-  pval vals[MAX_PARAM];
+void parse_action() {
+  int t = 0, i, j, rc;
+  ACTION nact;
+
+  msg_context_set_verbose(MY_MSG_CTX, 0); 
+  msg_context_set_debug(MY_MSG_CTX, 0); 
+
+  #ifdef DLFCN
+    dl_num = -1;
+  #endif
+
+  while ( ++t < tokc ) {
+    for (i = 0; i < DIM1(parse); ++i) {
+      if (0 == strcmp(tokv[t], parse[i].cmd)) {
+        DBG3("match: tokv[%d]: %s parse[%d].cmd: %s run: %d", t, tokv[t], i, parse[i].cmd, 0);
+        nact.tokn = t;
+        nact.action = tokv[t];
+        nact.args = STRNDUPX("", 1);
+      
+        for (j = 0; j < MAX_PARAM; ++j) {
+          if (parse[i].param[j] == NONE) break;
+          if (tokc - t <= 1) ERRX("action %d \"%s\" missing param %d", nact.tokn, nact.action, j+1);
+          nact.args = STRCATRX(STRCATRX(nact.args, " "), tokv[t+1]);
+          switch (parse[i].param[j]) {
+            case SINT:
+            case UINT:
+            case PINT:
+              t++;
+              nact.val[j].u = getI64(tokv[t], parse[i].param[j], t);
+              break;
+            case STR:
+              nact.val[j].s = tokv[++t];
+              break;
+            case HFLG:
+              t++; 
+              rc = str2enum(MY_MSG_CTX, &etab_hflg, tokv[t], &nact.val[j].i); 
+              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", nact.tokn, nact.action, tokv[t]);
+              rc = enum2str(MY_MSG_CTX, &etab_hflg, nact.val[j].i, &nact.val[j].s); 
+              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", nact.tokn, nact.action, tokv[t]);
+              break;
+            case HDSM:
+              t++; 
+              rc = str2enum(MY_MSG_CTX, &etab_hdsm, tokv[t], &nact.val[j].i); 
+              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", nact.tokn, nact.action, tokv[t]);
+              rc = enum2str(MY_MSG_CTX, &etab_hdsm, nact.val[j].i, &nact.val[j].s); 
+              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", nact.tokn, nact.action, tokv[t]);
+              break;
+            case NONE:
+              break;
+            default:
+              ERRX("internal parse error parse[%d].param[%d]: %d", i, j, parse[i].param[j]);
+          }
+        }
+        nact.handler = parse[i].handler; 
+        nact.runner = parse[i].runner; 
+        add2actv(&nact);
+        DBG2("Checking action %d: %s%s", actc-1, nact.action, nact.args); 
+        if (parse[i].handler) parse[i].handler(0, nact.action, &t, &actc, nact.val[0], nact.val[1], nact.val[2], nact.val[3], nact.val[4]);
+        else if (parse[i].checker) parse[i].checker(0, nact.action, &t, &actc, nact.val[0], nact.val[1], nact.val[2], nact.val[3], nact.val[4]);
+  
+        break;
+      }
+    }
+    if (i >= DIM1(parse)) ERRX("action %d: \"%s\" not recognized.", t, tokv[t]);
+  }
+  if (lcur-lctl > 0) ERRX("Unterminated loop - more loop starts than loop ends");
+  DBG4("actc: %d", actc);
+  IFDBG4( for (int a=0; a<actc; a++) DBG0("actv[%d].action: %s", a, actv[a].action) );
+}
+
+//----------------------------------------------------------------------------
+// Argument string parser - calls action handlers
+//----------------------------------------------------------------------------
+void run_action() {
+  int a = -1;
 
   msg_context_set_verbose(MY_MSG_CTX, 0); 
   msg_context_set_debug(MY_MSG_CTX, 0); 
@@ -1279,36 +1384,58 @@ void parse_and_dispatch(int run) {
   #endif
 
   while ( ++a < actc ) {
+     DBG2("Running action %d: %s%s", a, actv[a].action, actv[a].args); 
+     if (actv[a].handler) 
+       actv[a].handler(1, actv[a].action, &actv[a].tokn, &a, actv[a].val[0], actv[a].val[1], actv[a].val[2], actv[a].val[3], actv[a].val[4]);
+     else if (actv[a].runner) 
+       actv[a].runner(&actv[a], &a);
+  }
+}
+
+#if 0
+void run_action() {
+  int run = 1;
+  int a = 0, aa, i, j, rc;
+  PVAL vals[MAX_PARAM];
+
+  msg_context_set_verbose(MY_MSG_CTX, 0); 
+  msg_context_set_debug(MY_MSG_CTX, 0); 
+
+  #ifdef DLFCN
+    dl_num = -1;
+  #endif
+
+  while ( ++a < tokc ) {
     for (i = 0; i < DIM1(parse); ++i) {
-      if (0 == strcmp(actv[a], parse[i].action)) {
-        DBG3("match: actv[%d]: %s parse[%d].action: %s run: %d", a, actv[a], i, parse[i].action, run);
+      if (0 == strcmp(tokv[a], parse[i].cmd)) {
+        DBG3("match: tokv[%d]: %s parse[%d].cmd: %s run: %d", a, tokv[a], i, parse[i].cmd, run);
         aa = a;
         for (j = 0; j < MAX_PARAM; ++j) {
           if (parse[i].param[j] == NONE) break;
-          if (actc - a <= 1) ERRX("action %d \"%s\" missing param %d", aa, actv[aa], j+1);
+          if (tokc - a <= 1) ERRX("action %d \"%s\" missing param %d", aa, tokv[aa], j+1);
           switch (parse[i].param[j]) {
             case SINT:
             case UINT:
             case PINT:
               a++;
-              vals[j].u = getI64(actv[a], parse[i].param[j], a);
+              vals[j].u = getI64(tokv[a], parse[i].param[j], a);
               break;
             case STR:
-              vals[j].s = actv[++a];
+              vals[j].s = tokv[++a];
               break;
             case HFLG:
               a++; 
-              rc = str2enum(MY_MSG_CTX, &etab_hflg, actv[a], &vals[j].i); 
-              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", aa, actv[aa], actv[a]);
+              rc = str2enum(MY_MSG_CTX, &etab_hflg, tokv[a], &vals[j].i); 
+              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", aa, tokv[aa], tokv[a]);
               rc = enum2str(MY_MSG_CTX, &etab_hflg, vals[j].i, &vals[j].s); 
-              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", aa, actv[aa], actv[a]);
+              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", aa, tokv[aa], tokv[a]);
               break;
             case HDSM:
               a++; 
-              rc = str2enum(MY_MSG_CTX, &etab_hdsm, actv[a], &vals[j].i); 
-              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", aa, actv[aa], actv[a]);
+              rc = str2enum(MY_MSG_CTX, &etab_hdsm, tokv[a], &vals[j].i); 
+              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", aa, tokv[aa], tokv[a]);
               rc = enum2str(MY_MSG_CTX, &etab_hdsm, vals[j].i, &vals[j].s); 
-              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", aa, actv[aa], actv[a]);
+              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", aa, tokv[aa], tokv[a]);
               break;
             case NONE:
               break;
@@ -1316,14 +1443,15 @@ void parse_and_dispatch(int run) {
               ERRX("internal parse error parse[%d].param[%d]: %d", i, j, parse[i].param[j]);
           }
         }
-        parse[i].handler(run, actv[aa], &a, vals[0], vals[1], vals[2], vals[3], vals[4]);
+        parse[i].handler(run, tokv[aa], &a, &actc, vals[0], vals[1], vals[2], vals[3], vals[4]);
         break;
       }
     }
-    if (i >= DIM1(parse)) ERRX("action %d: \"%s\" not recognized.", a, actv[a]);
+    if (i >= DIM1(parse)) ERRX("action %d: \"%s\" not recognized.", a, tokv[a]);
   }
   if (lcur-lctl > 0) ERRX("Unterminated loop - more loop starts than loop ends");
 }
+#endif
 
 //----------------------------------------------------------------------------
 // Main - write help, call parser / dispatcher
@@ -1338,11 +1466,11 @@ int main(int argc, char * * argv) {
   msg_context_init(MY_MSG_CTX, 0, 0);
   get_id();  
 
-  add2actv(argc, argv); // Make initial copy of argv so im works
+  add2tokv(argc, argv); // Make initial copy of argv so im works
 
   // Make two passes through args, first to check, second to run.
-  parse_and_dispatch(0);
-  parse_and_dispatch(1);
+  parse_action();
+  run_action();
 
   VERB0("Returning from main rc: 0");
   return 0;
