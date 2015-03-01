@@ -66,9 +66,10 @@ void *reallocx(MSG_CONTEXT *msgctx, const char *context, void *ptr, size_t size)
   return r;
 }
 
-void freex(MSG_CONTEXT *msgctx, const char *context, void *ptr) {
+void *freex(MSG_CONTEXT *msgctx, const char *context, void *ptr) {
   DBG4("freex %s %p", context, ptr);
   free(ptr);
+  return NULL;
 }
 
 char *strndupx(MSG_CONTEXT *msgctx, const char *context, const char *s1, size_t n) {

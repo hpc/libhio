@@ -119,7 +119,7 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...);
 //----------------------------------------------------------------------------
 void *mallocx(MSG_CONTEXT *msgctx, const char *context, size_t size);
 void *reallocx(MSG_CONTEXT *msgctx, const char *context, void *ptr, size_t size);
-void freex(MSG_CONTEXT *msgctx, const char *context, void *ptr);
+void *freex(MSG_CONTEXT *msgctx, const char *context, void *ptr);
 char *strndupx(MSG_CONTEXT *msgctx, const char *context, const char *s1, size_t n);
 char *strcatrx(MSG_CONTEXT *msgctx, const char *context, const char *s1, const char *s2);
 char *alloc_printf(MSG_CONTEXT *msgctx, const char *context, const char *format, ...);
