@@ -955,10 +955,10 @@ ACTION_RUN(hx_run) {
 //----------------------------------------------------------------------------
 #ifdef DLFCN
 static int dl_num = -1;
-static void * handle[100];
+static void * dl_handle[100];
 
 ACTION_CHECK(dlo_check) {
-  if (++dl_num >= DIM1(handle)) ERRX("%s; too many dlo commands, limit is %d", A.desc, DIM1(handle));
+  if (++dl_num >= DIM1(dl_handle)) ERRX("%s; too many dlo commands, limit is %d", A.desc, DIM1(dl_handle));
 }
 
 ACTION_CHECK(dls_check) {
@@ -971,9 +971,9 @@ ACTION_CHECK(dlc_check) {
 
 ACTION_RUN(dlo_run) {
   char * name = V0.s;
-  handle[dl_num] = dlopen(name, RTLD_NOW);
-  VERB3("%s; dlopen(%s) returns %p", A.desc, name, handle[dl_num]);
-  if (!handle[dl_num]) {
+  dl_handle[dl_num] = dlopen(name, RTLD_NOW);
+  VERB3("%s; dlopen(%s) returns %p", A.desc, name, dl_handle[dl_num]);
+  if (!dl_handle[dl_num]) {
     VERB0("%s; dlopen failed: %s", A.desc, dlerror());
     dl_num--;
   }
@@ -982,14 +982,14 @@ ACTION_RUN(dlo_run) {
 ACTION_RUN(dls_run) {
   char * symbol = V0.s;
   char * error = dlerror();
-  void * sym = dlsym(handle[dl_num], symbol);
+  void * sym = dlsym(dl_handle[dl_num], symbol);
   VERB3("%s; dlsym(%s) returns %p", A.desc, symbol, sym);
   error = dlerror();
   if (error) VERB0("%s; dlsym error: %s", A.desc, error);
 }
 
 ACTION_RUN(dlc_run) {
-  int rc = dlclose(handle[dl_num--]);
+  int rc = dlclose(dl_handle[dl_num--]);
   VERB3("%s; dlclose returns %d", A.desc, rc);
   if (rc) VERB0("%s; dlclose error: %s", A.desc, dlerror());
 }
@@ -1020,215 +1020,221 @@ static U64 bufsz = 0;
 static int hio_check = 0;
 static U64 hew_ofs, her_ofs;
 static U64 rw_count[2];
-ACTION_HAND(hio_hand) {
-  int rc;
-  if (!strcmp(cmd, "hi")) {
-    char * context_name = v0.s;
-    char * data_root = v1.s;
-    char * tmp_str;
-    char * root_var = "data_roots";
-    if (run) {
-      DBG4("HIO_SET_ELEMENT_UNIQUE: %lld", HIO_SET_ELEMENT_UNIQUE);
-      DBG4("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
-      MPI_Comm myworld = MPI_COMM_WORLD;
-      // Workaround for read only context_data_root and no default context
-      char ename[255];
-      snprintf(ename, sizeof(ename), "HIO_context_%s_%s", context_name, root_var); 
-      DBG4("setenv %s=%s", ename, data_root);
-      rc = setenv(ename, data_root, 1);
-      DBG4("setenv %s=%s rc:%d", ename, data_root, rc);
-      DBG4("getenv(%s) returns \"%s\"", ename, getenv(ename));
-      // end workaround
-      DBG1("Invoking hio_init_mpi context:%s root:%s", context_name, data_root);
-      rc = hio_init_mpi(&context, &myworld, NULL, NULL, context_name);
-      VERB3("hio_init_mpi rc:%d context_name:%s", rc, context_name);
-      if (HIO_SUCCESS != rc) {
-        VERB0("hio_init_mpi failed rc:%d", rc);
-        hio_err_print_all(context, stderr, "hio_init_mpi error: ");
-      } else {
-        //DBG1("Invoking hio_config_set_value var:%s val:%s", root_var, data_root);
-        //rc = hio_config_set_value((hio_object_t)context, root_var, data_root);
-        //VERB2("hio_config_set_value rc:%d var:%s val:%s", rc, root_var, data_root);
-        DBG1("Invoking hio_config_get_value var:%s", root_var);
-        rc = hio_config_get_value((hio_object_t)context, root_var, &tmp_str);
-        VERB3("hio_config_get_value rc:%d, var:%s value=\"%s\"", rc, root_var, tmp_str);
-        if (HIO_SUCCESS == rc) {
-          free(tmp_str);
-        } else {
-          VERB0("hio_config_get_value failed, rc:%d var:%s", rc, root_var);
-          hio_err_print_all(context, stderr, "hio_config_get_value error: ");
-        }
-      }
-    }
-  } else if (!strcmp(cmd, "hdo")) {
-    char * ds_name = v0.s;
-    U64 ds_id = v1.u;
-    int flag_i = v2.i;
-    char * flag_s = v2.s;
-    int mode_i = v3.i;
-    char * mode_s = v3.s;
-    if (run) {
-      rw_count[0] = rw_count[1] = 0;
-      DBG1("Invoking hio_dataset_open name:%s id:%lld flags:%s mode:%s", ds_name, ds_id, flag_s, mode_s);
-      MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
-      timer_start();
-      rc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
-      VERB3("hio_dataset_open rc:%d name:%s id:%lld flags:%s mode:%s", rc, ds_name, ds_id, flag_s, mode_s);
-      if (HIO_SUCCESS != rc) {
-        char * herr;
-        enum2str(MY_MSG_CTX, &etab_herr, rc, &herr);
-        VERB0("hio_dataset_open failed rc:%d(%s) name:%s id:%lld flag_s:%s mode:%s", rc, herr, ds_name, ds_id, flag_s, mode_s);
-        free(herr);
-        hio_err_print_all(context, stderr, "hio_dataset_open error: ");
-      }
-    }
-  } else if (!strcmp(cmd, "heo")) {
-    char * el_name = v0.s;
-    int flag_i = v1.i;
-    char * flag_s = v1.s;
-    bufsz = v2.u;
-    if (run) {
-      DBG1("Invoking hio_element_open name:%s flags:%s", el_name, flag_s);
-      rc = hio_element_open (dataset, &element, el_name, flag_i);
-      VERB3("hio_element_open rc:%d name:%s flags:%s", rc, el_name, flag_s);
-      if (HIO_SUCCESS != rc) {
-        VERB0("hio_elememt_open failed rc:%d name:%s flags:%s", rc, el_name, flag_s);
-        hio_err_print_all(context, stderr, "hio_element_open error: ");
-      }
 
-      wbuf = MALLOCX(bufsz+LFSR_22_CYCLE);
-      lfsr_22_byte_init();
-      lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE); 
+ACTION_RUN(hi_run) {
+  hio_return_t hrc;
+  char * context_name = V0.s;
+  char * data_root = V1.s;
+  char * tmp_str;
+  char * root_var = "data_roots";
+  DBG4("HIO_SET_ELEMENT_UNIQUE: %lld", HIO_SET_ELEMENT_UNIQUE);
+  DBG4("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
+  MPI_Comm myworld = MPI_COMM_WORLD;
+  // Workaround for read only context_data_root and no default context
+  {
+    int rc;
+    char ename[255];
+    snprintf(ename, sizeof(ename), "HIO_context_%s_%s", context_name, root_var); 
+    DBG4("setenv %s=%s", ename, data_root);
+    rc = setenv(ename, data_root, 1);
+    DBG4("setenv %s=%s rc:%d", ename, data_root, rc);
+    DBG4("getenv(%s) returns \"%s\"", ename, getenv(ename));
+  }
+  // end workaround
+  DBG1("Invoking hio_init_mpi context:%s root:%s", context_name, data_root);
+  hrc = hio_init_mpi(&context, &myworld, NULL, NULL, context_name);
+  VERB3("hio_init_mpi rc:%d context_name:%s", hrc, context_name);
+  if (HIO_SUCCESS != hrc) {
+    VERB0("hio_init_mpi failed rc:%d", hrc);
+    hio_err_print_all(context, stderr, "hio_init_mpi error: ");
+  } else {
+    //DBG1("Invoking hio_config_set_value var:%s val:%s", root_var, data_root);
+    //hrc = hio_config_set_value((hio_object_t)context, root_var, data_root);
+    //VERB2("hio_config_set_value rc:%d var:%s val:%s", hrc, root_var, data_root);
+    DBG1("Invoking hio_config_get_value var:%s", root_var);
+    hrc = hio_config_get_value((hio_object_t)context, root_var, &tmp_str);
+    VERB3("hio_config_get_value rc:%d, var:%s value=\"%s\"", hrc, root_var, tmp_str);
+    if (HIO_SUCCESS == hrc) {
+      free(tmp_str);
+    } else {
+      VERB0("hio_config_get_value failed, rc:%d var:%s", hrc, root_var);
+      hio_err_print_all(context, stderr, "hio_config_get_value error: ");
+    }
+  }
+}
 
-      rbuf = MALLOCX(bufsz);
-      hew_ofs = her_ofs = 0;
-    }
-  } else if (!strcmp(cmd, "hxc")) {
-    I64 flag = v0.u;
-    if (run) {
-      if (flag) {
-        hio_check = 1;
-      } else {
-        hio_check = 0;
-      }
-      VERB0("HIO read data checking is now %s", hio_check?"on": "off"); 
-    }
-  } else if (!strcmp(cmd, "hew")) {
-    I64 p_ofs = v0.u;
-    U64 size = v1.u;
-    U64 a_ofs;
-    if (!run) {
-      if (size > bufsz) ERRX("hew: size > bufsz");
+ACTION_RUN(hdo_run) {
+  hio_return_t hrc;
+  char * ds_name = V0.s;
+  U64 ds_id = V1.u;
+  int flag_i = V2.i;
+  char * flag_s = V2.s;
+  int mode_i = V3.i;
+  char * mode_s = V3.s;
+  rw_count[0] = rw_count[1] = 0;
+  MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
+  timer_start();
+  hrc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
+  VERB3("hio_dataset_open rc:%d name:%s id:%lld flags:%s mode:%s", hrc, ds_name, ds_id, flag_s, mode_s);
+  if (HIO_SUCCESS != hrc) {
+    char * herr;
+    enum2str(MY_MSG_CTX, &etab_herr, hrc, &herr);
+    VERB0("hio_dataset_open failed rc:%d(%s) name:%s id:%lld flag_s:%s mode:%s", hrc, herr, ds_name, ds_id, flag_s, mode_s);
+    free(herr);
+    hio_err_print_all(context, stderr, "hio_dataset_open error: ");
+  }
+}
+
+ACTION_CHECK(heo_check) {
+  bufsz = V2.u;
+}
+
+ACTION_RUN(heo_run) {
+  hio_return_t hrc;
+  char * el_name = V0.s;
+  int flag_i = V1.i;
+  char * flag_s = V1.s;
+  bufsz = V2.u;
+  hrc = hio_element_open (dataset, &element, el_name, flag_i);
+  VERB3("hio_element_open rc:%d name:%s flags:%s", hrc, el_name, flag_s);
+  if (HIO_SUCCESS != hrc) {
+    VERB0("hio_elememt_open failed rc:%d name:%s flags:%s", hrc, el_name, flag_s);
+    hio_err_print_all(context, stderr, "hio_element_open error: ");
+  }
+
+  wbuf = MALLOCX(bufsz+LFSR_22_CYCLE);
+  lfsr_22_byte_init();
+  lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE); 
+
+  rbuf = MALLOCX(bufsz);
+  hew_ofs = her_ofs = 0;
+}
+
+ACTION_RUN(hxc_run) {
+  I64 flag = V0.u;
+  if (flag) {
+    hio_check = 1;
+  } else {
+    hio_check = 0;
+  }
+  VERB0("HIO read data checking is now %s", hio_check?"on": "off"); 
+}
+
+ACTION_CHECK(hew_check) {
+  U64 size = V1.u;
+  if (size > bufsz) ERRX("%s; size > bufsz", A.desc);
+}
+
+ACTION_RUN(hew_run) {
+  ssize_t retsize;
+  I64 p_ofs = V0.u;
+  U64 size = V1.u;
+  U64 a_ofs;
+  if (p_ofs < 0) { 
+    a_ofs = hew_ofs;
+    hew_ofs += -p_ofs;
+  } else {
+    a_ofs = p_ofs;
+  }
+  retsize = hio_element_write (element, a_ofs, 0, wbuf + (a_ofs%LFSR_22_CYCLE), 1, size);
+  VERB3("hio_element_write retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
+  if (size != retsize) {
+    VERB0("hio_element_write failed retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
+    hio_err_print_all(context, stderr, "hio_element_write error: ");
+  } else {
+    rw_count[1] += size;
+  }
+}
+
+ACTION_CHECK(her_check) {
+  U64 size = V1.u;
+  if (size > bufsz) ERRX("%s; size > bufsz", A.desc);
+}
+
+ACTION_RUN(her_run) {
+  ssize_t retsize;
+  I64 p_ofs = V0.u;
+  U64 size = V1.u;
+  U64 a_ofs;
+  if (p_ofs < 0) { 
+    a_ofs = her_ofs;
+    her_ofs += -p_ofs;
+  } else {
+    a_ofs = p_ofs;
+  }
+  retsize = hio_element_read (element, a_ofs, 0, rbuf, 1, size);
+  VERB3("hio_element_read retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
+  if (size != retsize) {
+    VERB0("hio_element_read failed retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
+    hio_err_print_all(context, stderr, "hio_element_read error: ");
+  } else {
+    rw_count[0] += size;
+  }
+  if (hio_check) {
+    if (memcmp(rbuf, wbuf + (a_ofs%LFSR_22_CYCLE), size)) {
+      VERB0("Error: hio_element_read data miscompare ofs:%lld size:%lld", a_ofs, size);
     } else {
-      if (p_ofs < 0) { 
-        a_ofs = hew_ofs;
-        hew_ofs += -p_ofs;
-      } else {
-        a_ofs = p_ofs;
-      }
-      DBG1("Invoking hio_element_write ofs:%lld size:%lld", a_ofs, size);
-      rc = hio_element_write (element, a_ofs, 0, wbuf + (a_ofs%LFSR_22_CYCLE), 1, size);
-      VERB3("hio_element_write rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
-      if (size != rc) {
-        VERB0("hio_element_write failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
-        hio_err_print_all(context, stderr, "hio_element_write error: ");
-      } else {
-        rw_count[1] += size;
-      }
+      VERB3("hio data read check successful");
     }
-  } else if (!strcmp(cmd, "her")) {
-    I64 p_ofs = v0.u;
-    U64 size = v1.u;
-    U64 a_ofs;
-    if (!run) {
-      if (size > bufsz) ERRX("her: size > bufsz");
-    } else {
-      if (p_ofs < 0) { 
-        a_ofs = her_ofs;
-        her_ofs += -p_ofs;
-      } else {
-        a_ofs = p_ofs;
-      }
-      DBG1("Invoking hio_element_read ofs:%lld size:%lld", a_ofs, size);
-      rc = hio_element_read (element, a_ofs, 0, rbuf, 1, size);
-      VERB3("hio_element_read rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
-      if (size != rc) {
-        VERB0("hio_element_read failed rc:%d ofs:%lld size:%lld", rc, a_ofs, size);
-        hio_err_print_all(context, stderr, "hio_element_read error: ");
-      } else {
-        rw_count[0] += size;
-      }
-      if (hio_check) {
-        if (memcmp(rbuf, wbuf + (a_ofs%LFSR_22_CYCLE), size)) {
-          VERB0("Error: hio_element_read data miscompare ofs:%lld size:%lld", a_ofs, size);
-        } else {
-          VERB3("hio data read check successful");
-        }
-      }
-    }
-  } else if (!strcmp(cmd, "hec")) {
-    if (run) {
-      DBG1("Invoking hio_element_close");
-      rc = hio_element_close(&element);
-      VERB3("hio_element_close rc:%d", rc);
-      if (HIO_SUCCESS != rc) {
-        VERB0("hio_close element_failed rc:%d", rc);
-        hio_err_print_all(context, stderr, "hio_element_close error: ");
-      }
-      DBG1("Invoking free(%p)", wbuf);
-      free(wbuf);
-      wbuf = NULL;
-      DBG1("Invoking free(%p)", rbuf);
-      free(rbuf);
-      rbuf = NULL;
-      bufsz = 0;
-    }
-  } else if (!strcmp(cmd, "hdc")) {
-    if (run) {
-      DBG1("Invoking hio_dataset_close");
-      rc = hio_dataset_close(&dataset);
-      MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
-      double time = timer_end();
-      VERB3("hio_datset_close rc:%d", rc);
-      if (HIO_SUCCESS != rc) {
-        VERB0("hio_datset_close failed rc:%d", rc);
-        hio_err_print_all(context, stderr, "hio_dataset_close error: ");
-      }
-      U64 rw_count_sum[2];
-      MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD));
-      if (myrank == 0)
-        VERB1("R/W bytes: %lld %lld time:%f R/W speed: %f %f GB/S", rw_count_sum[0], rw_count_sum[1], time, 
-               rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
-    }
-  } else if (!strcmp(cmd, "hf")) {
-    if (run) {
-      DBG1("Invoking hio_fini");
-      rc = hio_fini(&context);
-      VERB3("hio_fini rc:%d", rc);
-      if (rc != HIO_SUCCESS) {
-        VERB0("hio_fini failed, rc:%d", rc);
-        hio_err_print_all(context, stderr, "hio_fini error: ");
-      }
-    }
-  } else ERRX("internal error hio_hand invalid action: %s", cmd);
+  }
+}
+
+ACTION_RUN(hec_run) {
+  hio_return_t hrc;
+  hrc = hio_element_close(&element);
+  VERB3("hio_element_close rc:%d", hrc);
+  if (HIO_SUCCESS != hrc) {
+    VERB0("hio_close element_failed rc:%d", hrc);
+    hio_err_print_all(context, stderr, "hio_element_close error: ");
+  }
+  DBG1("Invoking free(%p)", wbuf);
+  free(wbuf);
+  wbuf = NULL;
+  DBG1("Invoking free(%p)", rbuf);
+  free(rbuf);
+  rbuf = NULL;
+  bufsz = 0;
+}
+
+ACTION_RUN(hdc_run) {
+  hio_return_t hrc;
+  hrc = hio_dataset_close(&dataset);
+  MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
+  double time = timer_end();
+  VERB3("hio_datset_close rc:%d", hrc);
+  if (HIO_SUCCESS != hrc) {
+    VERB0("hio_datset_close failed rc:%d", hrc);
+    hio_err_print_all(context, stderr, "hio_dataset_close error: ");
+  }
+  U64 rw_count_sum[2];
+  MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD));
+  if (myrank == 0)
+    VERB1("R/W bytes: %lld %lld time:%f R/W speed: %f %f GB/S", rw_count_sum[0], rw_count_sum[1], time, 
+           rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
+}
+
+ACTION_RUN(hf_run) {
+  hio_return_t hrc;
+  hrc = hio_fini(&context);
+  VERB3("hio_fini rc:%d", hrc);
+  if (hrc != HIO_SUCCESS) {
+    VERB0("hio_fini failed, rc:%d", hrc);
+    hio_err_print_all(context, stderr, "hio_fini error: ");
+  }
 }
 #endif
 
 //----------------------------------------------------------------------------
 // k, x (signal, exit) action handlers
 //----------------------------------------------------------------------------
-ACTION_HAND(raise_hand) {
-  if (run) {
-    VERB0("Raising signal %d", v0.u);
-    raise(v0.u);
-  }
+ACTION_RUN(raise_run) {
+  VERB0("Raising signal %d", V0.u);
+  raise(V0.u);
 }
 
-ACTION_HAND(exit_hand) {
-  if (run) {
-    VERB0("Exiting with status %d", v0.u);
-    exit(v0.u);
-  }
+ACTION_RUN(exit_run) {
+  VERB0("Exiting with status %d", V0.u);
+  exit(V0.u);
 }
 
 //----------------------------------------------------------------------------
@@ -1291,18 +1297,18 @@ struct parse {
   {"dlc", {NONE, NONE, NONE, NONE, NONE}, NULL,        dlc_check,    dlc_run},
   #endif
   #ifdef HIO
-  {"hi",  {STR,  STR,  NONE, NONE, NONE}, hio_hand, NULL, NULL},
-  {"hdo", {STR,  UINT, HFLG, HDSM, NONE}, hio_hand, NULL, NULL},
-  {"hxc", {UINT, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
-  {"heo", {STR,  HFLG, UINT, NONE, NONE}, hio_hand, NULL, NULL},
-  {"hew", {SINT, UINT, NONE, NONE, NONE}, hio_hand, NULL, NULL},
-  {"her", {SINT, UINT, NONE, NONE, NONE}, hio_hand, NULL, NULL},
-  {"hec", {NONE, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
-  {"hdc", {NONE, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
-  {"hf",  {NONE, NONE, NONE, NONE, NONE}, hio_hand, NULL, NULL},
+  {"hi",  {STR,  STR,  NONE, NONE, NONE}, NULL,        NULL,         hi_run},
+  {"hdo", {STR,  UINT, HFLG, HDSM, NONE}, NULL,        NULL,         hdo_run},
+  {"hxc", {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         hxc_run},
+  {"heo", {STR,  HFLG, UINT, NONE, NONE}, NULL,        heo_check,    heo_run},
+  {"hew", {SINT, UINT, NONE, NONE, NONE}, NULL,        hew_check,    hew_run},
+  {"her", {SINT, UINT, NONE, NONE, NONE}, NULL,        her_check,    her_run},
+  {"hec", {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         hec_run},
+  {"hdc", {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         hdc_run},
+  {"hf",  {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         hf_run},
   #endif
-  {"k",   {UINT, NONE, NONE, NONE, NONE}, raise_hand, NULL, NULL},
-  {"x",   {UINT, NONE, NONE, NONE, NONE}, exit_hand, NULL, NULL},
+  {"k",   {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         raise_run},
+  {"x",   {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         exit_run},
 };
 
 //----------------------------------------------------------------------------
@@ -1322,7 +1328,7 @@ void parse_action() {
   while ( ++t < tokc ) {
     for (i = 0; i < DIM1(parse); ++i) { // parse table loop
       if (0 == strcmp(tokv[t], parse[i].cmd)) {
-        DBG3("match: tokv[%d]: %s parse[%d].cmd: %s run: %d", t, tokv[t], i, parse[i].cmd, 0);
+        DBG3("match: tokv[%d]: %s parse[%d].cmd: %s", t, tokv[t], i, parse[i].cmd);
         nact.tokn = t;
         nact.actn = actc;
         nact.action = tokv[t];
@@ -1332,6 +1338,7 @@ void parse_action() {
           if (parse[i].param[j] == NONE) break;
           if (tokc - t <= 1) ERRX("action %d \"%s\" missing param %d", nact.tokn, nact.action, j+1);
           nact.desc = STRCATRX(STRCATRX(nact.desc, " "), tokv[t+1]);
+          DBG5("%s ...; parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
           switch (parse[i].param[j]) {
             case SINT:
             case UINT:
@@ -1342,10 +1349,10 @@ void parse_action() {
             case STR:
               nact.v[j].s = tokv[++t];
               break;
-            #ifdef hio
+            #ifdef HIO
             case HFLG:
               t++; 
-              rc = str2enum(MY_MSG_CTX, &etab_hflg, tokv[t], &nact.v[j].i); 
+              int rc = str2enum(MY_MSG_CTX, &etab_hflg, tokv[t], &nact.v[j].i); 
               if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", nact.tokn, nact.action, tokv[t]);
               rc = enum2str(MY_MSG_CTX, &etab_hflg, nact.v[j].i, &nact.v[j].s); 
               if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", nact.tokn, nact.action, tokv[t]);
@@ -1361,7 +1368,7 @@ void parse_action() {
             case NONE:
               break;
             default:
-              ERRX("internal parse error parse[%d].param[%d]: %d", i, j, parse[i].param[j]);
+              ERRX("%s ...; internal parse error parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
           }
         }
         nact.handler = parse[i].handler; 
