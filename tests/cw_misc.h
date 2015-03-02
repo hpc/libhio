@@ -159,6 +159,9 @@ typedef struct enum_table {
 // Sets *name to point to a string containing the enum name.  Caller must free.
 int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name);
 
+// Returns a pointer to a string containing the enum name. Not valid for multiple.
+char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val);
+
 // Sets *val to an enum value or OR of values for multiple types
 int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * val);
 

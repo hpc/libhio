@@ -120,12 +120,13 @@ char * help =
   "  hi  <name> <data_root>  Init hio context\n"
   "  hdo <name> <id> <flags> <mode> Dataset open\n"
   "  heo <name> <flags> Element open\n"
-  "  hxc <0|1>     Enable read data checking\n"
   "  hew <offset> <size> Element write - if offset negative, auto increment\n"
   "  her <offset> <size> Element read - if offset negative, auto increment\n"
   "  hec <name>    Element close\n"
   "  hdc           Dataset close\n"
   "  hf            Fini\n"
+  "  hck <ON|OFF>  Enable read data checking\n"
+  "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   #endif
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
@@ -176,9 +177,6 @@ typedef struct pval {
 typedef struct action ACTION;
 
 // Many action handlers, use macro to keep function defs in sync
-#define ACTION_HAND(name) void (name)(int run, char * cmd, int * ptokn, int * pactn, PVAL v0, PVAL v1, PVAL v2, PVAL v3, PVAL v4)
-typedef ACTION_HAND(action_hand);
-
 #define ACTION_CHECK(name) void (name)(struct action *actionp, int tokn)
 typedef ACTION_CHECK(action_check);
 
@@ -190,7 +188,7 @@ struct action {
   int actn;             // Index of this action element
   char * action;        // Action name
   char * desc;          // Action description
-  action_hand * handler;
+  action_check * checker;
   action_run * runner;
   PVAL v[MAX_PARAM];    // Action values
 };
@@ -301,7 +299,7 @@ void get_id() {
   MY_MSG_CTX->id_string=id_string;
 }
 
-enum ptype { SINT, UINT, PINT, STR, HFLG, HDSM, NONE };
+enum ptype { SINT, UINT, PINT, STR, HFLG, HDSM, HRC, ONFF, NONE };
 
 U64 getI64(char * num, enum ptype type, ACTION *actionp) {
   long long int n;
@@ -999,6 +997,7 @@ ACTION_RUN(dlc_run) {
 // hi, hdo, heo, hew, her, hec, hdc, hf (HIO) action handlers
 //----------------------------------------------------------------------------
 #ifdef HIO
+#define HIO_ANY 999    // "special" rc value, means any rc OK
 ENUM_START(etab_herr)  // hio error codes
 ENUM_NAMP(HIO_, SUCCESS)
 ENUM_NAMP(HIO_, ERROR)
@@ -1010,11 +1009,13 @@ ENUM_NAMP(HIO_, ERR_NOT_AVAILABLE)
 ENUM_NAMP(HIO_, ERR_BAD_PARAM)
 ENUM_NAMP(HIO_, ERR_IO_TEMPORARY)
 ENUM_NAMP(HIO_, ERR_IO_PERMANENT)
+ENUM_NAMP(HIO_, ANY)
 ENUM_END(etab_herr, 0, NULL)
 
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
+static hio_return_t hio_exp = HIO_SUCCESS;
 static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
 static int hio_check = 0;
@@ -1068,19 +1069,14 @@ ACTION_RUN(hdo_run) {
   char * ds_name = V0.s;
   U64 ds_id = V1.u;
   int flag_i = V2.i;
-  char * flag_s = V2.s;
   int mode_i = V3.i;
-  char * mode_s = V3.s;
   rw_count[0] = rw_count[1] = 0;
   MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
   timer_start();
   hrc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
-  VERB3("hio_dataset_open rc:%d name:%s id:%lld flags:%s mode:%s", hrc, ds_name, ds_id, flag_s, mode_s);
+  VERB3("%s; hio_dataset_open rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
   if (HIO_SUCCESS != hrc) {
-    char * herr;
-    enum2str(MY_MSG_CTX, &etab_herr, hrc, &herr);
-    VERB0("hio_dataset_open failed rc:%d(%s) name:%s id:%lld flag_s:%s mode:%s", hrc, herr, ds_name, ds_id, flag_s, mode_s);
-    free(herr);
+    VERB0("%s; hio_dataset_open failed rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
     hio_err_print_all(context, stderr, "hio_dataset_open error: ");
   }
 }
@@ -1110,14 +1106,9 @@ ACTION_RUN(heo_run) {
   hew_ofs = her_ofs = 0;
 }
 
-ACTION_RUN(hxc_run) {
-  I64 flag = V0.u;
-  if (flag) {
-    hio_check = 1;
-  } else {
-    hio_check = 0;
-  }
-  VERB0("HIO read data checking is now %s", hio_check?"on": "off"); 
+ACTION_RUN(hck_run) {
+  hio_check = V0.u;
+  VERB0("HIO read data checking is now %s", V0.s); 
 }
 
 ACTION_CHECK(hew_check) {
@@ -1222,6 +1213,12 @@ ACTION_RUN(hf_run) {
     hio_err_print_all(context, stderr, "hio_fini error: ");
   }
 }
+
+ACTION_RUN(hxrc_run) {
+  hio_exp = V0.i;
+  VERB0("%s; HIO expected rc now %d(%s)", A.desc, V0.i, V0.s);
+}
+
 #endif
 
 //----------------------------------------------------------------------------
@@ -1253,6 +1250,15 @@ ENUM_START(etab_hdsm)  // hio dataset mode
 ENUM_NAMP(HIO_SET_ELEMENT_, UNIQUE)
 ENUM_NAMP(HIO_SET_ELEMENT_, SHARED)
 ENUM_END(etab_hdsm, 0, NULL)
+
+ENUM_START(etab_onff)  // On, Off + case variants
+ENUM_NAME("OFF", 0)
+ENUM_NAME("ON",  1)
+ENUM_NAME("off", 0)
+ENUM_NAME("on",  1)
+ENUM_NAME("Off", 0)
+ENUM_NAME("On",  1)
+ENUM_END(etab_onff, 0, NULL)
 #endif
 
 //----------------------------------------------------------------------------
@@ -1261,61 +1267,61 @@ ENUM_END(etab_hdsm, 0, NULL)
 struct parse {
   char * cmd;
   enum ptype param[MAX_PARAM];
-  action_hand * handler;
   action_check * checker;
   action_run * runner;
 } parse[] = {
-// Command  V0    V1    V2    V3    V4    Old Hand    Check          Run
-  {"v",   {UINT, NONE, NONE, NONE, NONE}, NULL,       verbose_check, verbose_run},
-  {"d",   {UINT, NONE, NONE, NONE, NONE}, NULL,       debug_check,   debug_run},
-  {"im",  {STR,  NONE, NONE, NONE, NONE}, NULL,       imbed_check,   NULL},
-  {"lc",  {UINT, NONE, NONE, NONE, NONE}, NULL,       loop_check,    lc_run},
-  {"lt",  {UINT, NONE, NONE, NONE, NONE}, NULL,       loop_check,    lt_run},
+// Command  V0    V1    V2    V3    V4    Check          Run
+  {"v",    {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
+  {"d",    {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
+  {"im",   {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
+  {"lc",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
+  {"lt",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
   #ifdef MPI
-  {"ls",  {UINT, NONE, NONE, NONE, NONE}, NULL,       loop_check,    ls_run},
+  {"ls",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
   #endif
-  {"le",  {NONE, NONE, NONE, NONE, NONE}, NULL,       loop_check,    le_run},
-  {"o",   {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         stdout_run},
-  {"e",   {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         stderr_run},
-  {"s",   {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         sleep_run},
-  {"va",  {UINT, NONE, NONE, NONE, NONE}, NULL,        va_check,     va_run},
-  {"vt",  {PINT, NONE, NONE, NONE, NONE}, NULL,        vt_check,     vt_run},
-  {"vf",  {NONE, NONE, NONE, NONE, NONE}, NULL,        vf_check,     vf_run},
+  {"le",   {NONE, NONE, NONE, NONE, NONE}, loop_check,    le_run      },
+  {"o",    {UINT, NONE, NONE, NONE, NONE}, NULL,          stdout_run  },
+  {"e",    {UINT, NONE, NONE, NONE, NONE}, NULL,          stderr_run  },
+  {"s",    {UINT, NONE, NONE, NONE, NONE}, NULL,          sleep_run   },
+  {"va",   {UINT, NONE, NONE, NONE, NONE}, va_check,      va_run      },
+  {"vt",   {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
+  {"vf",   {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
   #ifdef MPI
-  {"mi",  {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         mi_run},
-  {"msr", {PINT, PINT, NONE, NONE, NONE}, NULL,        NULL,         msr_run},
-  {"mb",  {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         mb_run},
-  {"mf",  {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         mf_run},
+  {"mi",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mi_run      },
+  {"msr",  {PINT, PINT, NONE, NONE, NONE}, NULL,          msr_run     },
+  {"mb",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mb_run      },
+  {"mf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mf_run      },
   #endif
-  {"fi",  {UINT, PINT, NONE, NONE, NONE}, NULL,        fi_check,     fi_run},
-  {"fr",  {PINT, PINT, NONE, NONE, NONE}, NULL,        fr_check,     fr_run},
-  {"ff",  {NONE, NONE, NONE, NONE, NONE}, NULL,        ff_check,     fr_run},
-  {"hx",  {UINT, UINT, UINT, UINT, UINT}, NULL,        hx_check,     hx_run},
+  {"fi",   {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
+  {"fr",   {PINT, PINT, NONE, NONE, NONE}, fr_check,      fr_run      },
+  {"ff",   {NONE, NONE, NONE, NONE, NONE}, ff_check,      fr_run      },
+  {"hx",   {UINT, UINT, UINT, UINT, UINT}, hx_check,      hx_run      },
   #ifdef DLFCN
-  {"dlo", {STR,  NONE, NONE, NONE, NONE}, NULL,        dlo_check,    dlo_run},
-  {"dls", {STR,  NONE, NONE, NONE, NONE}, NULL,        dls_check,    dls_run},
-  {"dlc", {NONE, NONE, NONE, NONE, NONE}, NULL,        dlc_check,    dlc_run},
+  {"dlo",  {STR,  NONE, NONE, NONE, NONE}, dlo_check,     dlo_run     },
+  {"dls",  {STR,  NONE, NONE, NONE, NONE}, dls_check,     dls_run     },
+  {"dlc",  {NONE, NONE, NONE, NONE, NONE}, dlc_check,     dlc_run     },
   #endif
   #ifdef HIO
-  {"hi",  {STR,  STR,  NONE, NONE, NONE}, NULL,        NULL,         hi_run},
-  {"hdo", {STR,  UINT, HFLG, HDSM, NONE}, NULL,        NULL,         hdo_run},
-  {"hxc", {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         hxc_run},
-  {"heo", {STR,  HFLG, UINT, NONE, NONE}, NULL,        heo_check,    heo_run},
-  {"hew", {SINT, UINT, NONE, NONE, NONE}, NULL,        hew_check,    hew_run},
-  {"her", {SINT, UINT, NONE, NONE, NONE}, NULL,        her_check,    her_run},
-  {"hec", {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         hec_run},
-  {"hdc", {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         hdc_run},
-  {"hf",  {NONE, NONE, NONE, NONE, NONE}, NULL,        NULL,         hf_run},
+  {"hi",   {STR,  STR,  NONE, NONE, NONE}, NULL,          hi_run      },
+  {"hdo",  {STR,  UINT, HFLG, HDSM, NONE}, NULL,          hdo_run     },
+  {"hck",  {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
+  {"heo",  {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
+  {"hew",  {SINT, UINT, NONE, NONE, NONE}, hew_check,     hew_run     },
+  {"her",  {SINT, UINT, NONE, NONE, NONE}, her_check,     her_run     },
+  {"hec",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
+  {"hdc",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
+  {"hf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
+  {"hxrc", {HRC,  NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
   #endif
-  {"k",   {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         raise_run},
-  {"x",   {UINT, NONE, NONE, NONE, NONE}, NULL,        NULL,         exit_run},
+  {"k",    {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
+  {"x",    {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
 };
 
 //----------------------------------------------------------------------------
 // Argument string parser - call check routines, build action vector
 //----------------------------------------------------------------------------
 void parse_action() {
-  int t = 0, i, j;
+  int t = -1, i, j;
   ACTION nact;
 
   msg_context_set_verbose(MY_MSG_CTX, 0); 
@@ -1353,30 +1359,41 @@ void parse_action() {
             case HFLG:
               t++; 
               int rc = str2enum(MY_MSG_CTX, &etab_hflg, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", nact.tokn, nact.action, tokv[t]);
+              if (rc) ERRX("%s ...; invalid hio flag \"%s\"", nact.desc, tokv[t]);
               rc = enum2str(MY_MSG_CTX, &etab_hflg, nact.v[j].i, &nact.v[j].s); 
-              if (rc) ERRX("action %d \"%s\" invalid hio flag \"%s\"", nact.tokn, nact.action, tokv[t]);
+              if (rc) ERRX("%s ...; invalid hio flag \"%s\"", nact.desc, tokv[t]);
               break;
             case HDSM:
               t++; 
               rc = str2enum(MY_MSG_CTX, &etab_hdsm, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", nact.tokn, nact.action, tokv[t]);
+              if (rc) ERRX("%s ...; invalid hio mode \"%s\"", nact.desc, tokv[t]);
               rc = enum2str(MY_MSG_CTX, &etab_hdsm, nact.v[j].i, &nact.v[j].s); 
-              if (rc) ERRX("action %d \"%s\" invalid hio mode \"%s\"", nact.tokn, nact.action, tokv[t]);
+              if (rc) ERRX("%s ...; invalid hio mode \"%s\"", nact.desc, tokv[t]);
+              break;
+            case HRC:
+              t++; 
+              rc = str2enum(MY_MSG_CTX, &etab_herr, tokv[t], &nact.v[j].i); 
+              if (rc) ERRX("%s ...; invalid hio return \"%s\"", nact.desc, tokv[t]);
+              rc = enum2str(MY_MSG_CTX, &etab_herr, nact.v[j].i, &nact.v[j].s); 
+              if (rc) ERRX("%s ...; invalid hio return \"%s\"", nact.desc, tokv[t]);
               break;
             #endif
+            case ONFF:
+              t++;
+              rc = str2enum(MY_MSG_CTX, &etab_onff, tokv[t], &nact.v[j].i); 
+              if (rc) ERRX("%s ...; invalid ON / OFF token \"%s\"", nact.desc, tokv[t]);
+              nact.v[j].s = nact.v[j].i?"ON":"OFF";
+              break;
             case NONE:
               break;
             default:
               ERRX("%s ...; internal parse error parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
           }
         }
-        nact.handler = parse[i].handler; 
         nact.runner = parse[i].runner; 
         add2actv(&nact);
         DBG2("Checking %s", nact.desc); 
-        if (parse[i].handler) parse[i].handler(0, nact.action, &t, &actc, nact.v[0], nact.v[1], nact.v[2], nact.v[3], nact.v[4]);
-        else if (parse[i].checker) parse[i].checker(&actv[actc-1], t);
+        if (parse[i].checker) parse[i].checker(&actv[actc-1], t);
         break; // break parse table loop
       }
     }
@@ -1388,7 +1405,7 @@ void parse_action() {
 }
 
 //----------------------------------------------------------------------------
-// Action runner - call run routines for action vector entrie
+// Action runner - call run routines for action vector entries
 //----------------------------------------------------------------------------
 void run_action() {
   int a = -1;
@@ -1402,10 +1419,8 @@ void run_action() {
 
   while ( ++a < actc ) {
      DBG2("Running %s", actv[a].desc); 
-     if (actv[a].handler) 
-       actv[a].handler(1, actv[a].action, &actv[a].tokn, &a, actv[a].v[0], actv[a].v[1], actv[a].v[2], actv[a].v[3], actv[a].v[4]);
-     else if (actv[a].runner) 
-       actv[a].runner(&actv[a], &a);
+     // Runner routine may modify variable a for looping
+     if (actv[a].runner) actv[a].runner(&actv[a], &a);
   }
 }
 
@@ -1423,7 +1438,7 @@ int main(int argc, char * * argv) {
   msg_context_init(MY_MSG_CTX, 0, 0);
   get_id();  
 
-  add2tokv(argc, argv); // Make initial copy of argv so im works
+  add2tokv(argc-1, argv+1); // Make initial copy of argv so im works
 
   // Make two passes through args, first to check, second to run.
   parse_action();

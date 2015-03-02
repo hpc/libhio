@@ -181,6 +181,22 @@ int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name) {
   return rc;
 }
 
+// Returns a pointer to a string containing the enum name. Not valid for multiple.
+char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
+  char * retval = "Invalid";
+  if (etptr->multiple) ERRX("enum_name called for enum type multiple");
+
+  // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
+  if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
+
+  ENUM_NAME_VAL_PAIR nv = {NULL, val};
+  ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_val, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_val_compare);
+  if (nvp) {
+    retval = nvp->name;
+  }
+  return retval;
+}
+
 int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
   int rc = 0;
   // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
