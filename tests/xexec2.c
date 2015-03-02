@@ -299,7 +299,7 @@ void get_id() {
   MY_MSG_CTX->id_string=id_string;
 }
 
-enum ptype { SINT, UINT, PINT, STR, HFLG, HDSM, HRC, ONFF, NONE };
+enum ptype { SINT, UINT, PINT, STR, HFLG, HDSM, HERR, ONFF, NONE };
 
 U64 getI64(char * num, enum ptype type, ACTION *actionp) {
   long long int n;
@@ -1311,7 +1311,7 @@ struct parse {
   {"hec",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
   {"hdc",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
   {"hf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
-  {"hxrc", {HRC,  NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
+  {"hxrc", {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
   #endif
   {"k",    {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",    {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
@@ -1370,7 +1370,7 @@ void parse_action() {
               rc = enum2str(MY_MSG_CTX, &etab_hdsm, nact.v[j].i, &nact.v[j].s); 
               if (rc) ERRX("%s ...; invalid hio mode \"%s\"", nact.desc, tokv[t]);
               break;
-            case HRC:
+            case HERR:
               t++; 
               rc = str2enum(MY_MSG_CTX, &etab_herr, tokv[t], &nact.v[j].i); 
               if (rc) ERRX("%s ...; invalid hio return \"%s\"", nact.desc, tokv[t]);
