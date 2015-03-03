@@ -3,8 +3,6 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <signal.h>
-#include <time.h>
-#include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
@@ -131,7 +129,7 @@ char * help =
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
   "\n"
-  "  Numbers can be specified with suffixes k, K, ki, M, Mi, G, Gi, etc.\n"
+  "  Numbers can be specified with suffixes k, ki, M, Mi, G, Gi, etc.\n"
   "\n"
   "  Example action sequences:\n"
   "    v 1 d 1\n"
@@ -169,7 +167,8 @@ char * * tokv = NULL;
 typedef struct pval {
   U64 u;
   char * s;
-  int i;  // Use for enums 
+  int i;  // Use for enums
+  double d; 
 } PVAL;
 
 #define MAX_PARAM 5
@@ -244,30 +243,6 @@ MSG_CONTEXT my_msg_context;
   #define RANK_SERIALIZE_END
 #endif
 
-// Simple non-threadsafe timer start/stop routines
-#ifdef CLOCK_REALTIME
-  static struct timespec timer_start_time, timer_end_time;
-  void timer_start(void) {
-    if (clock_gettime(CLOCK_REALTIME, &timer_start_time)) ERRX("clock_gettime() failed: %s", strerror(errno));
-  }
-  double timer_end(void) {
-    if (clock_gettime(CLOCK_REALTIME, &timer_end_time)) ERRX("clock_gettime() failed: %s", strerror(errno));
-    return (double)(timer_end_time.tv_sec - timer_start_time.tv_sec) +
-             (1E-9 * (double) (timer_end_time.tv_nsec - timer_start_time.tv_nsec));
-  }
-#else
-  // Silly Mac OS doesn't support clock_gettime :-(
-  static struct timeval timer_start_time, timer_end_time;
-  void timer_start(void) {
-    if (gettimeofday(&timer_start_time, NULL)) ERRX("gettimeofday() failed: %s", strerror(errno));
-  }
-  double timer_end(void) {
-    if (gettimeofday(&timer_end_time, NULL)) ERRX("gettimeofday() failed: %s", strerror(errno));
-    return (double)(timer_end_time.tv_sec - timer_start_time.tv_sec) +
-             (1E-6 * (double) (timer_end_time.tv_usec - timer_start_time.tv_usec));
-  }
-#endif
-
 void get_id() {
   char * p;
   char tmp_id[sizeof(id_string)];
@@ -299,7 +274,7 @@ void get_id() {
   MY_MSG_CTX->id_string=id_string;
 }
 
-enum ptype { SINT, UINT, PINT, STR, HFLG, HDSM, HERR, ONFF, NONE };
+enum ptype { SINT, UINT, PINT, DOUB, STR, HFLG, HDSM, HERR, ONFF, NONE };
 
 U64 getI64(char * num, enum ptype type, ACTION *actionp) {
   long long int n;
@@ -312,7 +287,6 @@ U64 getI64(char * num, enum ptype type, ACTION *actionp) {
   if (type == PINT && n <= 0) ERRX("%s ...; non-positive integer \"%s\"", A.desc, num);
   if (*endptr == '\0');
   else if (!strcmp("k",  endptr)) n *= 1000;
-  else if (!strcmp("K",  endptr)) n *= 1024;
   else if (!strcmp("ki", endptr)) n *= 1024;
   else if (!strcmp("M",  endptr)) n *= (1000 * 1000);
   else if (!strcmp("Mi", endptr)) n *= (1024 * 1024);
@@ -323,6 +297,28 @@ U64 getI64(char * num, enum ptype type, ACTION *actionp) {
   else if (!strcmp("P",  endptr)) n *= (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
   else if (!strcmp("Pi", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
   else ERRX("%s ...; invalid integer \"%s\"", A.desc, num);
+  return n;
+}
+
+double getDoub(char * num, enum ptype type, ACTION *actionp) {
+  double n;
+  char * endptr;
+  DBG3("getDoub num: %s", num);
+  errno = 0;
+  n = strtod(num, &endptr);
+  if (errno != 0) ERRX("%s ...; invalid double \"%s\"", A.desc, num);
+  if (*endptr == '\0');
+  else if (!strcmp("k",  endptr)) n *= 1000;
+  else if (!strcmp("ki", endptr)) n *= 1024;
+  else if (!strcmp("M",  endptr)) n *= (1000 * 1000);
+  else if (!strcmp("Mi", endptr)) n *= (1024 * 1024);
+  else if (!strcmp("G",  endptr)) n *= (1000 * 1000 * 1000);
+  else if (!strcmp("Gi", endptr)) n *= (1024 * 1024 * 1024);
+  else if (!strcmp("T",  endptr)) n *= (1ll * 1000 * 1000 * 1000 * 1000);
+  else if (!strcmp("Ti", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024);
+  else if (!strcmp("P",  endptr)) n *= (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
+  else if (!strcmp("Pi", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
+  else ERRX("%s ...; invalid double \"%s\"", A.desc, num);
   return n;
 }
 
@@ -492,9 +488,9 @@ enum looptype {COUNT, TIME, SYNC};
 struct loop_ctl {
   enum looptype type;
   int count;
+  double ltime;
   int top;
-  struct timeval start;
-  struct timeval end;
+  ETIMER tmr;
 } lctl[MAX_LOOP+1];
 struct loop_ctl * lcur = &lctl[0];
 
@@ -512,6 +508,7 @@ ACTION_CHECK(loop_check) {
 }
 
 ACTION_RUN(lc_run) {
+  lcur++;
   DBG4("loop count start; depth: %d top actn: %d count: %d", lcur-lctl, *pactn, V0.u);
   lcur->type = COUNT;
   lcur->count = V0.u;
@@ -519,27 +516,28 @@ ACTION_RUN(lc_run) {
 }
 
 ACTION_RUN(lt_run) {
+  lcur++;
   DBG4("loop time start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, V0.u);
   lcur->type = TIME;
   lcur->top = *pactn;
-  if (gettimeofday(&lcur->end, NULL)) ERRX("loop time start: gettimeofday() failed: %s", strerror(errno));
-  lcur->end.tv_sec += V0.u;  // Save future time of loop end
+  lcur->ltime = V0.d;
+  ETIMER_START(&lcur->tmr); 
 }
 
 #ifdef MPI
 ACTION_RUN(ls_run) {
+  lcur++;
   DBG4("loop sync start; depth: %d top actn: %d time: %d", lcur - lctl, *pactn, V0.u);
   lcur->type = SYNC;
   lcur->top = *pactn;
+  lcur->ltime = V0.d;
   if (myrank == 0) {
-    if (gettimeofday(&lcur->end, NULL)) ERRX("loop time start: gettimeofday() failed: %s", strerror(errno));
-    lcur->end.tv_sec += V0.u;  // Save future time of loop end
+    ETIMER_START(&lcur->tmr);
   }
 }
 #endif
 
 ACTION_RUN(le_run) {
-  struct timeval now;
   switch (lcur->type) {
     case COUNT:;
       if (--lcur->count > 0) {
@@ -551,9 +549,7 @@ ACTION_RUN(le_run) {
       }
       break;
     case TIME:;
-      if (gettimeofday(&now, NULL)) ERRX("loop end: gettimeofday() failed: %s", strerror(errno));
-      if (now.tv_sec > lcur->end.tv_sec ||
-           (now.tv_sec == lcur->end.tv_sec && now.tv_usec >= lcur->end.tv_usec) ) {
+      if (lcur->ltime <= ETIMER_ELAPSED(&lcur->tmr)) {
         DBG4("loop time end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
         lcur--;
       } else {
@@ -565,9 +561,7 @@ ACTION_RUN(le_run) {
     case SYNC:;
       int time2stop = 0;
       if (myrank == 0) {
-        if (gettimeofday(&now, NULL)) ERRX("loop end: gettimeofday() failed: %s", strerror(errno));
-        if (now.tv_sec > lcur->end.tv_sec ||
-             (now.tv_sec == lcur->end.tv_sec && now.tv_usec >= lcur->end.tv_usec) ) {
+        if (lcur->ltime <= ETIMER_ELAPSED(&lcur->tmr)) {
           DBG4("loop sync rank 0 end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
           time2stop = 1;
         } else {
@@ -611,8 +605,13 @@ ACTION_RUN(stderr_run) {
 //----------------------------------------------------------------------------
 // s (sleep) action handler
 //----------------------------------------------------------------------------
+
+ACTION_CHECK(sleep_check) {
+  if (V0.d < 0) ERRX("%s; negative sleep seconds", A.desc);
+}
+
 ACTION_RUN(sleep_run) {
-  sleep(V0.u);
+  fsleep(V0.d);
 }
 
 //----------------------------------------------------------------------------
@@ -779,6 +778,7 @@ ACTION_RUN(fr_run) {
   U64 N = flap_size * count;
   U64 rep = V0.u;
   U64 stride = V1.u;
+  ETIMER tmr;
 
   max_val = (flap_size-1) * count;
   predicted = (pow((double) max_val, 2.0) + (double) max_val ) / 2 * (double)rep;
@@ -791,7 +791,7 @@ ACTION_RUN(fr_run) {
   }
 
   DBG1("flapper starting; size: %llu count: %llu rep: %llu stride: %llu", flap_size, count, rep, stride);
-  timer_start();
+  ETIMER_START(&tmr);
 
   for (b=0; b<count; ++b) {
     ba = b * stride % count;
@@ -814,7 +814,7 @@ ACTION_RUN(fr_run) {
     sum += nums[d];
   }
 
-  delta_t = timer_end();
+  delta_t = ETIMER_ELAPSED(&tmr);
 
   VERB2("flapper done; predicted: %e sum: %e delta: %e", predicted, sum, sum - predicted);
   VERB2("FP Adds: %llu, time: %f Seconds, MFLAPS: %e", fp_add_ct, delta_t, (double)fp_add_ct / delta_t / 1000000.0);
@@ -850,6 +850,7 @@ ACTION_RUN(hx_run) {
   double range_l2 = max_l2 - min_l2;
   U64 i, n, k, total = 0;
   int b;
+  ETIMER tmr;
 
   struct {
     void * ptr;
@@ -883,9 +884,9 @@ ACTION_RUN(hx_run) {
     if (blk[n].ptr) {
       DBG4("heapx: total: %llu; free %td bytes", total, blk[n].size);
       b = (int) log2(blk[n].size);
-      timer_start();
+      ETIMER_START(&tmr);
       free(blk[n].ptr);
-      stat[b].ftime += timer_end();
+      stat[b].ftime += ETIMER_ELAPSED(&tmr);
       total -= blk[n].size;
       blk[n].size = 0;
       blk[n].ptr = 0;
@@ -901,9 +902,9 @@ ACTION_RUN(hx_run) {
       if (blk[k].ptr) {
         DBG4("heapx: total: %llu; free %td bytes", total, blk[k].size);
         b = (int) log2(blk[k].size);
-        timer_start();
+        ETIMER_START(&tmr);
         free(blk[k].ptr);
-        stat[b].ftime += timer_end();
+        stat[b].ftime += ETIMER_ELAPSED(&tmr);
         total -= blk[k].size;
         blk[k].size = 0;
         blk[k].ptr = 0;
@@ -912,9 +913,9 @@ ACTION_RUN(hx_run) {
 
     VERB2("heapx: total: %llu; malloc and touch %td bytes", total, blk[n].size);
     b = (int) log2(blk[n].size);
-    timer_start();
+    ETIMER_START(&tmr);
     blk[n].ptr = malloc(blk[n].size);
-    stat[b].atime += timer_end();
+    stat[b].atime += ETIMER_ELAPSED(&tmr);
     if (!blk[n].ptr) ERRX("heapx: malloc %td bytes failed", blk[n].size);
     total += blk[n].size;
     stat[b].count++;
@@ -926,9 +927,9 @@ ACTION_RUN(hx_run) {
     if (blk[n].ptr) {
       DBG4("heapx: total: %llu; free %td bytes", total, blk[n].size);
       b = (int) log2(blk[n].size);
-      timer_start();
+      ETIMER_START(&tmr);
       free(blk[n].ptr);
-      stat[b].ftime += timer_end();
+      stat[b].ftime += ETIMER_ELAPSED(&tmr);
       total -= blk[n].size;
       blk[n].size = 0;
       blk[n].ptr = 0;
@@ -1021,6 +1022,7 @@ static U64 bufsz = 0;
 static int hio_check = 0;
 static U64 hew_ofs, her_ofs;
 static U64 rw_count[2];
+ETIMER hio_tmr;
 
 ACTION_RUN(hi_run) {
   hio_return_t hrc;
@@ -1072,7 +1074,7 @@ ACTION_RUN(hdo_run) {
   int mode_i = V3.i;
   rw_count[0] = rw_count[1] = 0;
   MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
-  timer_start();
+  ETIMER_START(&hio_tmr);
   hrc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
   VERB3("%s; hio_dataset_open rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
   if (HIO_SUCCESS != hrc) {
@@ -1191,7 +1193,7 @@ ACTION_RUN(hdc_run) {
   hio_return_t hrc;
   hrc = hio_dataset_close(&dataset);
   MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
-  double time = timer_end();
+  double time = ETIMER_ELAPSED(&hio_tmr);
   VERB3("hio_datset_close rc:%d", hrc);
   if (HIO_SUCCESS != hrc) {
     VERB0("hio_datset_close failed rc:%d", hrc);
@@ -1200,7 +1202,8 @@ ACTION_RUN(hdc_run) {
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD));
   if (myrank == 0)
-    VERB1("R/W bytes: %lld %lld time:%f R/W speed: %f %f GB/S", rw_count_sum[0], rw_count_sum[1], time, 
+    VERB1("R/W GB: %f %f time:%f R/W speed: %f %f GB/S",
+          (double)rw_count_sum[0]/1E9, (double)rw_count_sum[1]/1E9, time, 
            rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
 }
 
@@ -1275,14 +1278,14 @@ struct parse {
   {"d",    {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
   {"im",   {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
   {"lc",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
-  {"lt",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
+  {"lt",   {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
   #ifdef MPI
-  {"ls",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
+  {"ls",   {DOUB, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
   #endif
   {"le",   {NONE, NONE, NONE, NONE, NONE}, loop_check,    le_run      },
   {"o",    {UINT, NONE, NONE, NONE, NONE}, NULL,          stdout_run  },
   {"e",    {UINT, NONE, NONE, NONE, NONE}, NULL,          stderr_run  },
-  {"s",    {UINT, NONE, NONE, NONE, NONE}, NULL,          sleep_run   },
+  {"s",    {DOUB, NONE, NONE, NONE, NONE}, sleep_check,   sleep_run   },
   {"va",   {UINT, NONE, NONE, NONE, NONE}, va_check,      va_run      },
   {"vt",   {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
   {"vf",   {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
@@ -1351,6 +1354,10 @@ void parse_action() {
             case PINT:
               t++;
               nact.v[j].u = getI64(tokv[t], parse[i].param[j], &nact);
+              break;
+            case DOUB:
+              t++;
+              nact.v[j].d = getDoub(tokv[t], parse[i].param[j], &nact);
               break;
             case STR:
               nact.v[j].s = tokv[++t];

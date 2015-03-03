@@ -2,12 +2,17 @@
 // cw_misc.c - various small functions and macros to simplify the writing
 // of utility programs.
 //============================================================================
+#define _GNU_SOURCE
 #include <stdlib.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 #include <time.h>
+#include <sys/time.h>
+#include <math.h>
 #include "cw_misc.h"
 
 //----------------------------------------------------------------------------
@@ -72,10 +77,10 @@ void *freex(MSG_CONTEXT *msgctx, const char *context, void *ptr) {
   return NULL;
 }
 
-char *strndupx(MSG_CONTEXT *msgctx, const char *context, const char *s1, size_t n) {
-  char *r = strndup(s1, n);
-  DBG4("strndupx %s \"%s\" returns %p", context, s1, r);
-  if (!r) ERRX("%s: strndup(%d) failed", context, n)
+char *strdupx(MSG_CONTEXT *msgctx, const char *context, const char *s1) {
+  char *r = strdup(s1);
+  DBG4("strdupx %s \"%s\" returns %p", context, s1, r);
+  if (!r) ERRX("%s: strdup() failed", context)
   return r;
 }
 
@@ -169,12 +174,12 @@ int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name) {
     ENUM_NAME_VAL_PAIR nv = {NULL, val};
     ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_val, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_val_compare);
     if (nvp) {
-      *name = STRNDUPX(nvp->name, 64);
+      *name = STRDUPX(nvp->name);
       rc = 0;
     } else {
       char msg[32];
       snprintf(msg, sizeof(msg), "INVALID(0x%X)", val);
-      *name = STRNDUPX(msg, sizeof(msg));
+      *name = STRDUPX(msg);
       rc = -1;
     }
   }
@@ -203,10 +208,12 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
 
   if (etptr->multiple) {
-    char * string = STRNDUPX(name, 1000);
-    char * token;
+    char * string = STRDUPX(name);
+    char * token, *saveptr;
     int myval = 0;
-    while ((token = strsep(&string, etptr->delim))) {
+    
+    token = strtok_r(string, etptr->delim, &saveptr);
+    while (token) {
     ENUM_NAME_VAL_PAIR nv = {token, 0};
       ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
       if (nvp) {
@@ -214,6 +221,7 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
       } else {
         rc = -1;
       } 
+      token = strtok_r(NULL, etptr->delim, &saveptr);
     }
     if (rc == 0) *val = myval;  
   } else {
@@ -291,6 +299,39 @@ void hex_dump(void *data, int size) {
         /* print rest of buffer if not empty */
         printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
     }
+}
+
+//----------------------------------------------------------------------------
+// Simple timer start/stop routines - returns floating point seconds
+//----------------------------------------------------------------------------
+void etimer_start(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp) {
+  #ifdef CLOCK_REALTIMEz
+    if (clock_gettime(CLOCK_REALTIME, &timerp->start)) ERRX("clock_gettime() failed: %s", strerror(errno));
+  #else
+    // Silly Mac OS doesn't support clock_gettime :-(
+    if (gettimeofday(&timerp->start, NULL)) ERRX("gettimeofday() failed: %s", strerror(errno));
+  #endif
+}
+
+double etimer_elapsed(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp) {
+  #ifdef CLOCK_REALTIMEz
+    if (clock_gettime(CLOCK_REALTIME, &timerp->end)) ERRX("clock_gettime() failed: %s", strerror(errno));
+    return (double)(timerp->end.tv_sec - timerp->start.tv_sec) +
+             (1E-9 * (double) (timerp->end.tv_nsec - timerp->start.tv_nsec));
+  #else
+    if (gettimeofday(&timerp->end, NULL)) ERRX("gettimeofday() failed: %s", strerror(errno));
+    return (double)(timerp->end.tv_sec - timerp->start.tv_sec) +
+             (1E-6 * (double) (timerp->end.tv_usec - timerp->start.tv_usec));
+  #endif
+}
+
+// Sleep for floating point seconds and fractions
+void fsleep(double seconds) {
+  double seconds_only = floor(seconds);
+  double microseconds = 1000000 * (seconds - seconds_only);
+
+  sleep((int) seconds);
+  usleep((int) microseconds);
 }
 
 // --- end of cw_misc.c ---
