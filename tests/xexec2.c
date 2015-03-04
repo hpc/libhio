@@ -1202,7 +1202,7 @@ ACTION_RUN(hdc_run) {
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD));
   if (myrank == 0)
-    VERB1("R/W GB: %f %f time:%f R/W speed: %f %f GB/S",
+    VERB1(" R/W GB: %f %f  time: %f S  R/W speed: %f %f GB/S",
           (double)rw_count_sum[0]/1E9, (double)rw_count_sum[1]/1E9, time, 
            rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
 }
