@@ -158,6 +158,8 @@ char * help =
 //----------------------------------------------------------------------------
 char id_string[256] = "";
 int id_string_len = 0;
+int quit_on_fail = 1; // Quit after this many or more fails (0 = nevr quit)
+int fail_count = 0;   // Count of fails
 #ifdef MPI
 int myrank, mpi_size = 0;
 #endif
@@ -424,6 +426,14 @@ ACTION_RUN(debug_run) {
     msg_context_set_debug(MY_MSG_CTX, debug);
     VERB0("Run debug level set to %d", debug);
   }
+}
+
+//----------------------------------------------------------------------------
+// qof (quit on fail) action handlers
+//----------------------------------------------------------------------------
+ACTION_RUN(qof_run) {
+  quit_on_fail = V0.u;
+  VERB0("Quit on fail count set to %d", quit_on_fail);
 }
 
 //----------------------------------------------------------------------------
@@ -1068,6 +1078,7 @@ ACTION_RUN(hi_run) {
 
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
+  int hio_fail;
   char * ds_name = V0.s;
   U64 ds_id = V1.u;
   int flag_i = V2.i;
@@ -1076,11 +1087,19 @@ ACTION_RUN(hdo_run) {
   MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
   ETIMER_START(&hio_tmr);
   hrc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
-  VERB3("%s; hio_dataset_open rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
-  if (HIO_SUCCESS != hrc) {
-    VERB0("%s; hio_dataset_open failed rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
-    hio_err_print_all(context, stderr, "hio_dataset_open error: ");
+
+  fail_count += (hio_fail = (hrc != hio_exp && hio_exp != HIO_ANY) ? 1: 0);
+  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
+    MSG("%s: hio_dataset_open %s rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK", enum_name(MY_MSG_CTX, &etab_herr, hrc), enum_name(MY_MSG_CTX, &etab_herr, hio_exp));
+    if (hio_fail) hio_err_print_all(context, stderr, "hio_dataset_open error: "); 
   }
+
+  // VERB3("%s; hio_dataset_open rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
+  // if (HIO_SUCCESS != hrc) {
+  //   VERB0("%s; hio_dataset_open failed rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
+  //   hio_err_print_all(context, stderr, "hio_dataset_open error: ");
+  // }
+
 }
 
 ACTION_CHECK(heo_check) {
@@ -1202,7 +1221,7 @@ ACTION_RUN(hdc_run) {
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD));
   if (myrank == 0)
-    VERB1(" R/W GB: %f %f  time: %f S  R/W speed: %f %f GB/S",
+    VERB1("hdo-hdc R/W GB: %f %f  time: %f S  R/W speed: %f %f GB/S",
           (double)rw_count_sum[0]/1E9, (double)rw_count_sum[1]/1E9, time, 
            rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
 }
@@ -1276,6 +1295,7 @@ struct parse {
 // Command  V0    V1    V2    V3    V4    Check          Run
   {"v",    {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
   {"d",    {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
+  {"qof",  {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
   {"im",   {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
   {"lc",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
   {"lt",   {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
@@ -1425,10 +1445,17 @@ void run_action() {
   #endif
 
   while ( ++a < actc ) {
-     DBG2("Running %s", actv[a].desc); 
-     // Runner routine may modify variable a for looping
-     if (actv[a].runner) actv[a].runner(&actv[a], &a);
+    DBG2("Running %s", actv[a].desc); 
+    // Runner routine may modify variable a for looping
+    if (actv[a].runner) actv[a].runner(&actv[a], &a);
+    DBG3("Done %s; fails: %d qof: %d", actv[a].desc, fail_count, quit_on_fail);
+    if (quit_on_fail != 0 && fail_count >= quit_on_fail) {
+      VERB0("Quiting due to fails: %d >= qof: %d", fail_count, quit_on_fail); 
+      break;
+    }
   }
+  VERB0("Action execution ended, fails: %d", fail_count);
+
 }
 
 
@@ -1451,7 +1478,6 @@ int main(int argc, char * * argv) {
   parse_action();
   run_action();
 
-  VERB0("Returning from main rc: 0");
   return 0;
 }
 // --- end of xexec.c ---
