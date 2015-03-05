@@ -167,6 +167,10 @@ char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val);
 // Sets *val to an enum value or OR of values for multiple types
 int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * val);
 
+// Returns a list of enum names prefixed by "one of" or "one or more of".  List 
+// must be freed by caller.
+char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr);
+
 //----------------------------------------------------------------------------
 // hex_dump - dumps size bytes of *data to stdout. Looks like:
 // [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.

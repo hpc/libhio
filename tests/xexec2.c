@@ -49,7 +49,7 @@
 char * help =
   "xexec - universal testing executable.  Processes command line arguments\n"
   "        in sequence to control actions.\n"
-  "        Version 0.9.3 " __DATE__ " " __TIME__ "\n"
+  "        Version 0.9.4 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
   "\n"
@@ -68,6 +68,8 @@ char * help =
   "                4 = 3 + detailed action progress messages\n"
   "                5 = 4 + detailed repetitive action progress messages - if\n"
   "                enabled at compile time which will impact performance.\n"  
+  "  qof <number>  Quit after <number> of failures. 0 = never, default is 1.\n"
+  "  name <test name> Set test name for final success / fail message\n"
   "  im <file>     imbed a file of actions at this point, - means stdin\n"
   "  lc <count>    loop start; repeat the following actions (up to the matching\n"
   "                loop end) <count> times\n"
@@ -125,6 +127,7 @@ char * help =
   "  hf            Fini\n"
   "  hck <ON|OFF>  Enable read data checking\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
+  "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n" 
   #endif
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
@@ -160,8 +163,10 @@ char id_string[256] = "";
 int id_string_len = 0;
 int quit_on_fail = 1; // Quit after this many or more fails (0 = nevr quit)
 int fail_count = 0;   // Count of fails
+char * test_name = "<unnamed>";
 #ifdef MPI
 int myrank, mpi_size = 0;
+static MPI_Comm mpi_comm;
 #endif
 int tokc = 0;
 char * * tokv = NULL;
@@ -210,6 +215,7 @@ MSG_CONTEXT my_msg_context;
 // Common subroutines and macros
 //----------------------------------------------------------------------------
 #ifdef MPI
+
   #define MPI_CK(API) {                              \
     int mpi_rc;                                      \
     DBG2("Calling " #API);                           \
@@ -222,23 +228,21 @@ MSG_CONTEXT my_msg_context;
       ERRX("%s rc:%d [%s]", (#API), mpi_rc, str);    \
     }                                                \
   }
-#endif
 
-// Serialize execution of all MPI ranks
-#ifdef MPI
+  // Serialize execution of all MPI ranks
   #define RANK_SERIALIZE_START                           \
-    MPI_CK(MPI_Barrier(MPI_COMM_WORLD));                 \
+    MPI_CK(MPI_Barrier(mpi_comm));                       \
     if (mpi_size > 0 && myrank != 0) {                   \
       char buf;                                          \
       MPI_Status status;                                 \
       MPI_CK(MPI_Recv(&buf, 1, MPI_CHAR, myrank - 1,     \
-             MPI_ANY_TAG, MPI_COMM_WORLD, &status));     \
+             MPI_ANY_TAG, mpi_comm, &status));           \
     }
   #define RANK_SERIALIZE_END                             \
     if (mpi_size > 0 && myrank != mpi_size - 1) {        \
       char buf;                                          \
       MPI_CK(MPI_Send(&buf, 1, MPI_CHAR, myrank + 1,     \
-             0, MPI_COMM_WORLD));                        \
+             0, mpi_comm));                              \
     }
 #else
   #define RANK_SERIALIZE_START
@@ -262,9 +266,9 @@ void get_id() {
     if (mpi_init_flag) {
       MPI_Finalized(&mpi_final_flag);
       if (! mpi_final_flag) {
-        MPI_CK(MPI_Comm_rank(MPI_COMM_WORLD, &myrank));
+        MPI_CK(MPI_Comm_rank(mpi_comm, &myrank));
         sprintf(tmp_id+strlen(tmp_id), ".%d", myrank);
-        MPI_CK(MPI_Comm_size(MPI_COMM_WORLD, &mpi_size));
+        MPI_CK(MPI_Comm_size(mpi_comm, &mpi_size));
         sprintf(tmp_id+strlen(tmp_id), "/%d", mpi_size);
       }
     }
@@ -436,6 +440,10 @@ ACTION_RUN(qof_run) {
   VERB0("Quit on fail count set to %d", quit_on_fail);
 }
 
+ACTION_RUN(name_run) {
+  test_name = V0.s;
+}
+
 //----------------------------------------------------------------------------
 // im (imbed) action handler
 //----------------------------------------------------------------------------
@@ -578,7 +586,7 @@ ACTION_RUN(le_run) {
           DBG4("loop sync rank 0 end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
         }
       }
-      MPI_CK(MPI_Bcast(&time2stop, 1, MPI_INT, 0, MPI_COMM_WORLD));
+      MPI_CK(MPI_Bcast(&time2stop, 1, MPI_INT, 0, mpi_comm));
       if (time2stop) {
         VERB1("loop sync end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
         lcur--;
@@ -705,6 +713,23 @@ static size_t mpi_buf_len = 0;
 
 ACTION_RUN(mi_run) {
   MPI_CK(MPI_Init(NULL, NULL));
+  int shift = 3;
+  if (shift == 0) {
+    mpi_comm = MPI_COMM_WORLD;
+  } else {
+    get_id();
+    MPI_Group oldgroup;
+    int ranks[mpi_size];
+    shift = shift % mpi_size;
+    for (int i=0; i<shift; ++i) {
+      ranks[i] = (i + shift)%mpi_size;
+      if (myrank == 0) VERB2("New rank %d is old rank %d", i, ranks[i]); 
+    }
+    
+    MPI_CK(MPI_Comm_group(MPI_COMM_WORLD, &oldgroup));
+
+
+  } 
   get_id();
 }
 
@@ -722,11 +747,11 @@ ACTION_RUN(msr_run) {
   DBG2("msr len: %d dest: %d source: %d", len, dest, source);
   MPI_CK(MPI_Sendrecv(mpi_sbuf, len, MPI_BYTE, dest, 0,
                       mpi_rbuf, len, MPI_BYTE, source, 0,
-                      MPI_COMM_WORLD, &status));
+                      mpi_comm, &status));
 }
 
 ACTION_RUN(mb_run) {
-  MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
+  MPI_CK(MPI_Barrier(mpi_comm));
 }
 
 ACTION_RUN(mf_run) {
@@ -1023,10 +1048,16 @@ ENUM_NAMP(HIO_, ERR_IO_PERMANENT)
 ENUM_NAMP(HIO_, ANY)
 ENUM_END(etab_herr, 0, NULL)
 
+#define HIO_CNT_REQ -998
+#define HIO_CNT_ANY -999
+
+
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
-static hio_return_t hio_exp = HIO_SUCCESS;
+static hio_return_t hio_rc_exp = HIO_SUCCESS;
+static I64 hio_cnt_exp = HIO_CNT_REQ;
+static int hio_fail = 0;
 static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
 static int hio_check = 0;
@@ -1034,15 +1065,35 @@ static U64 hew_ofs, her_ofs;
 static U64 rw_count[2];
 ETIMER hio_tmr;
 
+#define HRC_TEST(API_NAME)  {                                                      \
+  fail_count += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);  \
+  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                \
+    MSG("%s: " #API_NAME " %s; rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK",   \
+         enum_name(MY_MSG_CTX, &etab_herr, hrc),                                   \
+         enum_name(MY_MSG_CTX, &etab_herr, hio_rc_exp));                           \
+    if (hio_fail) hio_err_print_all(context, stderr, #API_NAME " error: ");        \
+  }                                                                                \
+  hio_rc_exp = HIO_SUCCESS;                                                        \
+}
+
+#define HCNT_TEST(API_NAME)  {                                                               \
+  if (HIO_CNT_REQ == hio_cnt_exp) hio_cnt_exp = hreq;                                        \
+  fail_count += (hio_fail = ( hcnt != hio_cnt_exp && hio_cnt_exp != HIO_CNT_ANY ) ? 1: 0);   \
+  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                          \
+    MSG("%s: " #API_NAME " %s; cnt: %d exp: %d", A.desc, hio_fail ? "FAIL": "OK",            \
+         hcnt, hio_cnt_exp);                                                                 \
+    if (hio_fail) hio_err_print_all(context, stderr, #API_NAME " error: ");                  \
+  }                                                                                          \
+  hio_cnt_exp = HIO_CNT_REQ;                                                                 \
+}
+
 ACTION_RUN(hi_run) {
   hio_return_t hrc;
   char * context_name = V0.s;
   char * data_root = V1.s;
-  char * tmp_str;
   char * root_var = "data_roots";
   DBG4("HIO_SET_ELEMENT_UNIQUE: %lld", HIO_SET_ELEMENT_UNIQUE);
   DBG4("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
-  MPI_Comm myworld = MPI_COMM_WORLD;
   // Workaround for read only context_data_root and no default context
   {
     int rc;
@@ -1054,52 +1105,39 @@ ACTION_RUN(hi_run) {
     DBG4("getenv(%s) returns \"%s\"", ename, getenv(ename));
   }
   // end workaround
-  DBG1("Invoking hio_init_mpi context:%s root:%s", context_name, data_root);
-  hrc = hio_init_mpi(&context, &myworld, NULL, NULL, context_name);
-  VERB3("hio_init_mpi rc:%d context_name:%s", hrc, context_name);
-  if (HIO_SUCCESS != hrc) {
-    VERB0("hio_init_mpi failed rc:%d", hrc);
-    hio_err_print_all(context, stderr, "hio_init_mpi error: ");
-  } else {
-    //DBG1("Invoking hio_config_set_value var:%s val:%s", root_var, data_root);
-    //hrc = hio_config_set_value((hio_object_t)context, root_var, data_root);
-    //VERB2("hio_config_set_value rc:%d var:%s val:%s", hrc, root_var, data_root);
-    DBG1("Invoking hio_config_get_value var:%s", root_var);
-    hrc = hio_config_get_value((hio_object_t)context, root_var, &tmp_str);
-    VERB3("hio_config_get_value rc:%d, var:%s value=\"%s\"", hrc, root_var, tmp_str);
-    if (HIO_SUCCESS == hrc) {
-      free(tmp_str);
-    } else {
-      VERB0("hio_config_get_value failed, rc:%d var:%s", hrc, root_var);
-      hio_err_print_all(context, stderr, "hio_config_get_value error: ");
-    }
+  hrc = hio_init_mpi(&context, &mpi_comm, NULL, NULL, context_name);
+  HRC_TEST(hio_init_mpi)
+  
+  #if 0 
+  // This doesn't work yet 
+  if (HIO_SUCCESS == hrc) {
+    hrc = hio_config_set_value((hio_object_t)context, root_var, data_root);
+    HRC_TEST(hio_config_set_value)
   }
+  #endif
+
+  if (HIO_SUCCESS == hrc) {
+    char * tmp_str = NULL;
+    hrc = hio_config_get_value((hio_object_t)context, root_var, &tmp_str);
+    HRC_TEST(hio_config_get_value)
+    if (HIO_SUCCESS == hrc) {
+      VERB3("hio_config_get_value var:%s value=\"%s\"", root_var, tmp_str);
+    }
+  } 
 }
+
 
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
-  int hio_fail;
   char * ds_name = V0.s;
   U64 ds_id = V1.u;
   int flag_i = V2.i;
   int mode_i = V3.i;
   rw_count[0] = rw_count[1] = 0;
-  MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
+  MPI_CK(MPI_Barrier(mpi_comm));
   ETIMER_START(&hio_tmr);
   hrc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
-
-  fail_count += (hio_fail = (hrc != hio_exp && hio_exp != HIO_ANY) ? 1: 0);
-  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
-    MSG("%s: hio_dataset_open %s rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK", enum_name(MY_MSG_CTX, &etab_herr, hrc), enum_name(MY_MSG_CTX, &etab_herr, hio_exp));
-    if (hio_fail) hio_err_print_all(context, stderr, "hio_dataset_open error: "); 
-  }
-
-  // VERB3("%s; hio_dataset_open rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
-  // if (HIO_SUCCESS != hrc) {
-  //   VERB0("%s; hio_dataset_open failed rc:%d(%s)", A.desc, hrc,enum_name(MY_MSG_CTX, &etab_herr, hrc));
-  //   hio_err_print_all(context, stderr, "hio_dataset_open error: ");
-  // }
-
+  HRC_TEST(hio_dataset_open)
 }
 
 ACTION_CHECK(heo_check) {
@@ -1110,14 +1148,9 @@ ACTION_RUN(heo_run) {
   hio_return_t hrc;
   char * el_name = V0.s;
   int flag_i = V1.i;
-  char * flag_s = V1.s;
   bufsz = V2.u;
   hrc = hio_element_open (dataset, &element, el_name, flag_i);
-  VERB3("hio_element_open rc:%d name:%s flags:%s", hrc, el_name, flag_s);
-  if (HIO_SUCCESS != hrc) {
-    VERB0("hio_elememt_open failed rc:%d name:%s flags:%s", hrc, el_name, flag_s);
-    hio_err_print_all(context, stderr, "hio_element_open error: ");
-  }
+  HRC_TEST(hio_element_open)
 
   wbuf = MALLOCX(bufsz+LFSR_22_CYCLE);
   lfsr_22_byte_init();
@@ -1138,9 +1171,9 @@ ACTION_CHECK(hew_check) {
 }
 
 ACTION_RUN(hew_run) {
-  ssize_t retsize;
+  ssize_t hcnt;
   I64 p_ofs = V0.u;
-  U64 size = V1.u;
+  U64 hreq = V1.u;
   U64 a_ofs;
   if (p_ofs < 0) { 
     a_ofs = hew_ofs;
@@ -1148,14 +1181,9 @@ ACTION_RUN(hew_run) {
   } else {
     a_ofs = p_ofs;
   }
-  retsize = hio_element_write (element, a_ofs, 0, wbuf + (a_ofs%LFSR_22_CYCLE), 1, size);
-  VERB3("hio_element_write retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
-  if (size != retsize) {
-    VERB0("hio_element_write failed retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
-    hio_err_print_all(context, stderr, "hio_element_write error: ");
-  } else {
-    rw_count[1] += size;
-  }
+  hcnt = hio_element_write (element, a_ofs, 0, wbuf + (a_ofs%LFSR_22_CYCLE), 1, hreq);
+  HCNT_TEST(hio_element_write)
+  rw_count[1] += hcnt;
 }
 
 ACTION_CHECK(her_check) {
@@ -1164,9 +1192,9 @@ ACTION_CHECK(her_check) {
 }
 
 ACTION_RUN(her_run) {
-  ssize_t retsize;
+  ssize_t hcnt;
   I64 p_ofs = V0.u;
-  U64 size = V1.u;
+  U64 hreq = V1.u;
   U64 a_ofs;
   if (p_ofs < 0) { 
     a_ofs = her_ofs;
@@ -1174,52 +1202,28 @@ ACTION_RUN(her_run) {
   } else {
     a_ofs = p_ofs;
   }
-  retsize = hio_element_read (element, a_ofs, 0, rbuf, 1, size);
-  VERB3("hio_element_read retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
-  if (size != retsize) {
-    VERB0("hio_element_read failed retsize:%d ofs:%lld size:%lld", retsize, a_ofs, size);
-    hio_err_print_all(context, stderr, "hio_element_read error: ");
-  } else {
-    rw_count[0] += size;
-  }
-  if (hio_check) {
-    if (memcmp(rbuf, wbuf + (a_ofs%LFSR_22_CYCLE), size)) {
-      VERB0("Error: hio_element_read data miscompare ofs:%lld size:%lld", a_ofs, size);
-    } else {
-      VERB3("hio data read check successful");
-    }
-  }
+  hcnt = hio_element_read (element, a_ofs, 0, rbuf, 1, hreq);
+  HCNT_TEST(hio_element_read)
+  rw_count[0] += hcnt;
 }
 
 ACTION_RUN(hec_run) {
   hio_return_t hrc;
   hrc = hio_element_close(&element);
-  VERB3("hio_element_close rc:%d", hrc);
-  if (HIO_SUCCESS != hrc) {
-    VERB0("hio_close element_failed rc:%d", hrc);
-    hio_err_print_all(context, stderr, "hio_element_close error: ");
-  }
-  DBG1("Invoking free(%p)", wbuf);
-  free(wbuf);
-  wbuf = NULL;
-  DBG1("Invoking free(%p)", rbuf);
-  free(rbuf);
-  rbuf = NULL;
+  HRC_TEST(hio_elemnt_close)
+  wbuf = FREEX(wbuf);
+  rbuf = FREEX(rbuf);
   bufsz = 0;
 }
 
 ACTION_RUN(hdc_run) {
   hio_return_t hrc;
   hrc = hio_dataset_close(&dataset);
-  MPI_CK(MPI_Barrier(MPI_COMM_WORLD));
+  MPI_CK(MPI_Barrier(mpi_comm));
   double time = ETIMER_ELAPSED(&hio_tmr);
-  VERB3("hio_datset_close rc:%d", hrc);
-  if (HIO_SUCCESS != hrc) {
-    VERB0("hio_datset_close failed rc:%d", hrc);
-    hio_err_print_all(context, stderr, "hio_dataset_close error: ");
-  }
+  HRC_TEST(hio_dataset_close)
   U64 rw_count_sum[2];
-  MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD));
+  MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   if (myrank == 0)
     VERB1("hdo-hdc R/W GB: %f %f  time: %f S  R/W speed: %f %f GB/S",
           (double)rw_count_sum[0]/1E9, (double)rw_count_sum[1]/1E9, time, 
@@ -1229,16 +1233,23 @@ ACTION_RUN(hdc_run) {
 ACTION_RUN(hf_run) {
   hio_return_t hrc;
   hrc = hio_fini(&context);
-  VERB3("hio_fini rc:%d", hrc);
-  if (hrc != HIO_SUCCESS) {
-    VERB0("hio_fini failed, rc:%d", hrc);
-    hio_err_print_all(context, stderr, "hio_fini error: ");
-  }
+  HRC_TEST(hio_fini);
 }
 
 ACTION_RUN(hxrc_run) {
-  hio_exp = V0.i;
+  hio_rc_exp = V0.i;
   VERB0("%s; HIO expected rc now %d(%s)", A.desc, V0.i, V0.s);
+}
+
+ACTION_CHECK(hxct_check) {
+  I64 count = V0.u;
+  if (count < 0 && count != HIO_CNT_ANY && count != HIO_CNT_REQ)
+    ERRX("%s; count negative and not %d (ANY) or %d (REQ)", A.desc, HIO_CNT_ANY, HIO_CNT_REQ);
+}
+
+ACTION_RUN(hxct_run) {
+  hio_cnt_exp = V0.u;
+  VERB0("%s; HIO expected count now %lld", A.desc, V0.u);
 }
 
 #endif
@@ -1296,6 +1307,7 @@ struct parse {
   {"v",    {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
   {"d",    {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
   {"qof",  {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
+  {"name", {STR,  NONE, NONE, NONE, NONE}, NULL,          name_run    },
   {"im",   {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
   {"lc",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
   {"lt",   {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
@@ -1335,6 +1347,7 @@ struct parse {
   {"hdc",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
   {"hf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
   {"hxrc", {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
+  {"hxct", {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
   #endif
   {"k",    {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",    {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
@@ -1386,21 +1399,21 @@ void parse_action() {
             case HFLG:
               t++; 
               int rc = str2enum(MY_MSG_CTX, &etab_hflg, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid hio flag \"%s\"", nact.desc, tokv[t]);
+              if (rc) ERRX("%s ...; invalid hio flag \"%s\". Valid values are %s", nact.desc, tokv[t], enum_list(MY_MSG_CTX, &etab_hflg));
               rc = enum2str(MY_MSG_CTX, &etab_hflg, nact.v[j].i, &nact.v[j].s); 
               if (rc) ERRX("%s ...; invalid hio flag \"%s\"", nact.desc, tokv[t]);
               break;
             case HDSM:
               t++; 
               rc = str2enum(MY_MSG_CTX, &etab_hdsm, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid hio mode \"%s\"", nact.desc, tokv[t]);
+              if (rc) ERRX("%s ...; invalid hio mode \"%s\". Valid values are are %s", nact.desc, tokv[t], enum_list(MY_MSG_CTX, &etab_hdsm));
               rc = enum2str(MY_MSG_CTX, &etab_hdsm, nact.v[j].i, &nact.v[j].s); 
               if (rc) ERRX("%s ...; invalid hio mode \"%s\"", nact.desc, tokv[t]);
               break;
             case HERR:
               t++; 
               rc = str2enum(MY_MSG_CTX, &etab_herr, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid hio return \"%s\"", nact.desc, tokv[t]);
+              if (rc) ERRX("%s ...; invalid hio return \"%s\". Valid values are %s", nact.desc, tokv[t],  enum_list(MY_MSG_CTX, &etab_herr));
               rc = enum2str(MY_MSG_CTX, &etab_herr, nact.v[j].i, &nact.v[j].s); 
               if (rc) ERRX("%s ...; invalid hio return \"%s\"", nact.desc, tokv[t]);
               break;
@@ -1408,7 +1421,7 @@ void parse_action() {
             case ONFF:
               t++;
               rc = str2enum(MY_MSG_CTX, &etab_onff, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid ON / OFF token \"%s\"", nact.desc, tokv[t]);
+              if (rc) ERRX("%s ...; invalid ON / OFF token \"%s\". Valid values are %s", nact.desc, tokv[t], enum_list(MY_MSG_CTX, &etab_onff));
               nact.v[j].s = nact.v[j].i?"ON":"OFF";
               break;
             case NONE:
@@ -1454,7 +1467,7 @@ void run_action() {
       break;
     }
   }
-  VERB0("Action execution ended, fails: %d", fail_count);
+  VERB0("Action execution ended, Fails: %d", fail_count);
 
 }
 
@@ -1477,6 +1490,10 @@ int main(int argc, char * * argv) {
   // Make two passes through args, first to check, second to run.
   parse_action();
   run_action();
+
+  VERB0("xexec done.  Result: %s  Fails: %d  Test name: %s",
+        fail_count ? "FAILURE" : "SUCCESS", fail_count, test_name);
+
 
   return 0;
 }

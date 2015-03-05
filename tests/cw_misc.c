@@ -236,6 +236,22 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
   return rc;
 }
 
+// Returns a list of enum names prefixed by "one of" or "one or more of".  List 
+// must be freed by caller.
+char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr) {
+  // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
+  if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
+  
+  char * retval = STRDUPX(etptr->multiple?"one or more of ": "one of ");
+  for (int i = 0; i < etptr->nv_count; i++) {
+    retval = STRCATRX(retval, etptr->nv_by_name[i].name);
+    retval = STRCATRX(retval, ", "); 
+  }
+  retval[strlen(retval)-2] = '\0';
+  return retval;
+}
+
+
 //----------------------------------------------------------------------------
 // hex_dump - dumps size bytes of *data to stdout. Looks like:
 // [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
