@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
 // xexec.c - xexec is a multi-purpose HPC system testing tool.  See the help 
-// text a few lines below for a description of i's capabilities.
+// text a few lines below for a description of its capabilities.
 //----------------------------------------------------------------------------
 #include <stdlib.h>
 #include <stdio.h>
