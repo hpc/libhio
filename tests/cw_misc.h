@@ -181,7 +181,7 @@ void hex_dump(void *data, int size);
 // Simple timer start/stop routines - returns floating point seconds
 //----------------------------------------------------------------------------
 typedef struct etimer {
-  #ifdef CLOCK_REALTIMEz
+  #if defined(CLOCK_REALTIME) && defined(USE_REALTIME)
     struct timespec start, end;
   #else
     struct timeval start, end;

@@ -5,7 +5,7 @@
 # 1.2 GB per rank
 
 cmdw="
-  v 2 d 0 mi 
+  v 2 d 0 mi 0 
   hi ctx_name POSIX:$root 
   hdo dsn_name 22 WRONLY,CREAT UNIQUE 
   heo el_name WRONLY,CREAT 20Mi 
@@ -16,7 +16,7 @@ cmdw="
 "
 
 cmdr="
-  v 2 d 0 mi 
+  v 2 d 0 mi 0
   hi ctx_name POSIX:$root 
   hdo dsn_name 22 RDONLY       UNIQUE
   heo el_name RDONLY       20Mi

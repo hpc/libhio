@@ -321,7 +321,7 @@ void hex_dump(void *data, int size) {
 // Simple timer start/stop routines - returns floating point seconds
 //----------------------------------------------------------------------------
 void etimer_start(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp) {
-  #ifdef CLOCK_REALTIMEz
+  #if defined(CLOCK_REALTIME) && defined(USE_REALTIME)
     if (clock_gettime(CLOCK_REALTIME, &timerp->start)) ERRX("clock_gettime() failed: %s", strerror(errno));
   #else
     // Silly Mac OS doesn't support clock_gettime :-(
@@ -330,7 +330,7 @@ void etimer_start(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp) {
 }
 
 double etimer_elapsed(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp) {
-  #ifdef CLOCK_REALTIMEz
+  #if defined(CLOCK_REALTIME) && defined(USE_REALTIME)
     if (clock_gettime(CLOCK_REALTIME, &timerp->end)) ERRX("clock_gettime() failed: %s", strerror(errno));
     return (double)(timerp->end.tv_sec - timerp->start.tv_sec) +
              (1E-9 * (double) (timerp->end.tv_nsec - timerp->start.tv_nsec));

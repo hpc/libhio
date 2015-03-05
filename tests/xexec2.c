@@ -1,3 +1,7 @@
+//----------------------------------------------------------------------------
+// xexec.c - xexec is a multi-purpose HPC system testing tool.  See the help 
+// text a few lines below for a description of i's capabilities.
+//----------------------------------------------------------------------------
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -47,8 +51,8 @@
 //----------------------------------------------------------------------------
 
 char * help =
-  "xexec - universal testing executable.  Processes command line arguments\n"
-  "        in sequence to control actions.\n"
+  "xexec - multi-pupose HPC exercise and testing tool.  Processes command\n"
+  "        line arguments and file input in sequence to control actions.\n"
   "        Version 0.9.4 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
@@ -86,7 +90,7 @@ char * help =
   "  vt <stride>   touch most recently allocated memory every <stride> bytes\n"
   "  vf            free most recently allocated memory\n"
   #ifdef MPI
-  "  mi            issue MPI_Init()\n"
+  "  mi <shift>    issue MPI_Init(), shift ranks by <shift> from original assignment\n"
   "  msr <size> <stride>\n"
   "                issue MPI_Sendreceive with specified buffer <size> to and\n"
   "                from ranks <stride> above and below this rank\n"
@@ -713,24 +717,24 @@ static size_t mpi_buf_len = 0;
 
 ACTION_RUN(mi_run) {
   MPI_CK(MPI_Init(NULL, NULL));
-  int shift = 3;
-  if (shift == 0) {
-    mpi_comm = MPI_COMM_WORLD;
-  } else {
-    get_id();
-    MPI_Group oldgroup;
-    int ranks[mpi_size];
-    shift = shift % mpi_size;
-    for (int i=0; i<shift; ++i) {
-      ranks[i] = (i + shift)%mpi_size;
-      if (myrank == 0) VERB2("New rank %d is old rank %d", i, ranks[i]); 
-    }
-    
-    MPI_CK(MPI_Comm_group(MPI_COMM_WORLD, &oldgroup));
-
-
-  } 
+  int shift = V0.u;
+  mpi_comm = MPI_COMM_WORLD;
   get_id();
+  if (shift > 0) {
+    MPI_Group oldgroup, newgroup;
+    int ranks[mpi_size];
+
+    for (int i=0; i<mpi_size; ++i) {
+      ranks[i] = (i + shift) % mpi_size;
+      if (myrank == 0) VERB3("New rank %d is old rank %d", i, ranks[i]); 
+    }
+
+    MPI_CK(MPI_Comm_group(MPI_COMM_WORLD, &oldgroup));
+    MPI_CK(MPI_Group_incl(oldgroup, mpi_size, ranks, &newgroup));
+    MPI_CK(MPI_Comm_create(MPI_COMM_WORLD, newgroup, &mpi_comm));
+
+    get_id();
+  } 
 }
 
 ACTION_RUN(msr_run) {
@@ -1322,7 +1326,7 @@ struct parse {
   {"vt",   {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
   {"vf",   {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
   #ifdef MPI
-  {"mi",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mi_run      },
+  {"mi",   {UINT, NONE, NONE, NONE, NONE}, NULL,          mi_run      },
   {"msr",  {PINT, PINT, NONE, NONE, NONE}, NULL,          msr_run     },
   {"mb",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mb_run      },
   {"mf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mf_run      },

@@ -5,7 +5,7 @@
 # 2 ranks, 240 MB per rank written 
 
 cmdw="
-  v 2 d 1 mi 
+  v 2 d 1 mi 0
   hi ctx_name POSIX:$root 
   hdo dsn_name 22 WRONLY,CREAT UNIQUE 
   d 2 
@@ -17,7 +17,7 @@ cmdw="
 "
 
 cmdr="
-  v 2 d 1 mi 
+  v 2 d 1 mi 0
   hi ctx_name POSIX:$root 
   hdo dsn_name 22 RDONLY UNIQUE 
   d 2 
