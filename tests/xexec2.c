@@ -1380,6 +1380,14 @@ struct parse {
 //----------------------------------------------------------------------------
 // Argument string parser - call check routines, build action vector
 //----------------------------------------------------------------------------
+void decode(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL * val) {
+  int rc = str2enum(MY_MSG_CTX, etptr, tok, &val->i); 
+  if (rc) ERRX("%s ...; invalid %s \"%s\". Valid values are %s",
+               desc, name, tok, enum_list(MY_MSG_CTX, etptr));
+  rc = enum2str(MY_MSG_CTX, etptr, val->i, &val->s); 
+  if (rc) ERRX("%s ...; invalid %s \"%s\"", desc, name, tok);
+}
+
 void parse_action() {
   int t = -1, i, j;
   ACTION nact;
@@ -1392,7 +1400,7 @@ void parse_action() {
   #endif
 
   while ( ++t < tokc ) {
-    for (i = 0; i < DIM1(parse); ++i) { // parse table loop
+    for (i = 0; i < DIM1(parse); ++i) { // loop over parse table
       if (0 == strcmp(tokv[t], parse[i].cmd)) {
         DBG3("match: tokv[%d]: %s parse[%d].cmd: %s", t, tokv[t], i, parse[i].cmd);
         nact.tokn = t;
@@ -1400,55 +1408,37 @@ void parse_action() {
         nact.action = tokv[t];
         nact.desc = ALLOC_PRINTF("action %d: %s", actc+1, tokv[t]);
       
-        for (j = 0; j < MAX_PARAM; ++j) {
-          if (parse[i].param[j] == NONE) break;
-          if (tokc - t <= 1) ERRX("action %d \"%s\" missing param %d", nact.tokn, nact.action, j+1);
-          nact.desc = STRCATRX(STRCATRX(nact.desc, " "), tokv[t+1]);
+        for (j = 0; j < MAX_PARAM; ++j) { // loop over params
+          if (parse[i].param[j] == NONE) break; // for j loop over params
+          t++;
+          if (t >= tokc) ERRX("action %d \"%s\" missing param %d", nact.tokn, nact.action, j+1);
+          nact.desc = STRCATRX(STRCATRX(nact.desc, " "), tokv[t]);
           DBG5("%s ...; parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
           switch (parse[i].param[j]) {
             case SINT:
             case UINT:
             case PINT:
-              t++;
               nact.v[j].u = getI64(tokv[t], parse[i].param[j], &nact);
               break;
             case DOUB:
-              t++;
               nact.v[j].d = getDoub(tokv[t], parse[i].param[j], &nact);
               break;
             case STR:
-              nact.v[j].s = tokv[++t];
+              nact.v[j].s = tokv[t];
               break;
             #ifdef HIO
             case HFLG:
-              t++; 
-              int rc = str2enum(MY_MSG_CTX, &etab_hflg, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid hio flag \"%s\". Valid values are %s", nact.desc, tokv[t], enum_list(MY_MSG_CTX, &etab_hflg));
-              rc = enum2str(MY_MSG_CTX, &etab_hflg, nact.v[j].i, &nact.v[j].s); 
-              if (rc) ERRX("%s ...; invalid hio flag \"%s\"", nact.desc, tokv[t]);
+              decode(&etab_hflg, tokv[t], "hio flag", nact.desc, &nact.v[j]);
               break;
             case HDSM:
-              t++; 
-              rc = str2enum(MY_MSG_CTX, &etab_hdsm, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid hio mode \"%s\". Valid values are are %s", nact.desc, tokv[t], enum_list(MY_MSG_CTX, &etab_hdsm));
-              rc = enum2str(MY_MSG_CTX, &etab_hdsm, nact.v[j].i, &nact.v[j].s); 
-              if (rc) ERRX("%s ...; invalid hio mode \"%s\"", nact.desc, tokv[t]);
+              decode(&etab_hdsm, tokv[t], "hio mode", nact.desc, &nact.v[j]);
               break;
             case HERR:
-              t++; 
-              rc = str2enum(MY_MSG_CTX, &etab_herr, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid hio return \"%s\". Valid values are %s", nact.desc, tokv[t],  enum_list(MY_MSG_CTX, &etab_herr));
-              rc = enum2str(MY_MSG_CTX, &etab_herr, nact.v[j].i, &nact.v[j].s); 
-              if (rc) ERRX("%s ...; invalid hio return \"%s\"", nact.desc, tokv[t]);
+              decode(&etab_herr, tokv[t], "hio return", nact.desc, &nact.v[j]);
               break;
             #endif
             case ONFF:
-              t++;
-              rc = str2enum(MY_MSG_CTX, &etab_onff, tokv[t], &nact.v[j].i); 
-              if (rc) ERRX("%s ...; invalid ON / OFF token \"%s\". Valid values are %s", nact.desc, tokv[t], enum_list(MY_MSG_CTX, &etab_onff));
-              nact.v[j].s = nact.v[j].i?"ON":"OFF";
-              break;
-            case NONE:
+              decode(&etab_onff, tokv[t], "ON / OFF value", nact.desc, &nact.v[j]);
               break;
             default:
               ERRX("%s ...; internal parse error parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
@@ -1458,7 +1448,7 @@ void parse_action() {
         add2actv(&nact);
         DBG2("Checking %s", nact.desc); 
         if (parse[i].checker) parse[i].checker(&actv[actc-1], t);
-        break; // break parse table loop
+        break; // break for i loop over parse table
       }
     }
     if (i >= DIM1(parse)) ERRX("action %d: \"%s\" not recognized.", t, tokv[t]);
