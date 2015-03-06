@@ -2,6 +2,7 @@
 // xexec.c - xexec is a multi-purpose HPC system testing tool.  See the help 
 // text a few lines below for a description of its capabilities.
 //----------------------------------------------------------------------------
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -135,6 +136,7 @@ char * help =
   #endif
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
+  "  find <string> <file>  Read <file>, print (verbose 1) any lines containg string\n"
   "\n"
   "  Numbers can be specified with suffixes k, ki, M, Mi, G, Gi, etc.\n"
   "\n"
@@ -1272,6 +1274,23 @@ ACTION_RUN(exit_run) {
 }
 
 //----------------------------------------------------------------------------
+// find action handler
+//----------------------------------------------------------------------------
+ACTION_RUN(find_run) {
+  char line[512];
+  FILE * f = fopen(V1.s, "r");
+  if (!f) ERRX("Error opening \"%s\" %s", V1.s, strerror(errno));
+  while (fgets(line, sizeof(line), f)) {
+    if (strcasestr(line, V0.s)) {
+      char * last = line + strlen(line) - 1;
+      if ('\n' == *last) *last = '\0';
+      VERB1("Find: %s", line);
+    }
+  }
+  fclose(f);
+}
+
+//----------------------------------------------------------------------------
 // Enum conversion tables
 //----------------------------------------------------------------------------
 #ifdef HIO
@@ -1355,6 +1374,7 @@ struct parse {
   #endif
   {"k",    {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",    {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
+  {"find", {STR, STR,   NONE, NONE, NONE}, NULL,          find_run    },
 };
 
 //----------------------------------------------------------------------------
