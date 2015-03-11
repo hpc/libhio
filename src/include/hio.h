@@ -459,6 +459,9 @@ typedef enum hio_recommendation_t {
  * is specified in {config_file} then no configuration file will be used. The special
  * value HIO_CONFIG_FILE_DEFAULT will make libhio look for a file named context_name.cfg.
  * For more on configuration see @ref sec_configuration.
+ *
+ * Note: some errors may not be reported until hio_dataset_open () is called with the
+ * new context.
  */
 int hio_init_single (hio_context_t *new_context, const char *config_file, const char *config_file_prefix,
                      const char *context_name);

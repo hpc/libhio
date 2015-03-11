@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -119,7 +119,7 @@ static void hio_context_release (hio_context_t *contextp) {
   *contextp = NULL;
 }
 
-static int hioi_context_create_modules (hio_context_t context) {
+int hioi_context_create_modules (hio_context_t context) {
   char *data_roots, *data_root, *last;
   hio_module_t *module = NULL;
   int num_modules = 0;
@@ -190,8 +190,7 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   /* data roots can not be changed after a context has been created */
   hioi_config_add (context, &context->context_object, &context->context_data_roots,
                    "data_roots", HIO_CONFIG_TYPE_STRING, NULL,
-                   "Comma-separated list of data roots to use with this context",
-                   HIO_VAR_FLAG_READONLY);
+                   "Comma-separated list of data roots to use with this context", 0);
 
   hioi_config_add (context, &context->context_object, &context->context_checkpoint_size,
                    "checkpoint_size", HIO_CONFIG_TYPE_UINT64, NULL,
@@ -205,8 +204,7 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
     context->context_verbose = HIO_VERBOSE_MAX;
   }
 
-  /* create hio modules for each item in the specified data roots */
-  return hioi_context_create_modules (context);
+  return HIO_SUCCESS;
 }
 
 int hio_init_single (hio_context_t *new_context, const char *config_file, const char *config_file_prefix,

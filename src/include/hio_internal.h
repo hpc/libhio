@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -107,5 +107,15 @@ void hioi_log (hio_context_t context, int level, char *format, ...);
  * @returns hio error code
  */
 int hioi_err_errno (int err);
+
+
+/**
+ * Create HIO dataset modules based on the current data roots
+ *
+ * @param[in] context  context
+ *
+ * @returns hio error code
+ */
+int hioi_context_create_modules (hio_context_t context);
 
 #endif /* !defined(HIO_INTERNAL_H) */

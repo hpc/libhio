@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -20,6 +20,14 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
 
   if (NULL == context || NULL == set_out || NULL == name) {
     return HIO_ERR_BAD_PARAM;
+  }
+
+  if (0 == context->context_module_count) {
+    /* create hio modules for each item in the specified data roots */
+    rc = hioi_context_create_modules (context);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
   }
 
   if (HIO_DATASET_ID_LAST == set_id) {
