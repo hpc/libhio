@@ -452,7 +452,7 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
 					  hio_module_t **module) {
   builtin_posix_module_t *new_module;
 
-  if (strncasecmp("posix:", data_root, 1)) {
+  if (strncasecmp("posix:", data_root, 6)) {
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Module posix does not match for data root %s",
 	      data_root);
     return HIO_ERR_NOT_AVAILABLE;
