@@ -187,17 +187,17 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Set context verbosity to %d", context->context_verbose);
 
-  /* data roots can not be changed after a context has been created */
   hioi_config_add (context, &context->context_object, &context->context_data_roots,
-                   "data_roots", HIO_CONFIG_TYPE_STRING, NULL,
-                   "Comma-separated list of data roots to use with this context", 0);
+                   "context_data_roots", HIO_CONFIG_TYPE_STRING, NULL,
+                   "Comma-separated list of data roots to use with this context "
+                   "(default: posix:$PWD)", 0);
 
   hioi_config_add (context, &context->context_object, &context->context_checkpoint_size,
-                   "checkpoint_size", HIO_CONFIG_TYPE_UINT64, NULL,
+                   "context_checkpoint_size", HIO_CONFIG_TYPE_UINT64, NULL,
                    "hio hint for expected checkpoint size (default: 0 -- auto)", 0);
 
   hioi_config_add (context, &context->context_object, &context->context_print_statistics,
-                   "print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
+                   "context_print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
                    "to stdout when the context is closed (default: 0)", 0);
 
   if (context->context_verbose > HIO_VERBOSE_MAX) {
