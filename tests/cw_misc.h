@@ -9,8 +9,10 @@
 #include <sys/time.h>
 
 // Common typedefs and macros
-typedef unsigned long long int U64;
-typedef long long int I64;
+typedef uint64_t U64;
+typedef  int64_t I64;
+typedef uint32_t U32;
+typedef  int32_t I32;
 #define DIM1(array) ( sizeof(array) / sizeof(array[0]) )
 
 //----------------------------------------------------------------------------
@@ -198,5 +200,8 @@ double etimer_elapsed(MSG_CONTEXT *msgctx, const char *context, ETIMER * timerp)
 
 // Sleep for floating point seconds and fractions
 void fsleep(double seconds);
+
+
+unsigned int crc32(unsigned int crc, const void *buf, size_t size);
  
 // --- end of cw_misc.h ---

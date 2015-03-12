@@ -1039,6 +1039,31 @@ ACTION_RUN(dlc_run) {
 // hi, hdo, heo, hew, her, hec, hdc, hf (HIO) action handlers
 //----------------------------------------------------------------------------
 #ifdef HIO
+//----------------------------------------------------------------------------
+// Enum conversion tables
+//----------------------------------------------------------------------------
+ENUM_START(etab_hflg)
+ENUM_NAMP(HIO_FLAG_, RDONLY)
+ENUM_NAMP(HIO_FLAG_, WRONLY)
+ENUM_NAMP(HIO_FLAG_, CREAT)
+ENUM_NAMP(HIO_FLAG_, TRUNC)
+ENUM_NAMP(HIO_FLAG_, APPEND)
+ENUM_END(etab_hflg, 1, ",")
+
+ENUM_START(etab_hdsm)  // hio dataset mode
+ENUM_NAMP(HIO_SET_ELEMENT_, UNIQUE)
+ENUM_NAMP(HIO_SET_ELEMENT_, SHARED)
+ENUM_END(etab_hdsm, 0, NULL)
+
+ENUM_START(etab_onff)  // On, Off + case variants
+ENUM_NAME("OFF", 0)
+ENUM_NAME("ON",  1)
+ENUM_NAME("off", 0)
+ENUM_NAME("on",  1)
+ENUM_NAME("Off", 0)
+ENUM_NAME("On",  1)
+ENUM_END(etab_onff, 0, NULL)
+
 #define HIO_ANY 999    // "special" rc value, means any rc OK
 ENUM_START(etab_herr)  // hio error codes
 ENUM_NAMP(HIO_, SUCCESS)
@@ -1057,10 +1082,17 @@ ENUM_END(etab_herr, 0, NULL)
 #define HIO_CNT_REQ -998
 #define HIO_CNT_ANY -999
 
-
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
+char * hio_context_name;
+char * hio_dataset_name;
+U64 hio_dataset_id;
+hio_flags_t hio_dataset_flags;
+hio_dataset_mode_t hio_dataset_mode;
+char * hio_element_name;
+U64 hio_element_hash;
+#define EL_HASH_MODULUS 65521 // A prime a little less than 2**16
 static hio_return_t hio_rc_exp = HIO_SUCCESS;
 static I64 hio_cnt_exp = HIO_CNT_REQ;
 static int hio_fail = 0;
@@ -1095,12 +1127,12 @@ ETIMER hio_tmr;
 
 ACTION_RUN(hi_run) {
   hio_return_t hrc;
-  char * context_name = V0.s;
+  hio_context_name = V0.s;
   char * data_root = V1.s;
   char * root_var_name = "context_data_roots";
 
-  DBG2("Calling hio_init_mpi(&context, &mpi_comm, NULL, NULL, \"%s\")", context_name);
-  hrc = hio_init_mpi(&context, &mpi_comm, NULL, NULL, context_name);
+  DBG2("Calling hio_init_mpi(&context, &mpi_comm, NULL, NULL, \"%s\")", hio_context_name);
+  hrc = hio_init_mpi(&context, &mpi_comm, NULL, NULL, hio_context_name);
   HRC_TEST(hio_init_mpi)
   
   if (HIO_SUCCESS == hrc) {
@@ -1119,17 +1151,16 @@ ACTION_RUN(hi_run) {
   } 
 }
 
-
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
-  char * ds_name = V0.s;
-  U64 ds_id = V1.u;
-  int flag_i = V2.i;
-  int mode_i = V3.i;
+  hio_dataset_name = V0.s;
+  hio_dataset_id = V1.u;
+  hio_dataset_flags = V2.i;
+  hio_dataset_mode = V3.i;
   rw_count[0] = rw_count[1] = 0;
   MPI_CK(MPI_Barrier(mpi_comm));
   ETIMER_START(&hio_tmr);
-  hrc = hio_dataset_open (context, &dataset, ds_name, ds_id, flag_i, mode_i);
+  hrc = hio_dataset_open (context, &dataset, hio_dataset_name, hio_dataset_id, hio_dataset_flags, hio_dataset_mode);
   HRC_TEST(hio_dataset_open)
 }
 
@@ -1139,22 +1170,31 @@ ACTION_CHECK(heo_check) {
 
 ACTION_RUN(heo_run) {
   hio_return_t hrc;
-  char * el_name = V0.s;
+  hio_element_name = V0.s;
   int flag_i = V1.i;
   bufsz = V2.u;
-  hrc = hio_element_open (dataset, &element, el_name, flag_i);
+  hrc = hio_element_open (dataset, &element, hio_element_name, flag_i);
   HRC_TEST(hio_element_open)
 
-  wbuf = MALLOCX(bufsz+LFSR_22_CYCLE);
+  wbuf = MALLOCX(bufsz + LFSR_22_CYCLE);
   lfsr_22_byte_init();
   lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE); 
 
   rbuf = MALLOCX(bufsz);
   hew_ofs = her_ofs = 0;
+
+  // Calculate element hash which is added to the offset for read verification
+  char * hash_str = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
+                                 hio_dataset_id, hio_element_name, 
+                                 (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) ? myrank: 0);
+  hio_element_hash = crc32(0, hash_str, strlen(hash_str)) % EL_HASH_MODULUS;
+  DBG4("heo hash: \"%s\" 0x%04X", hash_str, hio_element_hash);
+  FREEX(hash_str);
+
 }
 
 ACTION_RUN(hck_run) {
-  hio_check = V0.u;
+  hio_check = V0.i;
   VERB0("HIO read data checking is now %s", V0.s); 
 }
 
@@ -1173,8 +1213,8 @@ ACTION_RUN(hew_run) {
     hew_ofs += -p_ofs;
   } else {
     a_ofs = p_ofs;
-  }
-  hcnt = hio_element_write (element, a_ofs, 0, wbuf + (a_ofs%LFSR_22_CYCLE), 1, hreq);
+  } 
+  hcnt = hio_element_write (element, a_ofs, 0, wbuf + ( (a_ofs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
   HCNT_TEST(hio_element_write)
   rw_count[1] += hcnt;
 }
@@ -1198,6 +1238,17 @@ ACTION_RUN(her_run) {
   hcnt = hio_element_read (element, a_ofs, 0, rbuf, 1, hreq);
   HCNT_TEST(hio_element_read)
   rw_count[0] += hcnt;
+
+  if (hio_check) {
+    if (memcmp(rbuf, wbuf + ( (a_ofs + hio_element_hash) % LFSR_22_CYCLE), hreq)) {
+      fail_count++;
+      VERB0("Error: hio_element_read data check miscompare ofs:%lld size:%lld", a_ofs, hreq);
+    } else {
+      VERB3("hio_element_read data check successful");
+    }
+  }
+
+
 }
 
 ACTION_RUN(hec_run) {
@@ -1276,33 +1327,6 @@ ACTION_RUN(find_run) {
   }
   fclose(f);
 }
-
-//----------------------------------------------------------------------------
-// Enum conversion tables
-//----------------------------------------------------------------------------
-#ifdef HIO
-ENUM_START(etab_hflg)
-ENUM_NAMP(HIO_FLAG_, RDONLY)
-ENUM_NAMP(HIO_FLAG_, WRONLY)
-ENUM_NAMP(HIO_FLAG_, CREAT)
-ENUM_NAMP(HIO_FLAG_, TRUNC)
-ENUM_NAMP(HIO_FLAG_, APPEND)
-ENUM_END(etab_hflg, 1, ",")
-
-ENUM_START(etab_hdsm)  // hio dataset mode
-ENUM_NAMP(HIO_SET_ELEMENT_, UNIQUE)
-ENUM_NAMP(HIO_SET_ELEMENT_, SHARED)
-ENUM_END(etab_hdsm, 0, NULL)
-
-ENUM_START(etab_onff)  // On, Off + case variants
-ENUM_NAME("OFF", 0)
-ENUM_NAME("ON",  1)
-ENUM_NAME("off", 0)
-ENUM_NAME("on",  1)
-ENUM_NAME("Off", 0)
-ENUM_NAME("On",  1)
-ENUM_END(etab_onff, 0, NULL)
-#endif
 
 //----------------------------------------------------------------------------
 // Argument string parsing table
