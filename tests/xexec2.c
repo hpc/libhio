@@ -288,6 +288,23 @@ void get_id() {
 
 enum ptype { SINT, UINT, PINT, DOUB, STR, HFLG, HDSM, HERR, ONFF, NONE };
 
+long long int get_mult(char * str) {
+  long long int n;
+  if (*str == '\0') n = 1;
+  else if (!strcmp("k",  str)) n = 1000;
+  else if (!strcmp("ki", str)) n = 1024;
+  else if (!strcmp("M",  str)) n = (1000 * 1000);
+  else if (!strcmp("Mi", str)) n = (1024 * 1024);
+  else if (!strcmp("G",  str)) n = (1000 * 1000 * 1000);
+  else if (!strcmp("Gi", str)) n = (1024 * 1024 * 1024);
+  else if (!strcmp("T",  str)) n = (1ll * 1000 * 1000 * 1000 * 1000);
+  else if (!strcmp("Ti", str)) n = (1ll * 1024 * 1024 * 1024 * 1024);
+  else if (!strcmp("P",  str)) n = (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
+  else if (!strcmp("Pi", str)) n = (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
+  else n = 0;
+  return n;
+}
+
 U64 getI64(char * num, enum ptype type, ACTION *actionp) {
   long long int n;
   char * endptr;
@@ -297,19 +314,10 @@ U64 getI64(char * num, enum ptype type, ACTION *actionp) {
   if (errno != 0) ERRX("%s ...; invalid integer \"%s\"", A.desc, num);
   if (type == UINT && n < 0) ERRX("%s ...; negative integer \"%s\"", A.desc, num);
   if (type == PINT && n <= 0) ERRX("%s ...; non-positive integer \"%s\"", A.desc, num);
-  if (*endptr == '\0');
-  else if (!strcmp("k",  endptr)) n *= 1000;
-  else if (!strcmp("ki", endptr)) n *= 1024;
-  else if (!strcmp("M",  endptr)) n *= (1000 * 1000);
-  else if (!strcmp("Mi", endptr)) n *= (1024 * 1024);
-  else if (!strcmp("G",  endptr)) n *= (1000 * 1000 * 1000);
-  else if (!strcmp("Gi", endptr)) n *= (1024 * 1024 * 1024);
-  else if (!strcmp("T",  endptr)) n *= (1ll * 1000 * 1000 * 1000 * 1000);
-  else if (!strcmp("Ti", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024);
-  else if (!strcmp("P",  endptr)) n *= (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
-  else if (!strcmp("Pi", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
-  else ERRX("%s ...; invalid integer \"%s\"", A.desc, num);
-  return n;
+  
+  long long mult = get_mult(endptr);
+  if (0 == mult) ERRX("%s ...; invalid integer \"%s\"", A.desc, num);
+  return n * mult;
 }
 
 double getDoub(char * num, enum ptype type, ACTION *actionp) {
@@ -319,19 +327,10 @@ double getDoub(char * num, enum ptype type, ACTION *actionp) {
   errno = 0;
   n = strtod(num, &endptr);
   if (errno != 0) ERRX("%s ...; invalid double \"%s\"", A.desc, num);
-  if (*endptr == '\0');
-  else if (!strcmp("k",  endptr)) n *= 1000;
-  else if (!strcmp("ki", endptr)) n *= 1024;
-  else if (!strcmp("M",  endptr)) n *= (1000 * 1000);
-  else if (!strcmp("Mi", endptr)) n *= (1024 * 1024);
-  else if (!strcmp("G",  endptr)) n *= (1000 * 1000 * 1000);
-  else if (!strcmp("Gi", endptr)) n *= (1024 * 1024 * 1024);
-  else if (!strcmp("T",  endptr)) n *= (1ll * 1000 * 1000 * 1000 * 1000);
-  else if (!strcmp("Ti", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024);
-  else if (!strcmp("P",  endptr)) n *= (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
-  else if (!strcmp("Pi", endptr)) n *= (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
-  else ERRX("%s ...; invalid double \"%s\"", A.desc, num);
-  return n;
+
+  long long mult = get_mult(endptr);
+  if (0 == mult) ERRX("%s ...; invalid double \"%s\"", A.desc, num);
+  return n * mult;
 }
 
 //----------------------------------------------------------------------------
@@ -1247,8 +1246,6 @@ ACTION_RUN(her_run) {
       VERB3("hio_element_read data check successful");
     }
   }
-
-
 }
 
 ACTION_RUN(hec_run) {
