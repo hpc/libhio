@@ -1097,37 +1097,24 @@ ACTION_RUN(hi_run) {
   hio_return_t hrc;
   char * context_name = V0.s;
   char * data_root = V1.s;
-  char * root_var = "data_roots";
-  DBG4("HIO_SET_ELEMENT_UNIQUE: %lld", HIO_SET_ELEMENT_UNIQUE);
-  DBG4("HIO_SET_ELEMENT_SHARED: %lld", HIO_SET_ELEMENT_SHARED);
-  // Workaround for read only context_data_root and no default context
-  {
-    int rc;
-    char ename[255];
-    snprintf(ename, sizeof(ename), "HIO_context_%s_%s", context_name, root_var); 
-    DBG4("setenv %s=%s", ename, data_root);
-    rc = setenv(ename, data_root, 1);
-    DBG4("setenv %s=%s rc:%d", ename, data_root, rc);
-    DBG4("getenv(%s) returns \"%s\"", ename, getenv(ename));
-  }
-  // end workaround
+  char * root_var_name = "context_data_roots";
+
+  DBG2("Calling hio_init_mpi(&context, &mpi_comm, NULL, NULL, \"%s\")", context_name);
   hrc = hio_init_mpi(&context, &mpi_comm, NULL, NULL, context_name);
   HRC_TEST(hio_init_mpi)
   
-  #if 0 
-  // This doesn't work yet 
   if (HIO_SUCCESS == hrc) {
-    hrc = hio_config_set_value((hio_object_t)context, root_var, data_root);
+    DBG2("Calling hio_config_set(context, \"%s\", \"%s\")", root_var_name, data_root);
+    hrc = hio_config_set_value((hio_object_t)context, root_var_name, data_root);
     HRC_TEST(hio_config_set_value)
   }
-  #endif
 
   if (HIO_SUCCESS == hrc) {
     char * tmp_str = NULL;
-    hrc = hio_config_get_value((hio_object_t)context, root_var, &tmp_str);
+    hrc = hio_config_get_value((hio_object_t)context, root_var_name, &tmp_str);
     HRC_TEST(hio_config_get_value)
     if (HIO_SUCCESS == hrc) {
-      VERB3("hio_config_get_value var:%s value=\"%s\"", root_var, tmp_str);
+      VERB3("hio_config_get_value var:%s value=\"%s\"", root_var_name, tmp_str);
     }
   } 
 }
