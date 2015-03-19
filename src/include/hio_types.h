@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -12,8 +12,8 @@
 #if !defined(HIO_TYPES_H)
 #define HIO_TYPES_H
 
-#include "config.h"
 #include "hio_internal.h"
+#include "hio_var.h"
 #include "hio_component.h"
 
 #if defined(HAVE_SYS_TIME_H)
@@ -79,7 +79,12 @@ struct hio_object_t {
   /** in hio configuration is done per context, dataset, or element.
    * this part of the object stores all the registered configuration
    * variables */
-  hio_config_t      configuration;
+  hio_var_array_t   configuration;
+
+  /** in hio performance is measured per context, dataset, or element.
+   * this part of the object stores all the registered peformance
+   * variables */
+  hio_var_array_t   performance;
 };
 
 struct hio_context_t {

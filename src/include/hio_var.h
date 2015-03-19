@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -14,16 +14,8 @@
  * @brief Internal hio context
  */
 
-#if !defined(HIO_CONFIG_H)
-#define HIO_CONFIG_H
-
-#include "config.h"
-
-#if HIO_USE_MPI
-#include <mpi.h>
-#endif
-
-#include "hio.h"
+#if !defined(HIO_VAR_H)
+#define HIO_VAR_H
 
 #if defined(HAVE_STDINT_H)
 #include <stdint.h>
@@ -57,7 +49,7 @@ typedef struct hio_config_kv_t {
   char *value;
 } hio_config_kv_t;
 
-typedef struct hio_config_var_t {
+typedef struct hio_var_t {
   /** unique name for this variable (allocated) */
   char             *var_name;
   /** basic type */
@@ -68,16 +60,16 @@ typedef struct hio_config_var_t {
   int               var_flags;
   /** brief description (allocated) */
   const char       *var_description;
-} hio_config_var_t;
+} hio_var_t;
 
-typedef struct hio_config_t {
+typedef struct hio_var_array_t {
   /** array of configurations */
-  hio_config_var_t *config_var;
+  hio_var_t *vars;
   /** current number of valid configurations */
-  int               config_var_count;
+  int        var_count;
   /** current size of configuration array */
-  int               config_var_size;
-} hio_config_t;
+  int        var_size;
+} hio_var_array_t;
 
 /**
  * Find the index of the given variable in the configuation
@@ -88,7 +80,7 @@ typedef struct hio_config_t {
  * @returns -1 if not found
  * @returns index if found
  */
-int hioi_config_lookup (hio_config_t *config, const char *name);
+int hioi_var_lookup (hio_var_array_t *var_array, const char *name);
 
 /**
  * Add a configuration to an object
@@ -108,18 +100,21 @@ int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, con
 
 int hioi_config_parse (hio_context_t context, const char *config_file, const char *prefix);
 
+int hioi_perf_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
+                   hio_config_type_t type, void *reserved0, const char *description, int flags);
+
 /**
  * Initialize the configuration component of an hio object
  *
  * @param[in] object  object to initialize
  */
-int hioi_config_init (hio_object_t object);
+int hioi_var_init (hio_object_t object);
 
 /**
  * Finalize the configuration component of an hio object
  *
  * @param[in] object  object to finalize
  */
-void hioi_config_fini (hio_object_t object);
+void hioi_var_fini (hio_object_t object);
 
-#endif /* !defined(HIO_CONFIG_H) */
+#endif /* !defined(HIO_VAR_H) */

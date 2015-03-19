@@ -44,6 +44,8 @@ typedef struct builtin_posix_module_dataset_t {
   struct hio_dataset_t base;
   pthread_mutex_t      lock;
   FILE                *fh;
+  uint64_t             bytes_read;
+  uint64_t             bytes_written;
 } builtin_posix_module_dataset_t;
 
 static void builtin_posix_dataset_path (struct hio_module_t *module, char *path, size_t path_size,
@@ -227,6 +229,13 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
   *set_out = &dataset->base;
 
+  /* set up performance variables */
+  hioi_perf_add (context, &dataset->base.dataset_object, &dataset->bytes_read, "total_bytes_read",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset instance", 0);
+
+  hioi_perf_add (context, &dataset->base.dataset_object, &dataset->bytes_written, "total_bytes_written",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
+
   return HIO_SUCCESS;
 }
 
@@ -252,6 +261,9 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
       return rc;
     }
   }
+
+  context->context_bytes_read = posix_dataset->bytes_read;
+  context->context_bytes_written = posix_dataset->bytes_written;
 
   pthread_mutex_destroy (&posix_dataset->lock);
 
@@ -323,6 +335,8 @@ static int builtin_posix_module_element_write_nb (struct hio_module_t *module, h
 
   items_written = fwrite (ptr, size, count, posix_dataset->fh);
 
+  posix_dataset->bytes_written += items_written * size;
+
   hioi_element_add_segment (element, file_offset, offset, 0, size * count);
 
   pthread_mutex_unlock (&posix_dataset->lock);
@@ -363,6 +377,8 @@ static int builtin_posix_module_element_read_nb (struct hio_module_t *module, hi
     fseek (posix_dataset->fh, file_offset, SEEK_SET);
     bytes_read = fread (ptr, 1, bytes_available, posix_dataset->fh);
     pthread_mutex_unlock (&posix_dataset->lock);
+
+    posix_dataset->bytes_read += bytes_read;
 
     if (0 == bytes_read) {
       rc = hioi_err_errno (errno);

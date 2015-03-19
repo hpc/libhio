@@ -1097,12 +1097,12 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
  * @ingroup performance
  * @brief Get the number of performance variables for an hio object
  *
- * @param[in]  hio_object  hio object
+ * @param[in]  object      hio object
  * @param[out] count       the number of performance variables
  *
  * @return HIO_SUCCESS on success
  */
-int hio_perf_get_count (hio_object_t hio_object, int *count);
+int hio_perf_get_count (hio_object_t object, int *count);
 
 /**
  * @ingroup performance
@@ -1124,7 +1124,7 @@ int hio_perf_get_count (hio_object_t hio_object, int *count);
  * The value specified in {index} should be a number between 0 and hio_perf_get_count().
  * If a non-existent index is specified an error is returned.
  */
-int hio_perf_get_info (hio_object_t hio_object, int index, char **name, hio_config_type_t *type);
+int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type);
 
 /**
  * @ingroup performance

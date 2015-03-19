@@ -20,7 +20,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-
 #include <sys/param.h>
 
 static hio_context_t hio_context_alloc (const char *identifier) {
@@ -38,7 +37,7 @@ static hio_context_t hio_context_alloc (const char *identifier) {
     return NULL;
   }
 
-  rc = hioi_config_init (&new_context->context_object);
+  rc = hioi_var_init (&new_context->context_object);
   if (HIO_SUCCESS != rc) {
     free (new_context->context_object.identifier);
     free (new_context);
@@ -104,8 +103,8 @@ static void hio_context_release (hio_context_t *contextp) {
   }
 #endif
 
-  /* finalize the configuration */
-  hioi_config_fini (&context->context_object);
+  /* finalize object variables */
+  hioi_var_fini (&context->context_object);
 
   if (context->context_object.identifier) {
     free (context->context_object.identifier);
@@ -200,6 +199,14 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
                    "context_print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
                    "to stdout when the context is closed (default: 0)", 0);
 
+  hioi_perf_add (context, &context->context_object, &context->context_bytes_read,
+                 "context_bytes_read", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
+                 "read in this context", 0);
+
+  hioi_perf_add (context, &context->context_object, &context->context_bytes_written,
+                 "context_bytes_written", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
+                 "written in this context", 0);
+
   if (context->context_verbose > HIO_VERBOSE_MAX) {
     context->context_verbose = HIO_VERBOSE_MAX;
   }
@@ -289,6 +296,12 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 int hio_fini (hio_context_t *context) {
   if (NULL == context || NULL == *context) {
     return HIO_SUCCESS;
+  }
+
+  if ((*context)->context_print_statistics) {
+    printf ("Context %s statistics:\n", (*context)->context_object.identifier);
+    printf ("  Bytes read: %" PRIu64 "\n", (*context)->context_bytes_read);
+    printf ("  Bytes written: %" PRIu64 "\n", (*context)->context_bytes_written);
   }
 
   hioi_log (*context, HIO_VERBOSE_DEBUG_LOW, "Destroying context with identifier %s",

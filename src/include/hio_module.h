@@ -12,9 +12,7 @@
 #if !defined(HIO_MODULE_H)
 #define HIO_MODULE_H
 
-#include "config.h"
-
-#include "hio.h"
+#include "hio_internal.h"
 
 #if defined(HAVE_STDINT_H)
 #include <stdint.h>
