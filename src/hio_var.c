@@ -26,29 +26,74 @@
 
 static const char *hio_config_env_prefix = "HIO_";
 
+/* variable array helper functions */
+
 /**
- * Check if the variable exists in the context.
+ * Check if the variable exists in the a variable array
  *
- * @param[in] context   context to search
+ * @param[in] var_array variable array to search
  * @param[in] name      variable name to lookup
  *
- * This does a linear search of the context configuration. Ideally,
- * there will never be a large number of configuration variables. If
- * that isn't the case then this should be updated to keep a hash
- * table for O(1) lookup.
+ * This does a linear search of the variable array. Ideally, there
+ * will never be a large number of variables in any given array. If
+ * that no longer holds true then the variable storage data structure
+ * should be updated to keep a hash table for O(1) lookup.
+ *
+ * @returns an index >= 0 if the variable is found
+ * @retyrns -1 if not found
  */
-int hioi_config_lookup (hio_config_t *config, const char *name) {
-  int config_index = -1;
-
-  for (int i = 0 ; i < config->config_var_count ; ++i) {
-    if (0 == strcmp (name, config->config_var[i].var_name)) {
-      config_index = i;
-      break;
+int hioi_var_lookup (hio_var_array_t *var_array, const char *name) {
+  for (int i = 0 ; i < var_array->var_count ; ++i) {
+    if (0 == strcmp (name, var_array->vars[i].var_name)) {
+      return i;
     }
   }
 
-  return config_index;
+  return -1;
 }
+
+static int hioi_var_array_grow (hio_var_array_t *var_array, int count) {
+  size_t new_size;
+  void *tmp;
+
+  /* grow the variable array by a little */
+  new_size = (var_array->var_size + count) * sizeof (hio_var_t);
+
+  tmp = realloc (var_array->vars, new_size);
+  if (NULL == tmp) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  var_array->var_size += count;
+  var_array->vars = tmp;
+
+  return HIO_SUCCESS;
+}
+
+static void hioi_var_array_init (hio_var_array_t *var_array) {
+  var_array->vars = NULL;
+  var_array->var_count = 0;
+  var_array->var_size = 0;
+}
+
+static void hioi_var_array_fini (hio_var_array_t *var_array) {
+  if (var_array->vars) {
+    for (int i = 0 ; i < var_array->var_count ; ++i) {
+      hio_var_t *var = var_array->vars + i;
+
+      if (var->var_name) {
+	free (var->var_name);
+      }
+    }
+
+    free (var_array->vars);
+  }
+
+  /* zero out structure members */
+  hioi_var_array_init (var_array);
+}
+
+/* END: variable array helper functions */
 
 static uint64_t hioi_string_to_int (const char *strval) {
   uint64_t value = 0;
@@ -76,7 +121,7 @@ static uint64_t hioi_string_to_int (const char *strval) {
   return value;
 }
 
-static int hioi_config_set_value_internal (hio_config_var_t *var, const char *strval) {
+static int hioi_config_set_value_internal (hio_var_t *var, const char *strval) {
   uint64_t intval = hioi_string_to_int(strval);
 
   if (NULL == strval) {
@@ -140,7 +185,7 @@ static int hioi_config_set_value_internal (hio_config_var_t *var, const char *st
  * similar structure.
  */
 static int hioi_config_set_from_file (hio_context_t context, hio_object_t object,
-				      hio_config_var_t *var) {
+				      hio_var_t *var) {
   for (int i = 0 ; i < context->context_file_configuration_count ; ++i) {
     hio_config_kv_t *kv = context->context_file_configuration + i;
     if ((HIO_OBJECT_TYPE_ANY == kv->object_type || object->type == kv->object_type) &&
@@ -156,7 +201,7 @@ static int hioi_config_set_from_file (hio_context_t context, hio_object_t object
 }
 
 static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
-				     hio_config_var_t *var) {
+				     hio_var_t *var) {
   char *string_value;
   char env_name[256];
 
@@ -206,35 +251,26 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
 
 int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
 		     hio_config_type_t type, void *reserved0, const char *description, int flags) {
-  hio_config_t *config = &object->configuration;
-  hio_config_var_t *new_var;
-  int config_index;
+  hio_var_array_t *config = &object->configuration;
+  int config_index, rc;
+  hio_var_t *new_var;
 
-  config_index = hioi_config_lookup (config, name);
+  config_index = hioi_var_lookup (config, name);
   if (config_index >= 0) {
     /* do not allow duplicate configuration registration for now */
     return HIO_ERROR;
   }
 
-  config_index = config->config_var_count++;
+  config_index = config->var_count++;
 
-  if (config->config_var_size <= config_index) {
-    size_t new_size;
-    void *tmp;
-
-    /* grow the configuration array by a little */
-    new_size = (config->config_var_size + 16) * sizeof (hio_config_var_t);
-
-    tmp = realloc (config->config_var, new_size);
-    if (NULL == tmp) {
-      return HIO_ERR_OUT_OF_RESOURCE;
+  if (config->var_size <= config_index) {
+    rc = hioi_var_array_grow (config, 16);
+    if (HIO_SUCCESS != rc) {
+      return rc;
     }
-
-    config->config_var_size += 16;
-    config->config_var = tmp;
   }
 
-  new_var = config->config_var + config_index;
+  new_var = config->vars + config_index;
 
   new_var->var_name = strdup (name);
   if (NULL == new_var->var_name) {
@@ -418,46 +454,32 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
   return rc;
 }
 
-
-int hioi_config_init (hio_object_t object) {
-  hio_config_t *config = &object->configuration;
-
-  config->config_var = NULL;
-  config->config_var_count = 0;
-  config->config_var_size = 0;
+int hioi_var_init (hio_object_t object) {
+  hioi_var_array_init (&object->configuration);
+  hioi_var_array_init (&object->performance);
 
   return HIO_SUCCESS;
 }
 
-void hioi_config_fini (hio_object_t object) {
-  hio_config_t *config = &object->configuration;
-
-  if (config->config_var) {
-    for (int i = 0 ; i < config->config_var_count ; ++i) {
-      hio_config_var_t *var = config->config_var + i;
-
-      if (var->var_name) {
-	free (var->var_name);
-      }
-    }
-
-    free (config->config_var);
-    config->config_var = NULL;
-    config->config_var_count = 0;
-    config->config_var_size = 0;
-  }
+void hioi_var_fini (hio_object_t object) {
+  hioi_var_array_fini (&object->configuration);
+  hioi_var_array_fini (&object->performance);
 }
 
 int hio_config_set_value (hio_object_t object, char *variable, char *value) {
-  hio_config_var_t *var;
+  hio_var_t *var;
   int config_index;
 
-  config_index = hioi_config_lookup (&object->configuration, variable);
+  if (NULL == object || NULL == variable || NULL == value) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  config_index = hioi_var_lookup (&object->configuration, variable);
   if (0 > config_index) {
     return HIO_ERR_NOT_FOUND;
   }
 
-  var = object->configuration.config_var + config_index;
+  var = object->configuration.vars + config_index;
 
   if (HIO_VAR_FLAG_READONLY & var->var_flags) {
     hio_err_push (HIO_ERR_PERM, NULL, object, "could not set read-only parameter: %s", variable);
@@ -468,15 +490,19 @@ int hio_config_set_value (hio_object_t object, char *variable, char *value) {
 }
 
 int hio_config_get_value (hio_object_t object, char *variable, char **value) {
-  hio_config_var_t *var;
+  hio_var_t *var;
   int config_index, rc = HIO_SUCCESS;
 
-  config_index = hioi_config_lookup (&object->configuration, variable);
+  if (NULL == object || NULL == variable || NULL == value) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  config_index = hioi_var_lookup (&object->configuration, variable);
   if (0 > config_index) {
     return HIO_ERR_NOT_FOUND;
   }
 
-  var = object->configuration.config_var + config_index;
+  var = object->configuration.vars + config_index;
 
   switch (var->var_type) {
   case HIO_CONFIG_TYPE_BOOL:
@@ -516,19 +542,27 @@ int hio_config_get_value (hio_object_t object, char *variable, char **value) {
 }
 
 int hio_config_get_count (hio_object_t object, int *count) {
-  *count = object->configuration.config_var_count;
+  if (NULL == object) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  *count = object->configuration.var_count;
   return HIO_SUCCESS;
 }
 
 int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
                          bool *read_only) {
-  hio_config_var_t *var;
+  hio_var_t *var;
 
-  if (index >= object->configuration.config_var_count) {
+  if (NULL == object || index < 0) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if (index >= object->configuration.var_count) {
     return HIO_ERR_NOT_FOUND;
   }
 
-  var = object->configuration.config_var + index;
+  var = object->configuration.vars + index;
 
   if (name) {
     *name = strdup (var->var_name);
@@ -541,6 +575,138 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
   if (read_only) {
     *read_only = !!(var->var_flags & HIO_VAR_FLAG_READONLY);
   }
+
+  return HIO_SUCCESS;
+}
+
+
+/* performance variables */
+int hio_perf_get_count (hio_object_t object, int *count) {
+  if (NULL == object) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  *count = object->performance.var_count;
+  return HIO_SUCCESS;
+}
+
+int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type) {
+  hio_var_t *var;
+
+  if (NULL == object || index < 0) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if (index >= object->performance.var_count) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  var = object->performance.vars + index;
+
+  if (name) {
+    *name = strdup (var->var_name);
+  }
+
+  if (type) {
+    *type = var->var_type;
+  }
+
+  return HIO_SUCCESS;
+}
+
+int hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len) {
+  hio_var_t *var;
+  int perf_index, rc = HIO_SUCCESS;
+
+  if (NULL == object || !value_len || NULL == variable) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  perf_index = hioi_var_lookup (&object->performance, variable);
+  if (0 > perf_index) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  var = object->performance.vars + perf_index;
+
+  switch (var->var_type) {
+  case HIO_CONFIG_TYPE_BOOL:
+    ((bool *) value)[0] = var->var_storage->boolval;
+    break;
+  case HIO_CONFIG_TYPE_STRING:
+    (void) strncpy (value, var->var_storage->strval, value_len);
+    if (value_len - 1 < strlen (var->var_storage->strval)) {
+      rc = HIO_ERR_TRUNCATE;
+    }
+
+    break;
+  case HIO_CONFIG_TYPE_INT32:
+  case HIO_CONFIG_TYPE_UINT32:
+    if (4 <= value_len) {
+      ((int32_t *) value)[0] = var->var_storage->int32val;
+    } else {
+      rc = HIO_ERR_TRUNCATE;
+    }
+    break;
+  case HIO_CONFIG_TYPE_INT64:
+  case HIO_CONFIG_TYPE_UINT64:
+    if (8 <= value_len) {
+      ((int64_t *) value)[0] = var->var_storage->int64val;
+    } else {
+      rc = HIO_ERR_TRUNCATE;
+    }
+    break;
+  case HIO_CONFIG_TYPE_FLOAT:
+    if (sizeof (float) <= value_len) {
+      ((float *) value)[0] = var->var_storage->floatval;
+    } else {
+      rc = HIO_ERR_TRUNCATE;
+    }
+    break;
+  case HIO_CONFIG_TYPE_DOUBLE:
+    if (sizeof (double) <= value_len) {
+      ((double *) value)[0] = var->var_storage->doubleval;
+    } else {
+      rc = HIO_ERR_TRUNCATE;
+    }
+    break;
+  }
+
+  return rc;
+}
+
+int hioi_perf_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
+                   hio_config_type_t type, void *reserved0, const char *description, int flags) {
+  hio_var_array_t *perf = &object->performance;
+  hio_var_t *new_var;
+  int perf_index, rc;
+
+  perf_index = hioi_var_lookup (perf, name);
+  if (perf_index >= 0) {
+    /* do not allow duplicate performance variable registration for now */
+    return HIO_ERROR;
+  }
+
+  perf_index = perf->var_count++;
+
+  if (perf->var_size <= perf_index) {
+    rc = hioi_var_array_grow (perf, 16);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+  }
+
+  new_var = perf->vars + perf_index;
+
+  new_var->var_name = strdup (name);
+  if (NULL == new_var->var_name) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  new_var->var_type        = type;
+  new_var->var_description = description;
+  new_var->var_flags       = flags;
+  new_var->var_storage     = (hio_var_value_t *) addr;
 
   return HIO_SUCCESS;
 }

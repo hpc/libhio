@@ -7,13 +7,13 @@ noinst_LIBRARIES = libconfig_parser.a
 
 include_HEADERS = include/hio.h
 noinst_HEADERS = include/config_parser.h include/hio_internal.h \
-	include/hio_types.h include/hio_config.h include/hio_module.h \
+	include/hio_types.h include/hio_var.h include/hio_module.h \
 	include/hio_component.h
 
 libhio_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS)
 libhio_la_LDFLAGS = $(LTLDFLAGS) $(XML_LIBS)
 libhio_la_LIBADD = libconfig_parser.a
-libhio_la_SOURCES = hio_context.c hio_component.c hio_config.c \
+libhio_la_SOURCES = hio_context.c hio_component.c hio_var.c \
 	hio_dataset.c hio_internal.c hio_request.c builtin-posix_component.c \
 	hio_manifest.c api/dataset_open.c api/dataset_close.c \
 	api/element_open.c api/element_close.c api/element_write.c \

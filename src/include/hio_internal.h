@@ -19,7 +19,14 @@
 
 #include "hio_config.h"
 
+#if HIO_USE_MPI
+#include <mpi.h>
+#endif
+
+#include "hio.h"
+
 #include <stddef.h>
+#include <inttypes.h>
 
 #if defined(HAVE_PTHREAD_H)
 #include <pthread.h>
