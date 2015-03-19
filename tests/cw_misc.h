@@ -5,6 +5,7 @@
 #ifndef CW_MISC_H_INCLUDED
 #define CW_MISC_H_INCLUDED
 #include <stdio.h>
+#include <stdint.h>
 #include <time.h>
 #include <sys/time.h>
 

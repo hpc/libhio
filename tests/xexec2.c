@@ -500,7 +500,7 @@ ACTION_CHECK(imbed_check) {
 
     // append remainder of old tokc / tokv to new
     add2tokv(old_tokc - tokn - 1, &old_tokv[tokn + 1]);
-    free(old_tokv);
+    FREEX(old_tokv);
 }
 
 //----------------------------------------------------------------------------
@@ -862,7 +862,7 @@ ACTION_RUN(fr_run) {
 
 ACTION_RUN(ff_run) {
   flap_size = 0;
-  free(nums);
+  FREEX(nums);
 }
 
 
@@ -1081,6 +1081,17 @@ ENUM_END(etab_herr, 0, NULL)
 #define HIO_CNT_REQ -998
 #define HIO_CNT_ANY -999
 
+ENUM_START(etab_hcfg)  // hio_config_type_t
+ENUM_NAMP(HIO_CONFIG_TYPE_, BOOL)
+ENUM_NAMP(HIO_CONFIG_TYPE_, STRING)
+ENUM_NAMP(HIO_CONFIG_TYPE_, INT32)
+ENUM_NAMP(HIO_CONFIG_TYPE_, UINT32)
+ENUM_NAMP(HIO_CONFIG_TYPE_, INT64)
+ENUM_NAMP(HIO_CONFIG_TYPE_, UINT64)
+ENUM_NAMP(HIO_CONFIG_TYPE_, FLOAT)
+ENUM_NAMP(HIO_CONFIG_TYPE_, DOUBLE)
+ENUM_END(etab_hcfg, 0, NULL)
+
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
@@ -1293,6 +1304,37 @@ ACTION_RUN(hxct_run) {
   VERB0("%s; HIO expected count now %lld", A.desc, V0.u);
 }
 
+void get_config_var(hio_object_t object, char * obj_name, struct action * actionp) {
+  hio_return_t hrc;                                                                             
+  int count;                                                                                   
+  hrc = hio_config_get_count((hio_object_t) object, &count);                                 
+  HRC_TEST("hio_config_get_count");                                                         
+  VERB1("hio_config_get_count %s returns count: %d", obj_name, count);                      
+  for (int i = 0; i< count; i++) {                                                             
+    char * name;                                                                                
+    hio_config_type_t type;                                                                     
+    bool ro;                                                                                    
+    char * value = NULL;                                                                               
+    hrc = hio_config_get_info((hio_object_t) object, i, &name, &type, &ro);                  
+    HRC_TEST("hio_config_get_info");                                                        
+    if (HIO_SUCCESS == hrc) {                                                                   
+      hrc = hio_config_get_value((hio_object_t) object, name, &value);                       
+      HRC_TEST("hio_config_get_value");                                                     
+      if (HIO_SUCCESS == hrc) {                                                                 
+        VERB1("%s name: %s type: %s  %s value: %s", obj_name, name,                             
+              enum_name(MY_MSG_CTX, &etab_hcfg, type), ro ? "RO": "RW", value);                 
+      }                                                                                         
+      value = FREEX(value);
+    }                                                                                           
+  }                                                                                             
+}
+
+ACTION_RUN(hgv_run) {
+  // bug 35912 get_config_var(NULL, "Global", actionp);
+  if (context) get_config_var((hio_object_t) context, "Context", actionp);
+  if (dataset) get_config_var((hio_object_t) dataset, "Dataset", actionp);
+}
+
 #endif
 
 //----------------------------------------------------------------------------
@@ -1379,6 +1421,7 @@ struct parse {
   {"hf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
   {"hxrc", {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
   {"hxct", {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
+  {"hgv",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hgv_run     },
   #endif
   {"k",    {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",    {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
