@@ -132,7 +132,8 @@ char * help =
   "  hf            Fini\n"
   "  hck <ON|OFF>  Enable read data checking\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
-  "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n" 
+  "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
+  "  hgv           Print (verbose 1) all hio config and perf vars\n"
   #endif
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
@@ -1321,7 +1322,7 @@ void get_config_var(hio_object_t object, char * obj_name, struct action * action
       hrc = hio_config_get_value((hio_object_t) object, name, &value);                       
       HRC_TEST("hio_config_get_value");                                                     
       if (HIO_SUCCESS == hrc) {                                                                 
-        VERB1("%s name: %s type: %s  %s value: %s", obj_name, name,                             
+        VERB1("%s Config name: %s type: %s  %s value: %s", obj_name, name,                             
               enum_name(MY_MSG_CTX, &etab_hcfg, type), ro ? "RO": "RW", value);                 
       }                                                                                         
       value = FREEX(value);
@@ -1329,10 +1330,61 @@ void get_config_var(hio_object_t object, char * obj_name, struct action * action
   }                                                                                             
 }
 
+void get_perf_var(hio_object_t object, char * obj_name, struct action * actionp) {
+  hio_return_t hrc;                                                                             
+  int count;                                                                                   
+  hrc = hio_perf_get_count((hio_object_t) object, &count);                                 
+  HRC_TEST("hio_perf_get_count");                                                         
+  VERB1("hio_perf_get_count %s returns count: %d", obj_name, count);                      
+  for (int i = 0; i< count; i++) {                                                             
+    char * name;                                                                                
+    hio_config_type_t type;                                                                     
+
+    union {                // Union member names match hio_config_type_t names 
+      bool BOOL;
+      char STRING[512];
+      I32 INT32;
+      U32 UINT32;
+      I64 INT64; 
+      U64 UINT64;
+      float FLOAT;
+      double DOUBLE; 
+    } value;
+                                                                              
+    hrc = hio_perf_get_info((hio_object_t) object, i, &name, &type);                  
+    HRC_TEST("hio_perf_get_info");                                                        
+    if (HIO_SUCCESS == hrc) {                                                                   
+      hrc = hio_perf_get_value((hio_object_t) object, name, &value, sizeof(value));                       
+      HRC_TEST("hio_perf_get_value");                                                     
+      if (HIO_SUCCESS == hrc) {                                                                 
+        #define PM(FMT, VAR)                                                 \
+          VERB1("%s Perf name: %s type: %s value: " #FMT, obj_name, name,    \
+                enum_name(MY_MSG_CTX, &etab_hcfg, type), VAR);                 
+
+        switch (type) {
+          case HIO_CONFIG_TYPE_BOOL:   PM(%d,   value.BOOL  ); break;
+          case HIO_CONFIG_TYPE_STRING: PM(%s,   value.STRING); break;
+          case HIO_CONFIG_TYPE_INT32:  PM(%ld,  value.INT32 ); break;
+          case HIO_CONFIG_TYPE_UINT32: PM(%lu,  value.UINT32); break;
+          case HIO_CONFIG_TYPE_INT64:  PM(%lld, value.INT64 ); break;
+          case HIO_CONFIG_TYPE_UINT64: PM(%llu, value.UINT64); break;
+          case HIO_CONFIG_TYPE_FLOAT:  PM(%f,   value.FLOAT) ; break;
+          case HIO_CONFIG_TYPE_DOUBLE: PM(%f,   value.DOUBLE); break;
+          default: ERRX("get_perf_var: Invalid hio_config_type_t: %d", type);  
+        }
+      }                                                                                         
+    }                                                                                           
+  }                                                                                             
+}
+
 ACTION_RUN(hgv_run) {
+  RANK_SERIALIZE_START;
   // bug 35912 get_config_var(NULL, "Global", actionp);
   if (context) get_config_var((hio_object_t) context, "Context", actionp);
   if (dataset) get_config_var((hio_object_t) dataset, "Dataset", actionp);
+  if (context) get_perf_var((hio_object_t) context, "Context", actionp);
+  if (dataset) get_perf_var((hio_object_t) dataset, "Dataset", actionp);
+  RANK_SERIALIZE_END;
 }
 
 #endif
