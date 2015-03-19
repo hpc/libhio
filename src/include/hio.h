@@ -1087,7 +1087,7 @@ int hio_config_get_count (hio_object_t object, int *count);
  * and {read_only} will indicate whether the variable is read-only. It is the
  * responsibility of the caller to free the pointer returned in {name}.
  *
- * The value specified in {index} should be a number between 0 and hio_config_get_count().
+ * The value specified in {index} should be a number in the range [0, hio_config_get_count()).
  * If a non-existent index is specified an error is returned.
  */
 int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
@@ -1121,7 +1121,7 @@ int hio_perf_get_count (hio_object_t object, int *count);
  * the performance variable and {type} will contain its type. It is the responsibility
  * of the caller to free the pointer returned in {name}.
  *
- * The value specified in {index} should be a number between 0 and hio_perf_get_count().
+ * The value specified in {index} should be a number in the range [0, hio_perf_get_count()).
  * If a non-existent index is specified an error is returned.
  */
 int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type);
