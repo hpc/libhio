@@ -1035,7 +1035,7 @@ void hio_should_checkpoint (hio_context_t ctx, int *hint);
  * specified in {object}. {object} must be be one of NULL (global), an hio
  * context, or an hio dataset. The value is expected to be a string
  * representation that matches the variable's type as returned by
- * hio_config_list_variables(). Dataset specific values can be set on a
+ * hio_config_get_info(). Dataset specific values can be set on a
  * a context and will apply to all datasets opened in that context.
  */
 int hio_config_set_value (hio_object_t object, char *variable, char *value);
@@ -1090,8 +1090,8 @@ int hio_config_get_count (hio_object_t object, int *count);
  * The value specified in {index} should be a number between 0 and hio_config_get_count().
  * If a non-existent index is specified an error is returned.
  */
-int hio_config_var_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
-                             bool *read_only);
+int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+                         bool *read_only);
 
 /**
  * @ingroup performance
@@ -1102,7 +1102,7 @@ int hio_config_var_get_info (hio_object_t object, int index, char **name, hio_co
  *
  * @return HIO_SUCCESS on success
  */
-int hio_perf_var_get_count (hio_object_t hio_object, int *count);
+int hio_perf_get_count (hio_object_t hio_object, int *count);
 
 /**
  * @ingroup performance
@@ -1124,7 +1124,7 @@ int hio_perf_var_get_count (hio_object_t hio_object, int *count);
  * The value specified in {index} should be a number between 0 and hio_perf_get_count().
  * If a non-existent index is specified an error is returned.
  */
-int hio_perf_var_get_info (hio_object_t hio_object, int index, char **name, hio_config_type_t *type);
+int hio_perf_get_info (hio_object_t hio_object, int index, char **name, hio_config_type_t *type);
 
 /**
  * @ingroup performance
@@ -1140,6 +1140,6 @@ int hio_perf_var_get_info (hio_object_t hio_object, int index, char **name, hio_
  * context, or an hio dataset. On success the value of the performance variable
  * is stored in the buffer specified in {value} according to it's type.
  */
-int hio_perf_var_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
+int hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
 
 #endif /* !defined(HIO_H) */
