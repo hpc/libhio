@@ -1038,10 +1038,19 @@ ACTION_RUN(dlc_run) {
 //----------------------------------------------------------------------------
 // hi, hdo, heo, hew, her, hec, hdc, hf (HIO) action handlers
 //----------------------------------------------------------------------------
-#ifdef HIO
 //----------------------------------------------------------------------------
 // Enum conversion tables
 //----------------------------------------------------------------------------
+ENUM_START(etab_onff)  // On, Off + case variants
+ENUM_NAME("OFF", 0)
+ENUM_NAME("ON",  1)
+ENUM_NAME("off", 0)
+ENUM_NAME("on",  1)
+ENUM_NAME("Off", 0)
+ENUM_NAME("On",  1)
+ENUM_END(etab_onff, 0, NULL)
+
+#ifdef HIO
 ENUM_START(etab_hflg)
 ENUM_NAMP(HIO_FLAG_, RDONLY)
 ENUM_NAMP(HIO_FLAG_, WRONLY)
@@ -1054,15 +1063,6 @@ ENUM_START(etab_hdsm)  // hio dataset mode
 ENUM_NAMP(HIO_SET_ELEMENT_, UNIQUE)
 ENUM_NAMP(HIO_SET_ELEMENT_, SHARED)
 ENUM_END(etab_hdsm, 0, NULL)
-
-ENUM_START(etab_onff)  // On, Off + case variants
-ENUM_NAME("OFF", 0)
-ENUM_NAME("ON",  1)
-ENUM_NAME("off", 0)
-ENUM_NAME("on",  1)
-ENUM_NAME("Off", 0)
-ENUM_NAME("On",  1)
-ENUM_END(etab_onff, 0, NULL)
 
 #define HIO_ANY 999    // "special" rc value, means any rc OK
 ENUM_START(etab_herr)  // hio error codes
