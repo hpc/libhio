@@ -1032,11 +1032,10 @@ void hio_should_checkpoint (hio_context_t ctx, int *hint);
  * @param[in] value     new value for this variable
  *
  * This function sets the value of the given variable within the hio object
- * specified in {object}. {object} must be be one of NULL (global), an hio
- * context, or an hio dataset. The value is expected to be a string
- * representation that matches the variable's type as returned by
- * hio_config_get_info(). Dataset specific values can be set on a
- * a context and will apply to all datasets opened in that context.
+ * specified in {object}. {object} must be a context, dataset, or element. The
+ * value is expected to be a string representation that matches the variable's
+ * type as returned by hio_config_get_info(). Dataset specific values can be
+ * set on a context and will apply to all datasets opened in that context.
  */
 int hio_config_set_value (hio_object_t object, char *variable, char *value);
 
@@ -1050,10 +1049,10 @@ int hio_config_set_value (hio_object_t object, char *variable, char *value);
  * @param[out] value     string representation of the value of {variable}
  *
  * This function gets the string value of the given variable within the hio
- * object specified in {object}. {object} must be one of NULL (global), an hio
- * context, or an hio dataset. On success the string representation of the
- * value is stored in a newly allocated pointer and returned in {value}. It is
- * the responsibility of the caller to free {value}.
+ * object specified in {object}. {object} must be a context, dataset, or element.
+ * On success the string representation of the value is stored in a newly
+ * allocated pointer and returned in {value}. It is the responsibility of the
+ * caller to free {value}.
  */
 int hio_config_get_value (hio_object_t object, char *variable, char **value);
 
@@ -1065,6 +1064,10 @@ int hio_config_get_value (hio_object_t object, char *variable, char **value);
  * @param[out] count   the number of configuration variables
  *
  * @returns hio_return_t
+ *
+ * This function returns the number of configuration variables supported by the
+ * hio object specified in {object}. {object} must be a context, dataset, or
+ * element. On success the number of configuration variables is stored in {count}.
  */
 int hio_config_get_count (hio_object_t object, int *count);
 
@@ -1080,14 +1083,16 @@ int hio_config_get_count (hio_object_t object, int *count);
  *
  * @returns hio_return_t
  *
- * This function gets info about the requested variable including its name, type,
- * and whether the variable is read-only (informational). Subsequent calls to this
- * function with the same index will always return the same values. On successful
- * return {name} will contain the name of the variable, {type} will contain its type,
- * and {read_only} will indicate whether the variable is read-only. It is the
- * responsibility of the caller to free the pointer returned in {name}.
+ * This function gets info about the variable specified by {object} and {index}. The
+ * returned information includs its name, type, and whether the variable is read-only
+ * (informational). Subsequent calls to this function with the same index will always
+ * return the same values. On successful return {name} will contain the name of the
+ * variable, {type} will contain its type, and {read_only} will indicate whether the
+ * variable is read-only. It is the responsibility of the caller to free the pointer
+ * returned in {name}. It is valid to pass in NULL for any of {name}, {type}, and
+ * {read_only}. {object} must be a context, dataset, or element.
  *
- * The value specified in {index} should be a number in the range [0, hio_config_get_count()).
+ * The value specified in {index} must be a number in the range [0, hio_config_get_count()).
  * If a non-existent index is specified an error is returned.
  */
 int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
@@ -1101,6 +1106,10 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
  * @param[out] count       the number of performance variables
  *
  * @return HIO_SUCCESS on success
+ *
+ * This function returns the number of performance variables supported by the
+ * hio object specified in {object}. {object} must be a context, dataset, or
+ * element. On success the number of performance variables is stored in {count}.
  */
 int hio_perf_get_count (hio_object_t object, int *count);
 
@@ -1119,7 +1128,8 @@ int hio_perf_get_count (hio_object_t object, int *count);
  * and type, Subsequent calls to this function with the same {index} and {object} will
  * always return the same values. On successful return {name} will contain the name of
  * the performance variable and {type} will contain its type. It is the responsibility
- * of the caller to free the pointer returned in {name}.
+ * of the caller to free the pointer returned in {name}. Either (or both) or {name} and
+ * {type} may be NULL. {object} must be a context, dataset, or element.
  *
  * The value specified in {index} should be a number in the range [0, hio_perf_get_count()).
  * If a non-existent index is specified an error is returned.
@@ -1135,10 +1145,14 @@ int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_t
  * @param[out] value      current value of the variable
  * @param[in]  value_len  the length of the buffer specified in {value}
  *
- * This function gets the value of the given variable within the hio
- * object specified in {object}. {object} must be one of NULL (global), an hio
- * context, or an hio dataset. On success the value of the performance variable
- * is stored in the buffer specified in {value} according to it's type.
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_TRUNCATE if the buffer specified by {value} and {value_len} is
+ *          to small to hold the value of the performance variable.
+ *
+ * This function gets the value of the given variable within the hio object specified
+ * in {object}. {object} must be a context, dataset, or element. On success the value
+ * of the performance variable is stored in the buffer specified in {value} according
+ * to it's type.
  */
 int hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
 
