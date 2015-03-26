@@ -1277,10 +1277,13 @@ ACTION_RUN(hdc_run) {
   HRC_TEST(hio_dataset_close)
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
-  if (myrank == 0)
+  if (myrank == 0) {
     VERB1("hdo-hdc R/W GB: %f %f  time: %f S  R/W speed: %f %f GB/S",
           (double)rw_count_sum[0]/1E9, (double)rw_count_sum[1]/1E9, time, 
-           rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 );  
+           rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 ); 
+    printf("<td> Read_speed %f GB/S\n", rw_count_sum[0] / time / 1E9 ); 
+    printf("<td> Write_speed %f GB/S\n", rw_count_sum[1] / time / 1E9 ); 
+  }
 }
 
 ACTION_RUN(hf_run) {
@@ -1610,6 +1613,9 @@ int main(int argc, char * * argv) {
 
   VERB0("xexec done.  Result: %s  Fails: %d  Test name: %s",
         fail_count ? "FAILURE" : "SUCCESS", fail_count, test_name);
+
+  printf("<result> %s xexec done.  Fails: %d  Test name: %s\n",
+        fail_count ? "fail" : "pass", fail_count, test_name);
 
 
   return 0;
