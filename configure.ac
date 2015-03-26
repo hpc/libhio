@@ -26,7 +26,7 @@ if test x$hio_use_mpi = x0 ; then
     if test -n "$CRAY_MPICH2_DIR" ; then
         AC_MSG_RESULT([yes])
         CPPFLAGS="$CPPFLAGS -I$CRAY_MPICH2_DIR/include"
-        LDFLAGS="$LDFLAGS -L$CRAY_MPICH2_DIR/include -lmpich"
+        LDFLAGS="$LDFLAGS -L$CRAY_MPICH2_DIR/lib -lmpich"
         hio_use_mpi=1
         # Don't let the Cray wrapper bring in extra crap
         CC="cc -target=native"
