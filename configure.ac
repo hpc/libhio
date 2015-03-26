@@ -8,6 +8,19 @@ AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
+if test -n "$XTOS_VERSION" ; then
+    # Work around Cray idiosyncrasies
+    # Don't let the Cray wrapper bring in extra crap
+    PE_VERSION=`echo $XTOS_VERSION | sed 's/\..*//g'`
+    if test x$PE_VERSION = x4 ; then
+        CC="cc -target=native"
+    else
+        CC="cc --cray-bypass-pkgconfig"
+    fi
+    # Force cray's linker to act like it should
+    LDFLAGS="$LDFLAGS -dynamic"
+fi
+
 AM_INIT_AUTOMAKE
 LT_INIT
 
@@ -26,10 +39,9 @@ if test x$hio_use_mpi = x0 ; then
     if test -n "$CRAY_MPICH2_DIR" ; then
         AC_MSG_RESULT([yes])
         CPPFLAGS="$CPPFLAGS -I$CRAY_MPICH2_DIR/include"
-        LDFLAGS="$LDFLAGS -L$CRAY_MPICH2_DIR/lib -lmpich"
+        LDFLAGS="$LDFLAGS -L$CRAY_MPICH2_DIR/lib"
+        LIBS="$LIBS -lmpich"
         hio_use_mpi=1
-        # Don't let the Cray wrapper bring in extra crap
-        CC="cc -target=native"
     else
         AC_MSG_RESULT([no])
     fi
