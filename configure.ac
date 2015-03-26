@@ -11,15 +11,29 @@ AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE
 LT_INIT
 
-AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [${CC}])
+PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
+AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
 
 if test ${MPICC} = "mpicc" ; then
+    CC=${MPICC}
     hio_use_mpi=1
 else
     hio_use_mpi=0
 fi
 
-CC=${MPICC}
+if test x$hio_use_mpi = x0 ; then
+    AC_MSG_CHECKING([for craypich])
+    if test -n "$CRAY_MPICH2_DIR" ; then
+        AC_MSG_RESULT([yes])
+        CPPFLAGS="$CPPFLAGS -I$CRAY_MPICH2_DIR/include"
+        LDFLAGS="$LDFLAGS -L$CRAY_MPICH2_DIR/lib -lmpich"
+        hio_use_mpi=1
+        # Don't let the Cray wrapper bring in extra crap
+        CC="cc -target=native"
+    else
+        AC_MSG_RESULT([no])
+    fi
+fi
 
 # Checks for programs.
 AC_PROG_CC_C99
@@ -41,8 +55,6 @@ AC_TYPE_SSIZE_T
 
 AC_DEFINE_UNQUOTED([HIO_USE_MPI], [$hio_use_mpi], [Whether to use mpi with hio])
 AC_DEFINE([_GNU_SOURCE], [1], [Define _GNU_SOURCE feature macro])
-
-PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
 
 # Checks for library functions.
 
