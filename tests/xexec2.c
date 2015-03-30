@@ -129,6 +129,7 @@ char * help =
   "  her <offset> <size> Element read - if offset negative, auto increment\n"
   "  hec <name>    Element close\n"
   "  hdc           Dataset close\n"
+  "  hdu <name> <id> CURRENT|FIRST|ALL  Dataset unlink\n"
   "  hf            Fini\n"
   "  hck <ON|OFF>  Enable read data checking\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
@@ -287,7 +288,7 @@ void get_id() {
   MY_MSG_CTX->id_string=id_string;
 }
 
-enum ptype { SINT, UINT, PINT, DOUB, STR, HFLG, HDSM, HERR, ONFF, NONE };
+enum ptype { SINT, UINT, PINT, DOUB, STR, HFLG, HDSM, HERR, HULM, ONFF, NONE };
 
 long long int get_mult(char * str) {
   long long int n;
@@ -1093,6 +1094,12 @@ ENUM_NAMP(HIO_CONFIG_TYPE_, FLOAT)
 ENUM_NAMP(HIO_CONFIG_TYPE_, DOUBLE)
 ENUM_END(etab_hcfg, 0, NULL)
 
+ENUM_START(etab_hulm) // hio_unlink_mode_t
+ENUM_NAMP(HIO_UNLINK_MODE_, CURRENT)
+ENUM_NAMP(HIO_UNLINK_MODE_, FIRST)
+ENUM_NAMP(HIO_UNLINK_MODE_, ALL)
+ENUM_END(etab_hulm, 0, NULL)
+
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
@@ -1286,6 +1293,15 @@ ACTION_RUN(hdc_run) {
   }
 }
 
+ACTION_RUN(hdu_run) {
+  hio_return_t hrc;
+  char * name = V0.s;
+  U64 id = V1.u;
+  hio_unlink_mode_t ulm = V2.i;
+  hrc = hio_dataset_unlink(context, name, id, ulm);
+  HRC_TEST(hio_dataset_unlink)
+}
+
 ACTION_RUN(hf_run) {
   hio_return_t hrc;
   hrc = hio_fini(&context);
@@ -1473,6 +1489,7 @@ struct parse {
   {"her",  {SINT, UINT, NONE, NONE, NONE}, her_check,     her_run     },
   {"hec",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
   {"hdc",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
+  {"hdu",  {STR,  UINT, HULM, NONE, NONE}, NULL,          hdu_run     },
   {"hf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
   {"hxrc", {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
   {"hxct", {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
@@ -1541,6 +1558,9 @@ void parse_action() {
               break;
             case HERR:
               decode(&etab_herr, tokv[t], "hio return", nact.desc, &nact.v[j]);
+              break;
+            case HULM:
+              decode(&etab_hulm, tokv[t], "hio unlink mode", nact.desc, &nact.v[j]);
               break;
             #endif
             case ONFF:
