@@ -349,6 +349,8 @@ typedef enum hio_return_t {
   HIO_ERR_NOT_AVAILABLE   = -6,
   /** Bad parameter */
   HIO_ERR_BAD_PARAM       = -7,
+  /** Dataset id already exists */
+  HIO_ERR_EXISTS          = -8,
   /** Temporary IO error. Try the IO again later. */
   HIO_ERR_IO_TEMPORARY   = -0x00010001,
   /** Permanent IO error. IO to the current data root is no longer available. */
@@ -435,6 +437,19 @@ typedef enum hio_recommendation_t {
   /** Checkpoint strongly recommended */
   HIO_SCP_MUST_CHECKPOINT,
 } hio_recommendation_t;
+
+/**
+ * @ingroup API
+ * @brief Dataset unlink modes
+ */
+typedef enum hio_unlink_mode_t {
+  /** Unlink dataset id only in the current active data root */
+  HIO_UNLINK_MODE_CURRENT,
+  /** Unlink first matching dataset id instance */
+  HIO_UNLINK_MODE_FIRST,
+  /** Unlink all matching dataset id instances */
+  HIO_UNLINK_MODE_ALL,
+} hio_unlink_mode_t;
 
 
 /**
@@ -577,7 +592,9 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  *
  * @returns HIO_SUCCESS on success
  * @returns HIO_ERROR_PARAM if a bad parameter is supplied. This can happen if
- * an existing dataset is opened with the incorrect mode.
+ *          an existing dataset is opened with the incorrect mode.
+ * @returns HIO_ERR_EXISTS if HIO_FLAG_CREAT is specified and the dataset id already
+ *          exists in the current data root.
  *
  * This function attempts to open/create an hio dataset. A dataset represents a
  * collection of one or more related elements. For example, a set of elements associated
@@ -615,13 +632,15 @@ int hio_dataset_close (hio_dataset_t *set);
  * @param[in] ctx     hio context
  * @param[in] name    name of hio dataset
  * @param[in] set_id  identified for the dataset
+ * @param[in] mode    unlink mode
  *
- * @returns hio_return_t
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_NOT_FOUND if the dataset id is not found
  *
  * This function removes all data associated with an hio dataset on all data
- * roots.
+ * roots. It is invalid to specify HIO_DATASET_ID_LAST for {set_id}.
  */
-int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id);
+int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio_unlink_mode_t mode);
 
 /**
  * @ingroup API

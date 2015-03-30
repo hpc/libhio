@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -15,6 +15,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <ftw.h>
 
 #include <string.h>
 
@@ -270,18 +271,27 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
   return HIO_SUCCESS;
 }
 
+static int builtin_posix_unlink_cb (const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf) {
+  return remove (path);
+}
+
 static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
   char path[PATH_MAX];
   struct stat statinfo;
   int rc;
+
+  if (module->context->context_rank) {
+    return HIO_ERR_NOT_AVAILABLE;
+  }
 
   builtin_posix_dataset_path (module, path, PATH_MAX, name, set_id);
   if (stat (path, &statinfo)) {
     return hioi_err_errno (errno);
   }
 
-  rc = rmdir (path);
+  rc = nftw (path, builtin_posix_unlink_cb, 32, FTW_DEPTH | FTW_PHYS);
   if (0 > rc) {
+    fprintf (stderr, "Could not unlink dataset. errno = %d\n", errno);
     return hioi_err_errno (errno);
   }
 

@@ -63,6 +63,8 @@ int hioi_err_errno (int err) {
     return HIO_ERR_NOT_FOUND;
   case EIO:
     return HIO_ERR_IO_PERMANENT;
+  case EEXIST:
+    return HIO_ERR_EXISTS;
   default:
     return HIO_ERROR;
   }

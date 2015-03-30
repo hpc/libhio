@@ -21,9 +21,18 @@ int main (int argc, char *argv[]) {
   rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRONLY | HIO_FLAG_CREAT,
 			 HIO_SET_ELEMENT_UNIQUE);
   if (HIO_SUCCESS != rc) {
-      fprintf (stderr, "Could not create restart dataset. reason: %d\n", rc);
-      hio_fini (&context);
-      return 1;
+      if (HIO_ERR_EXISTS == rc) {
+          hio_dataset_unlink (context, "restart", 100, HIO_UNLINK_MODE_FIRST);
+          rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRONLY | HIO_FLAG_CREAT,
+                                 HIO_SET_ELEMENT_UNIQUE);
+
+      }
+
+      if (HIO_SUCCESS != rc) {
+          fprintf (stderr, "Could not create restart dataset. reason: %d\n", rc);
+          hio_fini (&context);
+          return 1;
+      }
   }
 
   rc = hio_element_open (dataset, &element, "data", 0);
