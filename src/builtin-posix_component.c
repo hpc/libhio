@@ -331,9 +331,9 @@ static int builtin_posix_module_element_close (struct hio_module_t *module, hio_
   return HIO_SUCCESS;
 }
 
-static int builtin_posix_module_element_write_nb (struct hio_module_t *module, hio_element_t element,
-                                                  hio_request_t *request, off_t offset, void *ptr,
-                                                  size_t count, size_t size) {
+static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *module, hio_element_t element,
+                                                          hio_request_t *request, off_t offset, void *ptr,
+                                                          size_t count, size_t size, size_t stride) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) element->element_dataset;
   hio_context_t context = posix_dataset->base.dataset_context;
   hio_request_t new_request;
@@ -343,7 +343,16 @@ static int builtin_posix_module_element_write_nb (struct hio_module_t *module, h
   pthread_mutex_lock (&posix_dataset->lock);
   file_offset = ftell (posix_dataset->fh);
 
-  items_written = fwrite (ptr, size, count, posix_dataset->fh);
+  if (0 < stride) {
+    items_written = 0;
+
+    for (int i = 0 ; i < count ; ++i) {
+      items_written += fwrite (ptr, size, 1, posix_dataset->fh);
+      ptr = (void *)((intptr_t) ptr + size + stride);
+    }
+  } else {
+    items_written = fwrite (ptr, size, count, posix_dataset->fh);
+  }
 
   posix_dataset->bytes_written += items_written * size;
 
@@ -365,12 +374,13 @@ static int builtin_posix_module_element_write_nb (struct hio_module_t *module, h
   return HIO_SUCCESS;
 }
 
-static int builtin_posix_module_element_read_nb (struct hio_module_t *module, hio_element_t element,
-                                                 hio_request_t *request, off_t offset, void *ptr,
-                                                 size_t count, size_t size) {
+static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *module, hio_element_t element,
+                                                         hio_request_t *request, off_t offset, void *ptr,
+                                                         size_t count, size_t size, size_t stride) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) element->element_dataset;
   size_t bytes_read, bytes_available, bytes_requested = count * size;
   hio_context_t context = posix_dataset->base.dataset_context;
+  size_t remaining_size = size;
   hio_request_t new_request;
   off_t file_offset;
   int rc = HIO_SUCCESS;
@@ -385,7 +395,26 @@ static int builtin_posix_module_element_read_nb (struct hio_module_t *module, hi
     errno = 0;
     pthread_mutex_lock (&posix_dataset->lock);
     fseek (posix_dataset->fh, file_offset, SEEK_SET);
-    bytes_read = fread (ptr, 1, bytes_available, posix_dataset->fh);
+    if (0 < stride) {
+      bytes_read = 0;
+
+      for (int i = 0 ; i < count && bytes_available ; ++i) {
+        size_t tmp = (bytes_available < remaining_size) ? bytes_available : remaining_size;
+        bytes_read += fread (ptr, 1, tmp, posix_dataset->fh);
+
+        if (tmp < remaining_size) {
+          /* partial read */
+          ptr = (void *)((intptr_t) ptr + tmp);
+          remaining_size = size - tmp;
+        } else {
+          ptr = (void *)((intptr_t) ptr + remaining_size + stride);
+          remaining_size = size;
+        }
+      }
+    } else {
+      bytes_read = fread (ptr, 1, bytes_available, posix_dataset->fh);
+      ptr = (void *)((intptr_t) ptr + bytes_read);
+    }
     pthread_mutex_unlock (&posix_dataset->lock);
 
     posix_dataset->bytes_read += bytes_read;
@@ -396,7 +425,6 @@ static int builtin_posix_module_element_read_nb (struct hio_module_t *module, hi
     }
 
     offset += bytes_read;
-    ptr = (void *)((intptr_t) ptr + bytes_read);
     bytes_requested -= bytes_read;
   }
 
@@ -453,8 +481,8 @@ hio_module_t builtin_posix_module_template = {
   .element_open     = builtin_posix_module_element_open,
   .element_close    = builtin_posix_module_element_close,
 
-  .element_write_nb = builtin_posix_module_element_write_nb,
-  .element_read_nb  = builtin_posix_module_element_read_nb,
+  .element_write_strided_nb = builtin_posix_module_element_write_strided_nb,
+  .element_read_strided_nb  = builtin_posix_module_element_read_strided_nb,
 
   .element_flush    = builtin_posix_module_element_flush,
   .element_complete = builtin_posix_module_element_complete,

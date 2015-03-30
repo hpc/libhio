@@ -775,8 +775,8 @@ int hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t o
  * modified. Completion of a write does not guarantee the data has been
  * written to the data store.
  */
-int hio_element_write_strided (hio_element_t element, off_t offset, unsigned long reserved0,
-                               void *ptr, size_t count, size_t size, size_t stride);
+ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned long reserved0,
+                                   void *ptr, size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking
@@ -923,8 +923,8 @@ int hio_element_read_nb (hio_element_t element, hio_request_t *request, off_t of
  * and {stride}. This call returns when the buffer pointed to by {ptr}
  * contains the requested data or the read failed.
  */
-int hio_element_read_strided (hio_element_t element, off_t offset, unsigned long reserved0,
-                              void *ptr, size_t count, size_t size, size_t stride);
+ssize_t hio_element_read_strided (hio_element_t element, off_t offset, unsigned long reserved0,
+                                  void *ptr, size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking

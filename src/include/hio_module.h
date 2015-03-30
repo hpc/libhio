@@ -42,18 +42,18 @@ typedef int
 				 hio_flags_t flags);
 
 typedef int
-(*hio_module_element_write_nb_fn_t) (struct hio_module_t *module,
-				     hio_element_t element,
-				     hio_request_t *request,
-				     off_t offset, void *ptr,
-				     size_t count, size_t size);
+(*hio_module_element_write_strided_nb_fn_t) (struct hio_module_t *module,
+                                             hio_element_t element,
+                                             hio_request_t *request,
+                                             off_t offset, void *ptr,
+                                             size_t count, size_t size, size_t stride);
 
 typedef int
-(*hio_module_element_read_nb_fn_t) (struct hio_module_t *module,
-				    hio_element_t element,
-				    hio_request_t *request,
-				    off_t offset, void *ptr,
-				    size_t count, size_t size);
+(*hio_module_element_read_strided_nb_fn_t) (struct hio_module_t *module,
+                                            hio_element_t element,
+                                            hio_request_t *request,
+                                            off_t offset, void *ptr,
+                                            size_t count, size_t size, size_t stride);
 
 typedef int
 (*hio_module_element_flush_fn_t) (struct hio_module_t *module,
@@ -90,8 +90,8 @@ typedef struct hio_module_t {
   hio_module_element_open_fn_t      element_open;
   hio_module_element_close_fn_t     element_close;
 
-  hio_module_element_write_nb_fn_t  element_write_nb;
-  hio_module_element_read_nb_fn_t   element_read_nb;
+  hio_module_element_write_strided_nb_fn_t  element_write_strided_nb;
+  hio_module_element_read_strided_nb_fn_t   element_read_strided_nb;
 
   hio_module_element_flush_fn_t     element_flush;
   hio_module_element_complete_fn_t  element_complete;
