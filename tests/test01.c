@@ -19,12 +19,12 @@ int main (int argc, char *argv[]) {
   }
 
   rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRONLY | HIO_FLAG_CREAT,
-			 HIO_SET_ELEMENT_UNIQUE);
+			 HIO_SET_ELEMENT_SHARED);
   if (HIO_SUCCESS != rc) {
       if (HIO_ERR_EXISTS == rc) {
           hio_dataset_unlink (context, "restart", 100, HIO_UNLINK_MODE_FIRST);
           rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRONLY | HIO_FLAG_CREAT,
-                                 HIO_SET_ELEMENT_UNIQUE);
+                                 HIO_SET_ELEMENT_SHARED);
 
       }
 
@@ -66,7 +66,7 @@ int main (int argc, char *argv[]) {
   }
 
   rc = hio_dataset_open (context, &dataset, "restart", HIO_DATASET_ID_LAST, HIO_FLAG_RDONLY,
-			 HIO_SET_ELEMENT_UNIQUE);
+			 HIO_SET_ELEMENT_SHARED);
   if (HIO_SUCCESS != rc) {
       fprintf (stderr, "Could not load restart dataset. reason: %d\n", rc);
       hio_fini (&context);

@@ -129,6 +129,15 @@ static int hioi_config_set_value_internal (hio_var_t *var, const char *strval) {
     return HIO_SUCCESS;
   }
 
+  if (var->var_enum) {
+    for (int i = 0 ; i < var->var_enum->count ; ++i) {
+      if (0 == strcmp (var->var_enum->values[i].string_value, strval)) {
+        intval = var->var_enum->values[i].value;
+        break;
+      }
+    }
+  }
+
   switch (var->var_type) {
   case HIO_CONFIG_TYPE_BOOL:
     if (0 == strcmp (strval, "true") || 0 == strcmp (strval, "t") ||
@@ -250,7 +259,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
 }
 
 int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
-		     hio_config_type_t type, void *reserved0, const char *description, int flags) {
+		     hio_config_type_t type, hio_var_enum_t *var_enum, const char *description, int flags) {
   hio_var_array_t *config = &object->configuration;
   int config_index, rc;
   hio_var_t *new_var;
@@ -281,6 +290,7 @@ int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, con
   new_var->var_description = description;
   new_var->var_flags       = flags;
   new_var->var_storage     = (hio_var_value_t *) addr;
+  new_var->var_enum        = var_enum;
 
   hioi_config_set_from_file (context, object, new_var);
   hioi_config_set_from_env (context, object, new_var);

@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -14,6 +14,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+
+static hio_var_enum_t hioi_dataset_file_modes = {
+  .count = 2,
+  .values = {{.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
+             {.string_value = "optimized", .value = HIO_FILE_MODE_OPTIMIZED}},
+};
 
 hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name) {
   hio_element_t element;
@@ -42,6 +48,10 @@ void hioi_element_release (hio_element_t element) {
   if (NULL != element) {
     if (NULL != element->element_object.identifier) {
       free (element->element_object.identifier);
+    }
+
+    if (NULL != element->element_backing_file) {
+      free (element->element_backing_file);
     }
 
     free (element);
@@ -73,6 +83,11 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   new_dataset->dataset_flags = flags;
   new_dataset->dataset_mode = mode;
   new_dataset->dataset_context = context;
+
+  new_dataset->dataset_file_mode = HIO_FILE_MODE_BASIC;
+  hioi_config_add (context, &new_dataset->dataset_object, &new_dataset->dataset_file_mode,
+                   "dataset_file_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
+                   "Modes for writing dataset files. Valid values: (0: basic, 1: optimized)", 0);
 
   hioi_list_init (new_dataset->dataset_element_list);
 

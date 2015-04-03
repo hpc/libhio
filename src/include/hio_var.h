@@ -49,6 +49,18 @@ typedef struct hio_config_kv_t {
   char *value;
 } hio_config_kv_t;
 
+typedef struct hio_var_enum_t {
+  /** number of values */
+  int count;
+  struct {
+    /** string to match */
+    char *string_value;
+
+    /** corresponding value */
+    int value;
+  } values[];
+} hio_var_enum_t;
+
 typedef struct hio_var_t {
   /** unique name for this variable (allocated) */
   char             *var_name;
@@ -60,6 +72,8 @@ typedef struct hio_var_t {
   int               var_flags;
   /** brief description (allocated) */
   const char       *var_description;
+  /** variable enumerator (integer types only) */
+  const hio_var_enum_t *var_enum;
 } hio_var_t;
 
 typedef struct hio_var_array_t {
@@ -90,13 +104,13 @@ int hioi_var_lookup (hio_var_array_t *var_array, const char *name);
  * @param[in] addr        storage address for this variable
  * @param[in] name        variable name
  * @param[in] type        variable type
- * @param[in] reserved0   reserved for future use (must be NULL)
+ * @param[in] enum        value enumerator (integer types only) may be NULL
  * @param[in] description brief description of the variable (must
  *                        persist at least as long as the object)
  * @param[in] flags       variable flags
  */
 int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
-		     hio_config_type_t type, void *reserved0, const char *description, int flags);
+		     hio_config_type_t type, hio_var_enum_t *var_enum, const char *description, int flags);
 
 int hioi_config_parse (hio_context_t context, const char *config_file, const char *prefix);
 

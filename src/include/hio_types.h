@@ -65,6 +65,10 @@ typedef struct hio_list_t {
     (head).next = &(item)->member;                            \
   } while (0)
 
+static inline bool hioi_list_empty (hio_list_t *list) {
+  return list->prev == list->next;
+}
+
 struct hio_config_t;
 
 /**
@@ -132,6 +136,11 @@ struct hio_context_t {
   int                  context_current_module;
 };
 
+typedef enum hio_dataset_file_mode {
+  HIO_FILE_MODE_BASIC,
+  HIO_FILE_MODE_OPTIMIZED,
+} hio_dataset_file_mode_t;
+
 struct hio_dataset_t {
   /** allows for type detection */
   struct hio_object_t dataset_object;
@@ -154,6 +163,9 @@ struct hio_dataset_t {
 
   /** local process dataset backing file (relative to data root) */
   char               *dataset_backing_file;
+
+  /** dataset file modes */
+  hio_dataset_file_mode_t dataset_file_mode;
 };
 
 struct hio_request_t {
@@ -173,14 +185,25 @@ typedef struct hio_manifest_segment_t {
 struct hio_element_t {
   struct hio_object_t element_object;
 
+  /** elements are held in a list on the associated dataset */
   hio_list_t          element_list;
 
+  /** number of segments */
   int                 element_segment_count;
+  /** segment list */
   hio_list_t          element_segment_list;
 
+  /** associated dataset */
   hio_dataset_t       element_dataset;
 
+  /** element is curently open */
   bool                element_is_open;
+
+  /** (basic mode only) backing file for this element */
+  char               *element_backing_file;
+
+  /** element file handle (not used by all backends) */
+  FILE               *element_fh;
 };
 
 /* context functions */
