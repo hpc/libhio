@@ -119,6 +119,11 @@ static xmlDocPtr hio_manifest_generate_xml_1_1 (hio_dataset_t dataset) {
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_FILE_MODE, (unsigned long) dataset->dataset_file_mode);
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_DATASET_ID, (unsigned long) dataset->dataset_id);
 
+  if (HIO_FILE_MODE_BASIC == dataset->dataset_file_mode) {
+    /* NTH: for now do not write elements for basic mode. this may change in future versions */
+    return xml_doc;
+  }
+
   elements_node = xmlNewChild (top, NULL, (const xmlChar *) "elements", NULL);
   if (NULL == elements_node) {
     xmlFreeDoc (xml_doc);
