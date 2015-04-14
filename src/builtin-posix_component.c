@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #endif
 
+/* data types */
 typedef struct builtin_posix_module_t {
   hio_module_t base;
   mode_t access_mode;
@@ -47,7 +48,11 @@ typedef struct builtin_posix_module_dataset_t {
   FILE                *fh;
   uint64_t             bytes_read;
   uint64_t             bytes_written;
+  char                *base_path;
 } builtin_posix_module_dataset_t;
+
+/** static functions */
+static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id);
 
 static void builtin_posix_dataset_path (struct hio_module_t *module, char *path, size_t path_size,
 					const char *name, uint64_t set_id) {
@@ -155,7 +160,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   char path[PATH_MAX];
   int rc = HIO_SUCCESS;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-posix: opening dataset %s:%lu",
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-posix/dataset_open: opening dataset %s:%lu",
 	    name, (unsigned long) set_id);
 
   posix_dataset = (builtin_posix_module_dataset_t *)
@@ -165,24 +170,42 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
+  rc = asprintf (&posix_dataset->base_path, "%s/%s.hio/%s/%lu", module->data_root,
+                 context->context_object.identifier, name, (unsigned long) set_id);
+  if (0 > rc) {
+    /* out of memory. not much can be done now */
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+  rc = HIO_SUCCESS;
+
   if (!(flags & HIO_FLAG_CREAT)) {
-    snprintf (path, PATH_MAX, "%s/%s.hio/%s/%lu/manifest.basic.xml", module->data_root,
-              context->context_object.identifier, name, (unsigned long) set_id);
+    if (!(flags & HIO_FLAG_TRUNC)) {
+      snprintf (path, PATH_MAX, "%s/manifest.basic.xml", posix_dataset->base_path);
 
-    if (!access (path, F_OK)) {
-      /* if a basic dataset manifest is found switch to basic mode for reading */
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix: detected basic dataset. switching to basic "
-                "mode for reading...");
-      posix_dataset->base.dataset_file_mode = HIO_FILE_MODE_BASIC;
+      if (!access (path, F_OK)) {
+        /* if a basic dataset manifest is found switch to basic mode for reading */
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: detected basic dataset. switching "
+                  "to basic mode for reading...");
+        posix_dataset->base.dataset_file_mode = HIO_FILE_MODE_BASIC;
+      }
+
+      if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
+        snprintf (path, PATH_MAX, "%s/manifest%05d.xml", posix_dataset->base_path,
+                  context->context_rank);
+      }
+
+      rc = hioi_manifest_load (&posix_dataset->base, path);
+    } else {
+      /* access works with directories on OSX and Linux but not work with directories everywhere */
+      if (!context->context_rank && !access (path, F_OK)) {
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: removing existing dataset");
+        /* blow away an existing dataset */
+        rc = builtin_posix_module_dataset_unlink (module, path, set_id);
+      }
+
+      /* ensure we take the create path later */
+      flags |= HIO_FLAG_CREAT;
     }
-
-    if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
-      snprintf (path, PATH_MAX, "%s/%s.hio/%s/%lu/manifest%05d.xml", module->data_root,
-                context->context_object.identifier, name, (unsigned long) set_id,
-                context->context_rank);
-    }
-
-    rc = hioi_manifest_load (&posix_dataset->base, path);
   }
 
   /* basic datasets write a file per element so there is no dataset backing file */
@@ -202,7 +225,10 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
     rc = builtin_posix_create_dataset_dirs (module, name, set_id);
   }
 
+
 #if HIO_USE_MPI
+  /* need to barrier here to ensure directories are created before we try to open
+   * any files. might as well pass the return code and exit if any process failed */
   if (hioi_context_using_mpi (context)) {
     MPI_Allreduce (MPI_IN_PLACE, &rc, 1, MPI_INT, MPI_MIN, context->context_comm);
   }
@@ -246,6 +272,8 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
       fclose (posix_dataset->fh);
     }
 
+    free (posix_dataset->base_path);
+
     hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
     return rc;
   }
@@ -288,13 +316,10 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
     char path[PATH_MAX];
 
     if (HIO_FILE_MODE_BASIC != dataset->dataset_file_mode) {
-      snprintf (path, PATH_MAX, "%s/%s.hio/%s/%lu/manifest%05d.xml", module->data_root,
-                context->context_object.identifier, dataset->dataset_object.identifier,
-                (unsigned long) dataset->dataset_id, context->context_rank);
+      snprintf (path, PATH_MAX, "%s/manifest%05d.xml", posix_dataset->base_path,
+                context->context_rank);
     } else if (0 == context->context_rank) {
-      snprintf (path, PATH_MAX, "%s/%s.hio/%s/%lu/manifest.basic.xml", module->data_root,
-                context->context_object.identifier, dataset->dataset_object.identifier,
-                (unsigned long) dataset->dataset_id);
+      snprintf (path, PATH_MAX, "%s/manifest.basic.xml", posix_dataset->base_path);
     }
 
     if (HIO_FILE_MODE_BASIC != dataset->dataset_file_mode || 0 == context->context_rank) {
@@ -304,6 +329,11 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
         return rc;
       }
     }
+  }
+
+  if (posix_dataset->base_path) {
+    free (posix_dataset->base_path);
+    posix_dataset->base_path = NULL;
   }
 
   context->context_bytes_read = posix_dataset->bytes_read;
@@ -344,6 +374,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 static int builtin_posix_module_element_open (struct hio_module_t *module, hio_dataset_t dataset,
                                               hio_element_t *element_out, const char *element_name,
                                               hio_flags_t flags) {
+  builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   hio_context_t context = dataset->dataset_context;
   char *file_mode;
   hio_element_t element;
@@ -383,8 +414,7 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
       file_mode = "r";
     }
 
-    snprintf (path, PATH_MAX, "%s/%s.hio/%s/%lu/%s", module->data_root, context->context_object.identifier,
-              dataset->dataset_object.identifier, (unsigned long) dataset->dataset_id, element->element_backing_file);
+    snprintf (path, PATH_MAX, "%s/%s", posix_dataset->base_path, element->element_backing_file);
 
     element->element_fh = fopen (path, file_mode);
     if (NULL == element->element_fh) {
