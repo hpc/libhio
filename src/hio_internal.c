@@ -296,3 +296,9 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...)
 
   return HIO_SUCCESS;
 }
+
+uint64_t hioi_gettime (void) {
+  struct timeval tv;
+  gettimeofday (&tv, NULL);
+  return 1000000 * tv.tv_sec + tv.tv_usec;
+}

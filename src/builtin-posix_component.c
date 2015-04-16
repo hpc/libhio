@@ -282,6 +282,9 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
   pthread_mutex_init (&posix_dataset->lock, NULL);
 
+  /* record the open time */
+  gettimeofday (&posix_dataset->base.dataset_open_time, NULL);
+
   *set_out = &posix_dataset->base;
 
   /* set up performance variables */
@@ -331,6 +334,33 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
     }
   }
 
+  if (context->context_print_statistics) {
+    double speed, aggregate_time;
+    printf ("Dataset %s:%llu statistics:\n", dataset->dataset_object.identifier, dataset->dataset_id);
+
+    if (posix_dataset->bytes_read) {
+      aggregate_time = (double) dataset->dataset_read_time;
+      speed = ((double) posix_dataset->bytes_read) / aggregate_time;
+    } else {
+      speed = 0.0;
+      aggregate_time = 0.0;
+    }
+
+    printf ("  Bytes read: %" PRIu64 " in %llu usec (%1.2f MB/sec)\n", posix_dataset->bytes_read,
+            dataset->dataset_read_time, speed);
+
+    if (posix_dataset->bytes_written) {
+      aggregate_time = (double) dataset->dataset_write_time;
+      speed = ((double) posix_dataset->bytes_written) / aggregate_time;
+    } else {
+      speed = 0.0;
+      aggregate_time = 0.0;
+    }
+
+    printf ("  Bytes written: %" PRIu64 " in %llu usec (%1.2f MB/sec)\n", posix_dataset->bytes_written,
+            dataset->dataset_write_time, speed);
+  }
+
   if (posix_dataset->base_path) {
     free (posix_dataset->base_path);
     posix_dataset->base_path = NULL;
@@ -362,6 +392,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
     return hioi_err_errno (errno);
   }
 
+  /* use tree walk depth-first to remove all of the files for this dataset */
   rc = nftw (path, builtin_posix_unlink_cb, 32, FTW_DEPTH | FTW_PHYS);
   if (0 > rc) {
     fprintf (stderr, "Could not unlink dataset. errno = %d\n", errno);
@@ -446,10 +477,13 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
                                                           size_t count, size_t size, size_t stride) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) element->element_dataset;
   hio_context_t context = posix_dataset->base.dataset_context;
+  uint64_t stop, start;
   hio_request_t new_request;
   size_t items_written;
   long file_offset;
   FILE *fh;
+
+  start = hioi_gettime ();
 
   pthread_mutex_lock (&posix_dataset->lock);
 
@@ -496,6 +530,9 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
     new_request->request_complete = true;
   }
 
+  stop = hioi_gettime ();
+  posix_dataset->base.dataset_write_time += stop - start;
+
   return HIO_SUCCESS;
 }
 
@@ -506,10 +543,13 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
   size_t bytes_read, bytes_available, bytes_requested = count * size;
   hio_context_t context = posix_dataset->base.dataset_context;
   size_t remaining_size = size;
+  uint64_t start, stop;
   hio_request_t new_request;
   off_t file_offset;
   int rc = HIO_SUCCESS;
   FILE *fh;
+
+  start = hioi_gettime ();
 
   if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
     fh = posix_dataset->fh;
@@ -583,6 +623,8 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
     new_request->request_complete = true;
   }
 
+  stop = hioi_gettime ();
+  posix_dataset->base.dataset_read_time += stop - start;
   return rc;
 }
 

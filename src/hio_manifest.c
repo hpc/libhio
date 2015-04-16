@@ -18,17 +18,20 @@
 #include <libxml/parser.h>
 #include <libxml/xmlsave.h>
 
-#define HIO_MANIFEST_VERSION "0.2a"
+#define HIO_MANIFEST_VERSION "0.3a"
 #define HIO_MANIFEST_COMPAT  "1.1"
 
 #define HIO_MANIFEST_PROP_VERSION     (const xmlChar *) "hio_version"
 #define HIO_MANIFEST_PROP_COMPAT      (const xmlChar *) "hio_compat"
 #define HIO_MANIFEST_PROP_IDENTIFIER  (const xmlChar *) "hio_identifier"
+#define HIO_MANIFEST_PROP_DATASET_ID  (const xmlChar *) "hio_dataset_id"
 
 #define HIO_MANIFEST_KEY_BACKING_FILE (const xmlChar *) "hio_backing_file"
 #define HIO_MANIFEST_KEY_DATASET_MODE (const xmlChar *) "hio_dataset_mode"
 #define HIO_MANIFEST_KEY_FILE_MODE    (const xmlChar *) "hio_file_mode"
-#define HIO_MANIFEST_KEY_DATASET_ID   (const xmlChar *) "hio_dataset_id"
+#define HIO_MANIFEST_KEY_OPEN_TIME    (const xmlChar *) "hio_open_time"
+#define HIO_MANIFEST_KEY_CLOSE_TIME   (const xmlChar *) "hio_close_time"
+#define HIO_MANIFEST_KEY_COMM_SIZE    (const xmlChar *) "hio_comm_size"
 #define HIO_SEGMENT_KEY_FILE_OFFSET   (const xmlChar *) "file_offset"
 #define HIO_SEGMENT_KEY_APP_OFFSET0   (const xmlChar *) "app_offset0"
 #define HIO_SEGMENT_KEY_APP_OFFSET1   (const xmlChar *) "app_offset1"
@@ -39,6 +42,17 @@ static void hioi_manifest_set_number (xmlNodePtr node, const xmlChar *name, unsi
 
   sprintf (tmp, "%lu", value);
   xmlNewChild (node, NULL, name, (const xmlChar *) tmp);
+}
+
+static void hioi_manifest_prop_set_number (xmlNodePtr node, const xmlChar *name, unsigned long value) {
+  char tmp[16];
+
+  sprintf (tmp, "%lu", value);
+  xmlNewProp (node, name, (const xmlChar *) tmp);
+}
+
+static void hioi_manifest_set_string (xmlNodePtr node, const xmlChar *name, const char *value) {
+  xmlNewChild (node, NULL, name, (const xmlChar *) value);
 }
 
 static xmlNodePtr hioi_manifest_find_node (xmlNodePtr parent, const xmlChar *name) {
@@ -90,10 +104,12 @@ static int hioi_manifest_get_number (xmlDocPtr xml_doc, xmlNodePtr node, const x
 }
 
 static xmlDocPtr hio_manifest_generate_xml_1_1 (hio_dataset_t dataset) {
-  xmlDocPtr xml_doc;
   xmlNodePtr elements_node, element_node, segment_node, segments_node, top;
-  hio_element_t element;
+  hio_context_t context = dataset->dataset_context;
   hio_manifest_segment_t *segment;
+  hio_element_t element;
+  xmlDocPtr xml_doc;
+  char ctime_buf[26];
 
   xml_doc = xmlNewDoc ((const xmlChar *) "1.0");
   if (NULL == xml_doc) {
@@ -110,6 +126,8 @@ static xmlDocPtr hio_manifest_generate_xml_1_1 (hio_dataset_t dataset) {
 
   xmlNewProp (top, HIO_MANIFEST_PROP_VERSION, (const xmlChar *) HIO_MANIFEST_VERSION);
   xmlNewProp (top, HIO_MANIFEST_PROP_COMPAT, (const xmlChar *) HIO_MANIFEST_COMPAT);
+  xmlNewProp (top, HIO_MANIFEST_PROP_IDENTIFIER, (const xmlChar *) dataset->dataset_object.identifier);
+  hioi_manifest_prop_set_number (top, HIO_MANIFEST_PROP_DATASET_ID, (unsigned long) dataset->dataset_id);
 
   if (dataset->dataset_backing_file) {
     xmlNewChild (top, NULL, HIO_MANIFEST_KEY_BACKING_FILE, (const xmlChar *) dataset->dataset_backing_file);
@@ -117,7 +135,15 @@ static xmlDocPtr hio_manifest_generate_xml_1_1 (hio_dataset_t dataset) {
 
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_DATASET_MODE, (unsigned long) dataset->dataset_mode);
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_FILE_MODE, (unsigned long) dataset->dataset_file_mode);
-  hioi_manifest_set_number (top, HIO_MANIFEST_KEY_DATASET_ID, (unsigned long) dataset->dataset_id);
+  hioi_manifest_set_number (top, HIO_MANIFEST_KEY_COMM_SIZE, (unsigned long) context->context_size);
+
+  /* get a string representation of the time */
+  ctime_r ((time_t *) &dataset->dataset_open_time.tv_sec, ctime_buf);
+
+  /* remove newline */
+  ctime_buf[strlen(ctime_buf) - 1] = '\0';
+
+  hioi_manifest_set_string (top, HIO_MANIFEST_KEY_OPEN_TIME, ctime_buf);
 
   if (HIO_FILE_MODE_BASIC == dataset->dataset_file_mode) {
     /* NTH: for now do not write elements for basic mode. this may change in future versions */

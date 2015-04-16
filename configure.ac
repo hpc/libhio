@@ -56,6 +56,7 @@ AC_PROG_LEX
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdlib.h strings.h sys/types.h sys/time.h pthread.h])
+AC_CHECK_FUNCS([access gettimeofday])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL

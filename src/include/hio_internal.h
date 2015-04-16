@@ -32,6 +32,10 @@
 #include <pthread.h>
 #endif
 
+#if defined(HAVE_SYS_TIME_H)
+#include <sys/time.h>
+#endif
+
 /**
  * Maximum number of data roots.
  */
@@ -124,5 +128,12 @@ int hioi_err_errno (int err);
  * @returns hio error code
  */
 int hioi_context_create_modules (hio_context_t context);
+
+/**
+ * Get the current time (relative to system boot) in usec
+ *
+ * @returns monotonically increasing time in usec
+ */
+uint64_t hioi_gettime (void);
 
 #endif /* !defined(HIO_INTERNAL_H) */

@@ -166,6 +166,15 @@ struct hio_dataset_t {
 
   /** dataset file modes */
   hio_dataset_file_mode_t dataset_file_mode;
+
+  /** open time */
+  struct timeval      dataset_open_time;
+
+  /** aggregate read time */
+  uint64_t            dataset_read_time;
+
+  /** aggregate write time */
+  uint64_t            dataset_write_time;
 };
 
 struct hio_request_t {
