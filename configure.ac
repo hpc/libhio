@@ -25,6 +25,8 @@ AM_INIT_AUTOMAKE
 LT_INIT
 
 PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
+PKG_CHECK_MODULES(DATAWARP, cray-datawarp, [use_datawarp=1], [use_datawarp=0])
+
 AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
 
 if test ${MPICC} = "mpicc" ; then
@@ -55,8 +57,8 @@ AC_PROG_LEX
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdlib.h strings.h sys/types.h sys/time.h pthread.h])
-AC_CHECK_FUNCS([access gettimeofday])
+AC_CHECK_HEADERS([stdlib.h strings.h sys/types.h sys/time.h pthread.h datawarp.h dlfcn.h])
+AC_CHECK_FUNCS([access gettimeofday dlopen dlclose dlsym])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
@@ -68,6 +70,8 @@ AC_TYPE_SSIZE_T
 
 AC_DEFINE_UNQUOTED([HIO_USE_MPI], [$hio_use_mpi], [Whether to use mpi with hio])
 AC_DEFINE([_GNU_SOURCE], [1], [Define _GNU_SOURCE feature macro])
+AC_DEFINE_UNQUOTED([HIO_PREFIX], ["$prefix"], [HIO install prefix])
+AM_CONDITIONAL([DATAWARP_AVAILABLE], [test x$use_datawarp = x1])
 
 # Checks for library functions.
 
