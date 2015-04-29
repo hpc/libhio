@@ -1,0 +1,191 @@
+#! /bin/bash
+#----------------------------------------------------------------------------
+# buildall - build libhio on multiple systems with multiple options 
+#
+# Change History: 
+#   20150428  cgw  Initial version
+#----------------------------------------------------------------------------
+synexit() {
+  echo ""
+  if [[ -n $* ]]; then echo $*; echo ""; fi
+  echo "buildall - build libhio on multiple systems"
+  echo ""
+  echo "  Syntax:"
+  echo "    buildall [-ai] [-t build_tree] [-n tarname]"
+  echo "             [-r rmt_dir] [version ...] "
+  echo "             [-h]"
+  echo ""
+  echo "  Options:"   
+  echo "    -a                Autogen (local only) disables -i"
+  echo "    -i                Incremental transfer and build"
+  echo "    -t build_tree     Local directory containing hio build tree"
+  echo "    -n tarname        Dist tarball base name and dir name"
+  echo "                      (default $tarname)"
+  echo "    -r rmt_dir        Remote directory name.  Default is env var"
+  echo "                      HIOBUILD_RMT_DIR or ~/pgm/hio"     
+  echo "    version           One or more version names.  If no versions"
+  echo "                      specified, all versions are built."
+  echo "    -h                Display this help"
+  echo ""
+  echo "  Results logged to $logfn. Valid versions are:"
+  echo "  $allver"
+  echo ""
+  echo "  Example - full build locally and all remote versions:"
+  echo "    buildall"
+  echo ""
+  echo "  Example - incremental remote build of a single version:"
+  echo "    buildall -i mu-intel"
+  echo ""
+  echo "  Example - full local build with autogen:"
+  echo "    buildall -a local"
+  echo ""
+  echo "  Cornell Wright  cornell@lanl.gov"
+  
+  exit 8
+}
+
+cmd() {
+  echo "$host ---> $*" 2>&1 | tee -a $log
+  eval $*              2>&1 | tee -a $log
+}
+
+msg() { 
+  echo "$host $*" 2>&1 | tee -a $log
+}
+
+#----------------------------------------------------------------------------
+# build_l - local build of hio
+#----------------------------------------------------------------------------
+build_l() {
+  if [[ $autogen -gt 0 ]]; then
+    cmd ./hiobuild -ax
+    gotdist=1
+  elif [[ $incremental -gt 0 ]]; then
+    cmd ./hiobuild 
+  else
+    cmd ./hiobuild -fx
+    gotdist=1
+  fi 
+}
+#----------------------------------------------------------------------------
+# build_r - remote build a single version of hio
+#----------------------------------------------------------------------------
+build_r() {
+  dest=$1
+  dir=$2
+  tarname=$3
+  shift 3
+  options=$*
+  if [[ $incremental -gt 0 ]]; then
+    # Use contents of dist tarball to identify files to rsync (ignore m4/*)
+    awkpgm='
+      /^-/{ f=$9;
+            sub("[^/]*/", "", f);
+            if ("m4/" != substr(f, 0, 3)) {
+              files = files " " f;
+            }
+      }
+      END { cmd = "rsync -RlptgPv" files " '$dest:$dir/$tarname'";
+            print "awk ---> " cmd;
+            system(cmd)
+      }
+    '
+    cmd "tar -tvf $tarname.tar.gz | awk \"\$awkpgm\""
+    cmd "ssh $dest \"cd $dir/$tarname; ./hiobuild $options\"" 
+  else
+    options="-c $options"
+    if [[ $gotdist -eq 0 ]]; then
+      cmd "make dist"
+      gotdist=1;
+    fi
+    cmd "ssh $dest \"mkdir -p $dir; rm -fR $dir/*\""
+    cmd "ssh $dest \"ls -altr $dir\""
+    cmd "scp $tarname.tar.gz \"$dest:$dir\""
+    cmd "ssh $dest \"cd $dir; tar -xf $tarname.tar.gz; cd $dir/$tarname; ./hiobuild $options\"" 
+  fi
+}
+
+
+# Set up temporary log directory and file
+logfn="buildall.out"
+tdir=$(mktemp -d /tmp/buildall.tmp.XXXX)
+log="$tdir/$logfn"
+host=`hostname -s`
+gotdist=0
+
+args=$*
+msg "buildall $args: Starting at `date`"
+
+#----------------------------------------------------------------------------
+# Parse arguments
+#----------------------------------------------------------------------------
+autogen=0
+incremental=0
+tree=$PWD
+tarname="libhio-0.1"
+if [[ -z $HIOBUILD_RMT_DIR ]]; then rmt_dir="~/pgm/hio"
+else rmt_dir=$HIOBUILD_RMT_DIR; fi
+
+allver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ct-pgi"
+
+while getopts "hait:n:r:" optname; do
+  case $optname in
+    h ) synexit;;
+    a ) autogen=1;;
+    i ) incremental=1;;
+    t ) tree=$OPTARG;;
+    n ) tarname=$OPTARG;;
+    r ) rmt_dir=$OPTARG;;
+   \? ) synexit "Error: invalid option";;
+  esac
+done
+shift $((OPTIND - 1 ))
+vers=$*
+if [[ -z $vers ]]; then vers=$allver; fi
+
+# Move log file to build directory
+if [[ ! -d $tree ]]; then synexit "Error: directory $tree does not exist"; fi 
+cmd cd $tree
+mv -f $log .
+log="$PWD/$logfn"
+rm -fR $tdir
+
+#----------------------------------------------------------------------------
+# Run builds
+#----------------------------------------------------------------------------
+for v in $vers; do
+  case $v in
+    local    ) build_l;;
+    mu-gnu   ) build_r mu-fey "$rmt_dir/$v" $tarname  -l gcc   -l openmpi;;
+    mu-intel ) build_r mu-fey "$rmt_dir/$v" $tarname  -l intel -l openmpi;;
+    mu-pgi   ) build_r mu-fey "$rmt_dir/$v" $tarname  -l pgi   -l openmpi;;
+    ct-gnu   ) build_r ct-fe1 "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu;;
+    ct-intel ) build_r ct-fe1 "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel;;
+    ct-pgi   ) build_r ct-fe1 "$rmt_dir/$v" $tarname  ;;
+  esac
+done
+
+#----------------------------------------------------------------------------
+# Print results summary
+#----------------------------------------------------------------------------
+type gawk > /dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+  msg "gawk not available, skipping results summary"
+else
+  tmpfile=tmp.buildall.summary
+  awkpgm='
+    BEGIN { lastp=p=0 }
+    /\[HIOBUILD_RESULT_START\]/ { p=1 }
+    /\[HIOBUILD_RESULT_END\]/   { p=0 }
+    { if (lastp || p) print; lastp=p }
+  '      
+  msg
+  msg "buildall results summary:"
+  cat $log | gawk "$awkpgm" > $tmpfile
+  cmd "cat $tmpfile"
+  msg
+  cmd rm -f $tmpfile
+fi
+
+msg "buildall $args: Done at `date`"
+# --- end of buildal ---
