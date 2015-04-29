@@ -563,6 +563,7 @@ ACTION_RUN(ls_run) {
 #endif
 
 ACTION_RUN(le_run) {
+  int time2stop = 0;
   switch (lcur->type) {
     case COUNT:;
       if (--lcur->count > 0) {
@@ -584,7 +585,6 @@ ACTION_RUN(le_run) {
       break;
     #ifdef MPI
     case SYNC:;
-      int time2stop = 0;
       if (myrank == 0) {
         if (lcur->ltime <= ETIMER_ELAPSED(&lcur->tmr)) {
           DBG4("loop sync rank 0 end, done; depth: %d top actn: %d", lcur-lctl, lcur->top);
