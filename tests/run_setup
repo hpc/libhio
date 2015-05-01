@@ -3,8 +3,8 @@
 # Source this file from each test script.
 #
 # Env vars used for input:
-#   HIO_BUILD - location of HIO build tree, defaults to ../..
-#   HIO_ROOT  - location of data root directory for test, defaults to ./.test_root1
+#   HIO_BUILD - location of HIO build tree, defaults to $PWD/..
+#   HIO_ROOT  - location of data root directory for test, defaults to $PWD/.test_root1
 #
 # BASH variables set that can be used by test script:
 #        root - data root for test, created or emptied
@@ -95,7 +95,7 @@ shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
 
 # Add .lib dir to library path
-build=${HIO_BUILD:=$PWD/../..}
+build=${HIO_BUILD:=$PWD/..}
 libs=$build/src/.libs
 
 if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
@@ -127,6 +127,9 @@ myrun() {
   eval "$mympicmd -n $ranks $*"
 }
 
+# Load module environment recorded at build
+mod_script="hiobuild.modules.bash"
+if [[ -e $HIO_BUILD/$mod_script ]]; then . $HIO_BUILD/$mod_script; fi 
 
 # Display results of run_setup
 msg "run_setup:       PWD: \"$PWD\""

@@ -50,7 +50,14 @@ host=`hostname -s`
 args=$*
 msg "buildhio $args: Starting"
 
-if [[ ${OSTYPE:0:6} != "darwin" ]]; then . $MODULESHOME/init/bash; fi
+if [[ ${OSTYPE:0:6} != "darwin" ]]; then
+  . $MODULESHOME/init/bash
+  mod_script="hiobuild.modules.bash"
+  echo "# Created by hiobuild at `date`" > $mod_script
+  echo ". \$MODULESHOME/init/bash" >> $mod_script
+else
+  mod_script=""
+fi  
 
 #----------------------------------------------------------------------------
 # Parse arguments
@@ -72,16 +79,22 @@ while getopts "hacfxd:l:s:" optname; do
     l ) modload=$OPTARG
         echo "---> module load $modload" 2>&1 | tee -a $log
         module load $modload
+        if [[ -n $mod_script ]]; then echo "module load $modload" >> $mod_script; fi
         ;;
     s ) modswap=(${OPTARG//,/ })
         echo "---> module swap ${modswap[*]}" 2>&1 | tee -a $log
         module swap ${modswap[*]}
+        if [[ -n $mod_script ]]; then echo "module swap ${modswap[*]}" >> $mod_script; fi
         ;;
    \? ) synexit "Error: invalid option";;
   esac
 done
 shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
+if [[ -n $mod_script ]]; then 
+  echo "module list" >> $mod_script
+  echo "# --- end ---" >> $mod_script
+fi
 
 # Move log file to build directory
 if [[ ! -d $dir ]]; then synexit "Error: directory $dir does not exist"; fi 
