@@ -1,5 +1,5 @@
-#
-# run_setup - commmon setup for hio test.  
+#----------------------------------------------------------------------------
+# run_setup - common setup for hio tests 
 # Source this file from each test script.
 #
 # Env vars used for input:
@@ -7,8 +7,92 @@
 #   HIO_ROOT  - location of data root directory for test, defaults to ./.test_root1
 #
 # BASH variables set that can be used by test script:
-#   root - data root for test, created or emptied
+#        root - data root for test, created or emptied
+#        size - gross size of IO, per rank t|s|m|l|x
+#       ranks - number of MPI ranks
+#    verb_lev - xexec2 verbosity level
+#   debug_lev - xexec2 debug level
 #
+# BASH functions that can be called by the test script:
+#   clean_root - creates or empties out data root
+#          cmd - logs and runs a command
+#          msg - logs a message
+#        myrun - issues mpirun or aprun command with -n specified 
+#
+# Change History: 
+#   20150501  cgw  Initial version
+#----------------------------------------------------------------------------
+synexit() {
+  echo ""
+  if [[ -n $* ]]; then echo $*; echo ""; fi
+  echo "run_setup - common setup for hio tests"
+  echo ""
+  echo "  Syntax:"
+  echo "    $0"
+  echo "        [-s <size>]"
+  echo "        [-n <num_ranks>"
+  echo "        [-v <verb_level>"
+  echo "        [-d <debug_level>"
+  echo ""
+  echo "  Options:"   
+  echo "    -s <size>       Per rank run size t|s|m|l|x  (default s)"
+  echo "    -n <num_ranks>  Number of MPI ranks.  Default is all allocated"
+  echo "                    CPs or 2 on Mac OS"
+  echo "    -v <verb_lev>   Verbosity level for xexec2, default 1"
+  echo "    -d <debug_lev>  Debug level for xexec2, default 0"
+  echo ""
+  echo "  Cornell Wright  cornell@lanl.gov"
+  
+  exit 8
+}
+
+cmd() {
+  echo "$host ---> $*"
+  eval $*             
+}
+
+msg() { 
+  echo "$host $*" 
+}
+
+#----------------------------------------------------------------------------
+# Parse arguments
+#----------------------------------------------------------------------------
+host=`hostname -s`
+verb_lev=1
+debug_lev=0
+
+# Platform specific defaults
+if [[ ${OSTYPE:0:6} == "darwin" ]]; then
+  mympicmd="mpirun"
+  size="s"
+  ranks=2
+else
+  size="m"
+  type aprun > /dev/null 2>&1
+  if [[ $? -eq 0 ]]; then
+    # aprun available - must be a Cray
+    mympicmd="aprun"
+    ranks=$PBS_NP
+  else
+    # aprun not available - use mpirun
+    mympicmd="mpirun"
+    ranks=$((SLURM_JOB_CPUS_PER_NODE * SLURM_JOB_NODES))
+  fi
+fi
+
+while getopts "hs:n:v:d:" optname; do
+  case $optname in
+    h ) synexit;;
+    s ) size=$OPTARG;;
+    n ) ranks=$OPTARG;;
+    v ) verb_lev=$OPTARG;;
+    d ) debug_lev=$OPTARG;;
+   \? ) synexit "Error: invalid option";;
+  esac
+done
+shift $((OPTIND - 1 ))
+if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
 
 # Add .lib dir to library path
 build=${HIO_BUILD:=$PWD/../..}
@@ -18,26 +102,41 @@ if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_
 elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
 else echo "run_setup: OSTYPE \"$OSTYPE\" not recognized"; exit; fi
 
-# Set data root and create or clean out directory
+# Set data root and define function to create or clean out directory
 root=${HIO_ROOT:=$PWD/.test_root1}
-if [ -e $root ]; then
-  if [ -d $root ]; then
-    if [ ! -w $root ]; then
-      echo "run_setup: Unable to write test root \"$root\""
-      exit
+clean_root() {
+  if [ -e $root ]; then
+    if [ -d $root ]; then
+      if [ ! -w $root ]; then
+        echo "run_setup: Unable to write test root \"$root\""
+        exit
+      else
+        rm -fR $root/*
+      fi
     else
-      rm -fR $root/*
+      echo "run_setup: Test root \"$root\" exists and is not a directory"
+      exit
     fi
   else
-    echo "run_setup: Test root \"$root\" exists and is not a directory"
-    exit
+    mkdir -p $root
   fi
-else
-  mkdir -p $root
-fi
+}
 
-echo "run_setup: build: \"$build\""
-echo "run_setup:  libs: \"$libs\""
-echo "run_setup:  root: \"$root\""
+# function to invoke mpi on various platforms
+myrun() {
+  eval "$mympicmd -n $ranks $*"
+}
+
+
+# Display results of run_setup
+msg "run_setup:       PWD: \"$PWD\""
+msg "run_setup:     build: \"$build\""
+msg "run_setup:      libs: \"$libs\""
+msg "run_setup:      root: \"$root\""
+msg "run_setup:    mpicmd: \"$mympicmd\""
+msg "run_setup:      size: \"$size\""
+msg "run_setup:     ranks: $ranks"
+msg "run_setup:  verb_lev: $verb_lev"
+msg "run_setup: debug_lev: $debug_lev"
 
 # --- end of run_setup ---

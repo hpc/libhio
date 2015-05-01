@@ -1,28 +1,43 @@
 #! /bin/bash
 . ./run_setup
 
-# Small read and write test case with read data value checking.  
-# 2 ranks, 12 MB per rank written 
+# Read and write N-N test case with read data value checking.  
+
+case $size in
+  t ) blk=1k;   nblk=5;;
+  s ) blk=20ki; nblk=8;;   
+  m ) blk=1Mi;  nblk=200;;
+  l ) blk=2Mi;  nblk=512;;
+  x ) blk=2Mi;  nblk=1024;;
+  * ) synexit "Error: invalid size $size";;
+esac
+
+msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg" 
 
 cmdw="
-  v 2 d 1 mi 0
-  hi ctx_name POSIX:$root
-  hdo dsn_name 22 WRONLY,CREAT UNIQUE 
-  heo el_name WRONLY,CREAT 20Mi
-  hck on 
-  hew 0 12Mi 
+  name run02w v $verb_lev d $debug_lev mi 0
+  hi MY_CTX POSIX:$root 
+  hdo NTN_DS 97 WRONLY,CREAT UNIQUE 
+  heo MY_EL WRONLY,CREAT,TRUNC 20Mi        
+  lc $nblk
+    hew -$blk $blk 
+  le 
   hec hdc hf mf
 "
+
 cmdr="
-  v 3 d 1 mi 0
-  hi ctx_name POSIX:$root 
-  hdo dsn_name 22 RDONLY       UNIQUE
-  heo el_name RDONLY       20Mi
-  hck on 
-  her 0 12Mi
+  name run02r v $verb_lev d $debug_lev mi 0
+  hi MY_CTX POSIX:$root 
+  hdo NTN_DS 97 RDONLY UNIQUE 
+  heo MY_EL RDONLY 20Mi 
+  hck on
+  lc $nblk
+    her -$blk $blk 
+  le 
   hec hdc hf mf
 "
 
 set -x
-mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmdw
-mpirun -mca orte_tag_output 1 -n 2 ./xexec2.x $cmdr
+clean_root
+myrun ./xexec2.x $cmdw
+myrun ./xexec2.x $cmdr
