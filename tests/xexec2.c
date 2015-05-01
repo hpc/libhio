@@ -127,6 +127,10 @@ char * help =
   "  heo <name> <flags> Element open\n"
   "  hew <offset> <size> Element write - if offset negative, auto increment\n"
   "  her <offset> <size> Element read - if offset negative, auto increment\n"
+  "  hsega <start> <size_per_rank> <rank_shift> Activate absolute segmented\n"
+  "                addressing. Actual offset now ofs + <start> + rank*size\n"
+  "  hsegr <start> <size_per_rank> <rank_shift> Activate relative segmented\n"
+  "                addressing. Start is relative to end of previous segment\n"
   "  hec <name>    Element close\n"
   "  hdc           Dataset close\n"
   "  hdu <name> <id> CURRENT|FIRST|ALL  Dataset unlink\n"
@@ -1075,6 +1079,7 @@ ENUM_NAMP(HIO_, ERR_OUT_OF_RESOURCE)
 ENUM_NAMP(HIO_, ERR_NOT_FOUND)
 ENUM_NAMP(HIO_, ERR_NOT_AVAILABLE)
 ENUM_NAMP(HIO_, ERR_BAD_PARAM)
+ENUM_NAMP(HIO_, ERR_EXISTS)
 ENUM_NAMP(HIO_, ERR_IO_TEMPORARY)
 ENUM_NAMP(HIO_, ERR_IO_PERMANENT)
 ENUM_NAMP(HIO_, ANY)
@@ -1118,6 +1123,9 @@ static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
 static int hio_check = 0;
 static U64 hew_ofs, her_ofs;
+static I64 hseg_start = 0;
+static I64 hseg_size_per_rank = 0;
+static I64 hseg_rank_shift = 0;
 static U64 rw_count[2];
 ETIMER hio_tmr;
 
@@ -1221,18 +1229,36 @@ ACTION_CHECK(hew_check) {
   if (size > bufsz) ERRX("%s; size > bufsz", A.desc);
 }
 
+ACTION_RUN(hsega_run) {
+  hseg_start = V0.u;
+  hseg_size_per_rank = V1.u;
+  hseg_rank_shift = V2.u;
+  hew_ofs = her_ofs = 0;
+}
+
+ACTION_RUN(hsegr_run) {
+  hseg_start += (hseg_size_per_rank * mpi_size + V0.u); 
+  hseg_size_per_rank = V1.u;
+  hseg_rank_shift = V2.u;
+  hew_ofs = her_ofs = 0;
+}
+
 ACTION_RUN(hew_run) {
   ssize_t hcnt;
-  I64 p_ofs = V0.u;
+  I64 ofs_param = V0.u;
   U64 hreq = V1.u;
-  U64 a_ofs;
-  if (p_ofs < 0) { 
-    a_ofs = hew_ofs;
-    hew_ofs += -p_ofs;
+  U64 ofs_segrel, ofs_abs;
+  if (ofs_param < 0) { 
+    ofs_segrel = hew_ofs;
+    hew_ofs += -ofs_param;
   } else {
-    a_ofs = p_ofs;
+    ofs_segrel = ofs_param;
   } 
-  hcnt = hio_element_write (element, a_ofs, 0, wbuf + ( (a_ofs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
+
+  ofs_abs = hseg_start + hseg_size_per_rank * ((myrank + hseg_rank_shift) % mpi_size) + ofs_segrel; 
+  
+  DBG2("hew ofs_param: %lld ofs_segrel: %lld ofs_abs: %lld len: %lld", ofs_param, ofs_segrel, ofs_abs, hreq);
+  hcnt = hio_element_write (element, ofs_abs, 0, wbuf + ( (ofs_abs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
   HCNT_TEST(hio_element_write)
   rw_count[1] += hcnt;
 }
@@ -1244,23 +1270,27 @@ ACTION_CHECK(her_check) {
 
 ACTION_RUN(her_run) {
   ssize_t hcnt;
-  I64 p_ofs = V0.u;
+  I64 ofs_param = V0.u;
   U64 hreq = V1.u;
-  U64 a_ofs;
-  if (p_ofs < 0) { 
-    a_ofs = her_ofs;
-    her_ofs += -p_ofs;
+  U64 ofs_segrel, ofs_abs;
+  if (ofs_param < 0) { 
+    ofs_segrel = her_ofs;
+    her_ofs += -ofs_param;
   } else {
-    a_ofs = p_ofs;
+    ofs_segrel = ofs_param;
   }
-  hcnt = hio_element_read (element, a_ofs, 0, rbuf, 1, hreq);
+
+  ofs_abs = hseg_start + hseg_size_per_rank * ((myrank + hseg_rank_shift) % mpi_size) + ofs_segrel; 
+
+  DBG2("hew ofs_param: %lld ofs_segrel: %lld ofs_abs: %lld len: %lld", ofs_param, ofs_segrel, ofs_abs, hreq);
+  hcnt = hio_element_read (element, ofs_abs, 0, rbuf, 1, hreq);
   HCNT_TEST(hio_element_read)
   rw_count[0] += hcnt;
 
   if (hio_check) {
-    if (memcmp(rbuf, wbuf + ( (a_ofs + hio_element_hash) % LFSR_22_CYCLE), hreq)) {
+    if (memcmp(rbuf, wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE), hreq)) {
       fail_count++;
-      VERB0("Error: hio_element_read data check miscompare ofs:%lld size:%lld", a_ofs, hreq);
+      VERB0("Error: hio_element_read data check miscompare ofs:%lld size:%lld", ofs_abs, hreq);
     } else {
       VERB3("hio_element_read data check successful");
     }
@@ -1448,56 +1478,58 @@ struct parse {
   action_run * runner;
 } parse[] = {
 // Command  V0    V1    V2    V3    V4    Check          Run
-  {"v",    {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
-  {"d",    {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
-  {"qof",  {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
-  {"name", {STR,  NONE, NONE, NONE, NONE}, NULL,          name_run    },
-  {"im",   {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
-  {"lc",   {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
-  {"lt",   {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
+  {"v",     {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
+  {"d",     {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
+  {"qof",   {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
+  {"name",  {STR,  NONE, NONE, NONE, NONE}, NULL,          name_run    },
+  {"im",    {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
+  {"lc",    {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
+  {"lt",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
   #ifdef MPI
-  {"ls",   {DOUB, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
+  {"ls",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
   #endif
-  {"le",   {NONE, NONE, NONE, NONE, NONE}, loop_check,    le_run      },
-  {"o",    {UINT, NONE, NONE, NONE, NONE}, NULL,          stdout_run  },
-  {"e",    {UINT, NONE, NONE, NONE, NONE}, NULL,          stderr_run  },
-  {"s",    {DOUB, NONE, NONE, NONE, NONE}, sleep_check,   sleep_run   },
-  {"va",   {UINT, NONE, NONE, NONE, NONE}, va_check,      va_run      },
-  {"vt",   {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
-  {"vf",   {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
+  {"le",    {NONE, NONE, NONE, NONE, NONE}, loop_check,    le_run      },
+  {"o",     {UINT, NONE, NONE, NONE, NONE}, NULL,          stdout_run  },
+  {"e",     {UINT, NONE, NONE, NONE, NONE}, NULL,          stderr_run  },
+  {"s",     {DOUB, NONE, NONE, NONE, NONE}, sleep_check,   sleep_run   },
+  {"va",    {UINT, NONE, NONE, NONE, NONE}, va_check,      va_run      },
+  {"vt",    {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
+  {"vf",    {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
   #ifdef MPI
-  {"mi",   {UINT, NONE, NONE, NONE, NONE}, NULL,          mi_run      },
-  {"msr",  {PINT, PINT, NONE, NONE, NONE}, NULL,          msr_run     },
-  {"mb",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mb_run      },
-  {"mf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mf_run      },
+  {"mi",    {UINT, NONE, NONE, NONE, NONE}, NULL,          mi_run      },
+  {"msr",   {PINT, PINT, NONE, NONE, NONE}, NULL,          msr_run     },
+  {"mb",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mb_run      },
+  {"mf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mf_run      },
   #endif
-  {"fi",   {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
-  {"fr",   {PINT, PINT, NONE, NONE, NONE}, fr_check,      fr_run      },
-  {"ff",   {NONE, NONE, NONE, NONE, NONE}, ff_check,      fr_run      },
-  {"hx",   {UINT, UINT, UINT, UINT, UINT}, hx_check,      hx_run      },
+  {"fi",    {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
+  {"fr",    {PINT, PINT, NONE, NONE, NONE}, fr_check,      fr_run      },
+  {"ff",    {NONE, NONE, NONE, NONE, NONE}, ff_check,      fr_run      },
+  {"hx",    {UINT, UINT, UINT, UINT, UINT}, hx_check,      hx_run      },
   #ifdef DLFCN
-  {"dlo",  {STR,  NONE, NONE, NONE, NONE}, dlo_check,     dlo_run     },
-  {"dls",  {STR,  NONE, NONE, NONE, NONE}, dls_check,     dls_run     },
-  {"dlc",  {NONE, NONE, NONE, NONE, NONE}, dlc_check,     dlc_run     },
+  {"dlo",   {STR,  NONE, NONE, NONE, NONE}, dlo_check,     dlo_run     },
+  {"dls",   {STR,  NONE, NONE, NONE, NONE}, dls_check,     dls_run     },
+  {"dlc",   {NONE, NONE, NONE, NONE, NONE}, dlc_check,     dlc_run     },
   #endif
   #ifdef HIO
-  {"hi",   {STR,  STR,  NONE, NONE, NONE}, NULL,          hi_run      },
-  {"hdo",  {STR,  UINT, HFLG, HDSM, NONE}, NULL,          hdo_run     },
-  {"hck",  {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
-  {"heo",  {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
-  {"hew",  {SINT, UINT, NONE, NONE, NONE}, hew_check,     hew_run     },
-  {"her",  {SINT, UINT, NONE, NONE, NONE}, her_check,     her_run     },
-  {"hec",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
-  {"hdc",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
-  {"hdu",  {STR,  UINT, HULM, NONE, NONE}, NULL,          hdu_run     },
-  {"hf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
-  {"hxrc", {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
-  {"hxct", {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
-  {"hgv",  {NONE, NONE, NONE, NONE, NONE}, NULL,          hgv_run     },
+  {"hi",    {STR,  STR,  NONE, NONE, NONE}, NULL,          hi_run      },
+  {"hdo",   {STR,  UINT, HFLG, HDSM, NONE}, NULL,          hdo_run     },
+  {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
+  {"heo",   {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
+  {"hsega", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsega_run   },
+  {"hsegr", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsegr_run   },
+  {"hew",   {SINT, UINT, NONE, NONE, NONE}, hew_check,     hew_run     },
+  {"her",   {SINT, UINT, NONE, NONE, NONE}, her_check,     her_run     },
+  {"hec",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
+  {"hdc",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
+  {"hdu",   {STR,  UINT, HULM, NONE, NONE}, NULL,          hdu_run     },
+  {"hf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
+  {"hxrc",  {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
+  {"hxct",  {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
+  {"hgv",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hgv_run     },
   #endif
-  {"k",    {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
-  {"x",    {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
-  {"find", {STR, STR,   NONE, NONE, NONE}, NULL,          find_run    },
+  {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
+  {"x",     {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
+  {"find",  {STR, STR,   NONE, NONE, NONE}, NULL,          find_run    },
 };
 
 //----------------------------------------------------------------------------

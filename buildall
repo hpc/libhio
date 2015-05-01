@@ -145,7 +145,8 @@ if [[ -z $vers ]]; then vers=$allver; fi
 
 # Move log file to build directory
 if [[ ! -d $tree ]]; then synexit "Error: directory $tree does not exist"; fi 
-cmd cd $tree
+msg "---> cd $tree"
+cd $tree
 mv -f $log .
 log="$PWD/$logfn"
 rm -fR $tdir
@@ -188,4 +189,4 @@ else
 fi
 
 msg "buildall $args: Done at `date`"
-# --- end of buildal ---
+# --- end of buildall ---
