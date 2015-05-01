@@ -85,7 +85,8 @@ if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
 
 # Move log file to build directory
 if [[ ! -d $dir ]]; then synexit "Error: directory $dir does not exist"; fi 
-cmd cd $dir
+msg "---> cd $dir"
+cd $dir 
 mv -f $log .
 log="$PWD/$logfn"
 rm -fR $tdir
