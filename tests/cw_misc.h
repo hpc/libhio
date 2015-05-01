@@ -15,6 +15,12 @@ typedef  int64_t I64;
 typedef uint32_t U32;
 typedef  int32_t I32;
 #define DIM1(array) ( sizeof(array) / sizeof(array[0]) )
+#ifndef MAX 
+  #define MAX(a,b) ( (a) > (b) ? (a) : (b) ) 
+#endif
+#ifndef MIN 
+  #define MIN(a,b) ( (a) < (b) ? (a) : (b) ) 
+#endif
 
 //----------------------------------------------------------------------------
 // Message control macros and functions

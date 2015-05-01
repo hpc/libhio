@@ -146,6 +146,11 @@ char * help =
   "\n"
   "  Numbers can be specified with suffixes k, ki, M, Mi, G, Gi, etc.\n"
   "\n"
+  "  Comments are delimited with /@ and @/, however those must stand alone in the \n"
+  "  actions as separate tokens.  Also, /@ is only recognized if it is the first\n"
+  "  token of an action.  Comments may be nested.\n"
+  "\n"
+  "\n"
   "  Example action sequences:\n"
   "    v 1 d 1\n"
   "    lc 3 s 0 le\n"
@@ -1554,64 +1559,77 @@ void parse_action() {
     dl_num = -1;
   #endif
 
+  int comment_depth=0;
+
   while ( ++t < tokc ) {
-    for (i = 0; i < DIM1(parse); ++i) { // loop over parse table
-      if (0 == strcmp(tokv[t], parse[i].cmd)) {
-        DBG3("match: tokv[%d]: %s parse[%d].cmd: %s", t, tokv[t], i, parse[i].cmd);
-        nact.tokn = t;
-        nact.actn = actc;
-        nact.action = tokv[t];
-        nact.desc = ALLOC_PRINTF("action %d: %s", actc+1, tokv[t]);
+    if (0 == strcmp(tokv[t], "/@")) {
+      comment_depth++;
+      DBG3("comment start: tokv[%d]: %s depth: %d", t, tokv[t], comment_depth);
+    } else if (0 == strcmp(tokv[t], "@/")) {
+      comment_depth = MAX(0, comment_depth - 1); 
+      DBG3("comment end: tokv[%d]: %s depth: %d", t, tokv[t], comment_depth);
+    } else if (comment_depth > 0) {
+      DBG3("Token in comment skipped: tokv[%d]: %s depth: %d", t, tokv[t], comment_depth);
+    } else {
+      for (i = 0; i < DIM1(parse); ++i) { // loop over parse table
+        if (0 == strcmp(tokv[t], parse[i].cmd)) {
+          DBG3("match: tokv[%d]: %s parse[%d].cmd: %s", t, tokv[t], i, parse[i].cmd);
+          nact.tokn = t;
+          nact.actn = actc;
+          nact.action = tokv[t];
+          nact.desc = ALLOC_PRINTF("action %d: %s", actc+1, tokv[t]);
       
-        for (j = 0; j < MAX_PARAM; ++j) { // loop over params
-          if (parse[i].param[j] == NONE) break; // for j loop over params
-          t++;
-          if (t >= tokc) ERRX("action %d \"%s\" missing param %d", nact.tokn, nact.action, j+1);
-          nact.desc = STRCATRX(STRCATRX(nact.desc, " "), tokv[t]);
-          DBG5("%s ...; parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
-          switch (parse[i].param[j]) {
-            case SINT:
-            case UINT:
-            case PINT:
-              nact.v[j].u = getI64(tokv[t], parse[i].param[j], &nact);
-              break;
-            case DOUB:
-              nact.v[j].d = getDoub(tokv[t], parse[i].param[j], &nact);
-              break;
-            case STR:
-              nact.v[j].s = tokv[t];
-              break;
-            #ifdef HIO
-            case HFLG:
-              decode(&etab_hflg, tokv[t], "hio flag", nact.desc, &nact.v[j]);
-              break;
-            case HDSM:
-              decode(&etab_hdsm, tokv[t], "hio mode", nact.desc, &nact.v[j]);
-              break;
-            case HERR:
-              decode(&etab_herr, tokv[t], "hio return", nact.desc, &nact.v[j]);
-              break;
-            case HULM:
-              decode(&etab_hulm, tokv[t], "hio unlink mode", nact.desc, &nact.v[j]);
-              break;
-            #endif
-            case ONFF:
-              decode(&etab_onff, tokv[t], "ON / OFF value", nact.desc, &nact.v[j]);
-              break;
-            default:
-              ERRX("%s ...; internal parse error parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
+          for (j = 0; j < MAX_PARAM; ++j) { // loop over params
+            if (parse[i].param[j] == NONE) break; // for j loop over params
+            t++;
+            if (t >= tokc) ERRX("action %d \"%s\" missing param %d", nact.tokn, nact.action, j+1);
+            nact.desc = STRCATRX(STRCATRX(nact.desc, " "), tokv[t]);
+            DBG5("%s ...; parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
+            switch (parse[i].param[j]) {
+              case SINT:
+              case UINT:
+              case PINT:
+                nact.v[j].u = getI64(tokv[t], parse[i].param[j], &nact);
+                break;
+              case DOUB:
+                nact.v[j].d = getDoub(tokv[t], parse[i].param[j], &nact);
+                break;
+              case STR:
+                nact.v[j].s = tokv[t];
+                break;
+              #ifdef HIO
+              case HFLG:
+                decode(&etab_hflg, tokv[t], "hio flag", nact.desc, &nact.v[j]);
+                break;
+              case HDSM:
+                decode(&etab_hdsm, tokv[t], "hio mode", nact.desc, &nact.v[j]);
+                break;
+              case HERR:
+                decode(&etab_herr, tokv[t], "hio return", nact.desc, &nact.v[j]);
+                break;
+              case HULM:
+                decode(&etab_hulm, tokv[t], "hio unlink mode", nact.desc, &nact.v[j]);
+                break;
+              #endif
+              case ONFF:
+                decode(&etab_onff, tokv[t], "ON / OFF value", nact.desc, &nact.v[j]);
+                break;
+              default:
+                ERRX("%s ...; internal parse error parse[%d].param[%d]: %d", nact.desc, i, j, parse[i].param[j]);
+            }
           }
+          nact.runner = parse[i].runner; 
+          add2actv(&nact);
+          DBG2("Checking %s", nact.desc); 
+          if (parse[i].checker) parse[i].checker(&actv[actc-1], t);
+          break; // break for i loop over parse table
         }
-        nact.runner = parse[i].runner; 
-        add2actv(&nact);
-        DBG2("Checking %s", nact.desc); 
-        if (parse[i].checker) parse[i].checker(&actv[actc-1], t);
-        break; // break for i loop over parse table
       }
+      if (i >= DIM1(parse)) ERRX("action %d: \"%s\" not recognized.", t, tokv[t]);
     }
-    if (i >= DIM1(parse)) ERRX("action %d: \"%s\" not recognized.", t, tokv[t]);
   }
   if (lcur-lctl > 0) ERRX("Unterminated loop - more loop starts than loop ends");
+  if (comment_depth > 0) ERRX("Unterminated comment - more comment starts than comment ends");
   IFDBG4( for (int a=0; a<actc; a++) DBG0("actv[%d].desc: %s", a, actv[a].desc) );
   DBG1("Parse complete actc: %d", actc);
 }

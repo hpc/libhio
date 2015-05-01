@@ -6,7 +6,8 @@
 
 fails="
   name run04w v $verb_lev d $debug_lev mi 0
-  hxrc ERR_BAD_PARAM 
+  /@ hdo without prior init @/
+    hxrc ERR_BAD_PARAM 
     hdo NT1_DS 98 WRONLY,CREAT SHARED
   mf
 "
