@@ -6,9 +6,24 @@
 
 fails="
   name run04w v $verb_lev d $debug_lev mi 0
-  /@ hdo without prior init @/
+  /@ HDO without prior init @/
     hxrc ERR_BAD_PARAM 
     hdo NT1_DS 98 WRONLY,CREAT SHARED
+  /@ HI file name @/
+    hi MY_CTX POSIX:/does_not_exist 
+    hxrc ERR_NOT_FOUND 
+    hdo NTN_DS 97 WRONLY,CREAT UNIQUE 
+  /@ HI bad prefix @/
+    hi MY_CTX WIERD_FS:/$root 
+    hxrc ERR_NOT_FOUND 
+    hdo NTN_DS 97 WRONLY,CREAT UNIQUE 
+  /@ HEO without hdo @/
+    hxrc ERR_BAD_PARAM 
+    heo MY_EL WRONLY,CREAT,TRUNC 20Mi        
+  /@ HDO RDONLY missing DS @/
+    hi MY_CTX POSIX:$root 
+    hxrc ERR_NOT_FOUND 
+    hdo NTN_DS 97 RDONLY UNIQUE 
   mf
 "
 
