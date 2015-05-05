@@ -9,12 +9,11 @@
  * $HEADER$
  */
 
-#include "hio_types.h"
-#include "hio_component.h"
-#include "hio_module.h"
+#include "builtin-posix_component.h"
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <fcntl.h>
 #include <stdarg.h>
 #include <ftw.h>
 
@@ -32,21 +31,6 @@
 #if defined(HAVE_SYS_STAT_H)
 #include <sys/stat.h>
 #endif
-
-/* data types */
-typedef struct builtin_posix_module_t {
-  hio_module_t base;
-  mode_t access_mode;
-} builtin_posix_module_t;
-
-typedef struct builtin_posix_module_dataset_t {
-  struct hio_dataset_t base;
-  pthread_mutex_t      lock;
-  FILE                *fh;
-  uint64_t             bytes_read;
-  uint64_t             bytes_written;
-  char                *base_path;
-} builtin_posix_module_dataset_t;
 
 /** static functions */
 static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id);
@@ -454,7 +438,6 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
                                               hio_flags_t flags) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   hio_context_t context = dataset->dataset_context;
-  char *file_mode;
   hio_element_t element;
 
   hioi_list_foreach (element, dataset->dataset_element_list, struct hio_element_t, element_list) {
@@ -472,8 +455,10 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
   }
 
   if (HIO_FILE_MODE_BASIC == dataset->dataset_file_mode) {
+    int open_flags;
+    char *file_mode;
     char *path;
-    int rc;
+    int rc, fd;
 
     if (HIO_SET_ELEMENT_UNIQUE == dataset->dataset_mode) {
       rc = asprintf (&element->element_backing_file, "element_data.%s.%05d", element_name,
@@ -487,7 +472,13 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
     }
 
     /* determine the fopen file mode to use */
-    file_mode = (HIO_FLAG_WRONLY & dataset->dataset_flags) ? "w" : "r";
+    if (HIO_FLAG_WRONLY & dataset->dataset_flags) {
+      file_mode = "w";
+      open_flags = O_CREAT | O_WRONLY;
+    } else {
+      file_mode = "r";
+      open_flags = O_RDONLY;
+    }
 
     rc = asprintf (&path, "%s/%s", posix_dataset->base_path, element->element_backing_file);
     if (0 > rc) {
@@ -495,7 +486,11 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    element->element_fh = fopen (path, file_mode);
+    /* it is not possible to get open with create without truncation using fopen so use a
+     * combination of open and fdopen to get the desired effect */
+    fd = open (path, open_flags);
+    element->element_fh = fdopen (fd, file_mode);
+
     if (NULL == element->element_fh) {
       int hrc = hioi_err_errno (errno);
       hio_err_push (hrc, dataset->dataset_context, &dataset->dataset_object, "Error opening element file %s",
@@ -504,6 +499,7 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
       hioi_element_release (element);
       return hrc;
     }
+
     free (path);
   }
 
