@@ -134,6 +134,11 @@ struct hio_context_t {
   int                  context_module_count;
   /** current active data root */
   int                  context_current_module;
+
+#if HIO_USE_DATAWARP
+  /** path to datawarp root */
+  char                *context_datawarp_root;
+#endif
 };
 
 typedef enum hio_dataset_file_mode {

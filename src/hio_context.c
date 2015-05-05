@@ -103,6 +103,13 @@ static void hio_context_release (hio_context_t *contextp) {
   }
 #endif
 
+#if HIO_USE_DATAWARP
+  if (context->context_datawarp_root) {
+    free (context->context_datawarp_root);
+    context->context_datawarp_root = NULL;
+  }
+#endif
+
   /* finalize object variables */
   hioi_var_fini (&context->context_object);
 
@@ -119,7 +126,7 @@ static void hio_context_release (hio_context_t *contextp) {
 }
 
 int hioi_context_create_modules (hio_context_t context) {
-  char *data_roots, *data_root, *last;
+  char *data_roots, *data_root, *next_data_root, *last;
   hio_module_t *module = NULL;
   int num_modules = 0;
   int rc = HIO_SUCCESS;
@@ -132,7 +139,9 @@ int hioi_context_create_modules (hio_context_t context) {
   data_root = strtok_r (data_roots, ",", &last);
 
   do {
-    rc = hioi_component_query (context, data_root, &module);
+    next_data_root = strtok_r (NULL, ",", &last);
+
+    rc = hioi_component_query (context, data_root, next_data_root, &module);
     if (HIO_SUCCESS != rc) {
       hio_err_push (rc, context, NULL, "Could not find an hio io module for data root %s",
                     data_root);
@@ -144,7 +153,8 @@ int hioi_context_create_modules (hio_context_t context) {
       hioi_log (context, HIO_VERBOSE_WARN, "Maximum number of IO modules reached for this context");
       break;
     }
-  } while (NULL != (data_root = strtok_r (NULL, ",", &last)));
+    data_root = next_data_root;
+  } while (NULL != data_root);
 
   context->context_module_count = num_modules;
   context->context_current_module = 0;
@@ -198,6 +208,13 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   hioi_config_add (context, &context->context_object, &context->context_print_statistics,
                    "context_print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
                    "to stdout when the context is closed (default: 0)", 0);
+
+#if HIO_USE_DATAWARP
+  context->context_datawarp_root = strdup ("auto");
+  hioi_config_add (context, &context->context_object, &context->context_datawarp_root,
+                   "context_datawarp_root", HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
+                   "for datawarp (burst-buffer) (default: auto-detect)", 0);
+#endif
 
   hioi_perf_add (context, &context->context_object, &context->context_bytes_read,
                  "context_bytes_read", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
@@ -267,7 +284,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
   comm_in = comm ? *comm : MPI_COMM_WORLD;
 
   rc = MPI_Comm_dup (comm_in, &context->context_comm);
-  if (NULL == context->context_comm) {
+  if (MPI_COMM_NULL == context->context_comm) {
     hio_err_push_mpi (rc, context, NULL, "Error duplicating MPI communicator");
     hio_context_release(&context);
     return hio_err_mpi (rc);

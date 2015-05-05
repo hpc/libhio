@@ -314,6 +314,9 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   hioi_perf_add (context, &posix_dataset->base.dataset_object, &posix_dataset->bytes_written, "total_bytes_written",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
 
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Successfully created posix dataset %s:%llu on data root %s",
+            name, set_id, module->data_root);
+
   return HIO_SUCCESS;
 }
 
@@ -321,7 +324,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   hio_context_t context = module->context;
   hio_element_t element;
-  int rc;
+  int rc = HIO_SUCCESS;
 
   if (posix_dataset->fh) {
     fclose (posix_dataset->fh);
@@ -346,18 +349,24 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
         rc = asprintf (&path, "%s/manifest.basic.xml", posix_dataset->base_path);
       }
 
-      if (0 > rc) {
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-
-      rc = hioi_manifest_save (dataset, path);
-      free (path);
-      if (HIO_SUCCESS != rc) {
-        hio_err_push (rc, context, &dataset->dataset_object, "error writing local manifest");
-        return rc;
+      if (0 < rc) {
+        rc = hioi_manifest_save (dataset, path);
+        free (path);
+        if (HIO_SUCCESS != rc) {
+          hio_err_push (rc, context, &dataset->dataset_object, "error writing local manifest");
+        }
+      } else {
+        rc = HIO_ERR_OUT_OF_RESOURCE;
       }
     }
   }
+
+#if HIO_USE_MPI
+  /* ensure all ranks have closed the dataset before continuing */
+  if (hioi_context_using_mpi (context)) {
+    MPI_Allreduce (MPI_IN_PLACE, &rc, 1, MPI_INT, MPI_MIN, context->context_comm);
+  }
+#endif
 
   if (context->context_print_statistics) {
     double speed, aggregate_time;
@@ -396,7 +405,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
 
   pthread_mutex_destroy (&posix_dataset->lock);
 
-  return HIO_SUCCESS;
+  return rc;
 }
 
 static int builtin_posix_unlink_cb (const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf) {
@@ -735,7 +744,7 @@ static int builtin_posix_component_fini (void) {
 }
 
 static int builtin_posix_component_query (hio_context_t context, const char *data_root,
-					  hio_module_t **module) {
+					  const char *next_data_root, hio_module_t **module) {
   builtin_posix_module_t *new_module;
 
   if (strncasecmp("posix:", data_root, 6)) {

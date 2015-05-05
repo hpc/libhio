@@ -50,7 +50,8 @@ typedef int (*hio_component_fini_fn_t) (void);
  *
  * It is safe to push the error code onto the error stack.
  */
-typedef int (*hio_component_query_t) (hio_context_t context, const char *data_root, hio_module_t **module);
+typedef int (*hio_component_query_t) (hio_context_t context, const char *data_root, const char *next_data_root,
+                                      hio_module_t **module);
 
 typedef uint64_t hio_component_flags_t;
 enum {
@@ -75,6 +76,7 @@ typedef struct hio_component_t {
 
 int hioi_component_init (void);
 int hioi_component_fini (void);
-int hioi_component_query (hio_context_t context, const char *data_root, hio_module_t **module);
+int hioi_component_query (hio_context_t context, const char *data_root, const char *next_data_root,
+                          hio_module_t **module);
 
 #endif /* !defined(HIO_COMPONENT_H) */
