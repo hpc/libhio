@@ -453,4 +453,20 @@ unsigned int crc32(unsigned int crc, const void *buf, size_t size) {
         }
 	return crc ^ ~0U;
 }
+
+//----------------------------------------------------------------------------
+// memdiff - compares two memory areas, returns NULL if they match, else the 
+// address in the first operand where the first differing byte occurs.
+//----------------------------------------------------------------------------
+void * memdiff(const void * s1, const void *s2, size_t n) {
+  char * c1 = (char *) s1;
+  char * c2 = (char *) s2;
+  for (size_t i = 0; i<n; i++) {
+    if ( *(c1+i) != *(c2+i) ) {
+      return (void *)(c1+i);
+    }
+  }
+  return NULL;
+}
+
 // --- end of cw_misc.c ---

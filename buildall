@@ -163,6 +163,7 @@ for v in $vers; do
     ct-gnu   ) build_r ct-fe1 "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu;;
     ct-intel ) build_r ct-fe1 "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel;;
     ct-pgi   ) build_r ct-fe1 "$rmt_dir/$v" $tarname  ;;
+    ga-gnu   ) build_r iga-fe1"$rmt_dir/$v" $tarname  -s PrgEnv-cray PrgEnv-gnu -l craype-haswell -l cray-mpich;;
   esac
 done
 

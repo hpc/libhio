@@ -210,5 +210,11 @@ void fsleep(double seconds);
 
 
 unsigned int crc32(unsigned int crc, const void *buf, size_t size);
+
+//----------------------------------------------------------------------------
+// memdiff - compares two memory areas, returns NULL if they match, else the 
+// address in the first operand where the first differing byte occurs.
+//----------------------------------------------------------------------------
+void * memdiff(const void * s1, const void *s2, size_t n);
  
 // --- end of cw_misc.h ---

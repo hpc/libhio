@@ -16,7 +16,8 @@ msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg"
 
 cmdw="
   name run03w v $verb_lev d $debug_lev mi 0
-  hi MY_CTX POSIX:$root 
+  hi MY_CTX POSIX:$root
+  hdu NT1_DS 98 ALL 
   hdo NT1_DS 98 WRONLY,CREAT SHARED 
   heo MY_EL WRONLY,CREAT,TRUNC 20Mi        
   lc $nseg
@@ -44,6 +45,6 @@ cmdr="
 "
 
 set -x
-clean_root
-myrun ./xexec2.x $cmdw
-myrun ./xexec2.x $cmdr
+#clean_root
+myrun .libs/xexec2.x $cmdw
+myrun .libs/xexec2.x $cmdr

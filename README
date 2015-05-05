@@ -1,0 +1,53 @@
+Testing (updated 20150504)
+==========================
+
+More general information needed here, but for now, here's how
+to recreate a specific failure in test run03.
+
+1) Get the tarball from ~cornell/dw_miscompare_20150504
+
+2) untar into <dir>
+
+3) cd <dir>/libhio-0.1
+
+4) module swap PrgEnv-cray PrgEnv-gnu
+    module load craype-haswell cray-mpich
+
+5) ./configure
+
+6) make all
+
+7) cd <dir>/libhio-0.1/tests
+
+8) Create a directory in DW
+    e.g. aprun -b mkdir /dwphase1/cornell/hio_test2
+
+9) export HIO_ROOT=<DW DIR>
+    export HIO_ROOT=/dwphase1/cornell/hio_test2
+
+10) ./run03 -d 4 -v 3 -n 256 -s m 1>run03.db01.out 2>&1
+
+11) grep miscompare run03.db*.out 
+
+12) Parameters to run03 are:
+
+  Syntax:
+    ./run03
+        [-s <size>]
+        [-n <num_ranks>]
+        [-v <verb_level>]
+        [-d <debug_level>]
+
+  Options:
+    -s <size>       Per rank run size t|s|m|l|x  (default s)
+    -n <num_ranks>  Number of MPI ranks.  Default is all allocated
+                    CPs or 2 on Mac OS
+    -v <verb_lev>   Verbosity level for xexec2, default 1
+    -d <debug_lev>  Debug level for xexec2, default 0
+
+The test driver xexec2 has a bit of help text that will describe the
+parameters in run03.
+
+--- End of README ---
+
+

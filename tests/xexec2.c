@@ -1293,9 +1293,20 @@ ACTION_RUN(her_run) {
   rw_count[0] += hcnt;
 
   if (hio_check) {
-    if (memcmp(rbuf, wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE), hreq)) {
+    void * mis_comp;
+    // Force error for unit test
+    // *(char *)(rbuf+27) = '\0'; 
+    if ((mis_comp = memdiff(rbuf, wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE), hreq))) {
       fail_count++;
-      VERB0("Error: hio_element_read data check miscompare ofs:%lld size:%lld", ofs_abs, hreq);
+      I64 offset = (char *)mis_comp - (char *)rbuf;
+      I64 dump_start = MAX(0, offset - 16);
+      VERB0("Error: hio_element_read data check miscompare; read ofs:%lld read size:%lld miscompare ofs: %lld",
+             ofs_abs, hreq, offset);
+      
+      VERB0("Miscompare expected data at offset %lld", dump_start);
+      hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 32);
+      VERB0("Miscompare actual data at offset %lld", dump_start);
+      hex_dump( rbuf + dump_start, 32);
     } else {
       VERB3("hio_element_read data check successful");
     }
