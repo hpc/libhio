@@ -8,7 +8,7 @@ noinst_LIBRARIES = libconfig_parser.a
 include_HEADERS = include/hio.h
 noinst_HEADERS = include/config_parser.h include/hio_internal.h \
 	include/hio_types.h include/hio_var.h include/hio_module.h \
-	include/hio_component.h
+	include/hio_component.h builtin-posix_component.h
 
 libhio_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS)
 libhio_la_LDFLAGS = $(LTLDFLAGS) $(XML_LIBS)
