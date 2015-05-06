@@ -101,7 +101,7 @@ static uint64_t hioi_string_to_int (const char *strval) {
 
   value = strtol (strval, &tmp, 0);
   if (tmp == strval) {
-    return 0;
+    return (uint64_t) -1;
   }
 
   if (*tmp) {
@@ -130,11 +130,31 @@ static int hioi_config_set_value_internal (hio_var_t *var, const char *strval) {
   }
 
   if (var->var_enum) {
-    for (int i = 0 ; i < var->var_enum->count ; ++i) {
-      if (0 == strcmp (var->var_enum->values[i].string_value, strval)) {
-        intval = var->var_enum->values[i].value;
-        break;
+    bool found = false;
+
+    if ((uint64_t) -1 == intval) {
+      for (int i = 0 ; i < var->var_enum->count ; ++i) {
+        if (0 == strcmp (var->var_enum->values[i].string_value, strval)) {
+          intval = var->var_enum->values[i].value;
+          found = true;
+          break;
+        }
       }
+    } else {
+      for (int i = 0 ; i < var->var_enum->count ; ++i) {
+        if (intval == var->var_enum->values[i].value) {
+          found = true;
+          break;
+        }
+      }
+    }
+
+    if (found) {
+      hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "Setting enumeration value to %llu", intval);
+    } else {
+      hioi_log (NULL, HIO_VERBOSE_WARN, "Invalid enumeration value provided for variable %s. Got %s",
+                var->var_name, strval);
+      return HIO_ERR_BAD_PARAM;
     }
   }
 
@@ -219,6 +239,8 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     snprintf (env_name, 256, "%sdataset_%s_%s_%s", hio_config_env_prefix, context->context_object.identifier,
               object->identifier, var->var_name);
 
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Looking for variable %s", env_name);
+
     string_value = getenv (env_name);
     if (NULL != string_value) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
@@ -227,6 +249,8 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     }
 
     snprintf (env_name, 256, "%sdataset_%s_%s", hio_config_env_prefix, object->identifier, var->var_name);
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Looking for variable %s", env_name);
 
     string_value = getenv (env_name);
     if (NULL != string_value) {
@@ -239,6 +263,8 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
   snprintf (env_name, 256, "%scontext_%s_%s", hio_config_env_prefix, context->context_object.identifier,
             var->var_name);
 
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Looking for variable %s", env_name);
+
   string_value = getenv (env_name);
   if (NULL != string_value) {
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
@@ -247,6 +273,8 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
   }
 
   snprintf (env_name, 256, "%s%s", hio_config_env_prefix, var->var_name);
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Looking for variable %s", env_name);
 
   string_value = getenv (env_name);
   if (NULL != string_value) {

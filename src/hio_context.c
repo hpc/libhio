@@ -339,5 +339,8 @@ hio_module_t *hioi_context_select_module (hio_context_t context) {
     context->context_current_module = 0;
   }
 
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Selected module %d with data root %s",
+            context->context_current_module, context->context_modules[context->context_current_module]->data_root);
+
   return context->context_modules[context->context_current_module];
 }

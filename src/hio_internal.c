@@ -313,3 +313,34 @@ uint64_t hioi_gettime (void) {
   gettimeofday (&tv, NULL);
   return 1000000 * tv.tv_sec + tv.tv_usec;
 }
+
+int hio_mkpath (const char *path, mode_t access_mode) {
+  char *sep, *tmp = strdup (path);
+  int rc;
+
+  if (NULL == tmp) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  sep = tmp;
+  for (sep = strchr (tmp, '/') ; sep ; sep = strchr (sep + 1, '/')) {
+    if (sep == tmp) {
+      continue;
+    }
+
+    *sep = '\0';
+    errno = 0;
+    rc = mkdir (tmp, access_mode);
+    if (0 != rc && (EEXIST != errno)) {
+      free (tmp);
+      return HIO_ERROR;
+    }
+
+    *sep = '/';
+  }
+
+  errno = 0;
+  rc = mkdir (tmp, access_mode);
+  free (tmp);
+  return (rc && errno != EEXIST) ? HIO_ERROR : HIO_SUCCESS;
+}

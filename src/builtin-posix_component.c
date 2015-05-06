@@ -44,26 +44,6 @@ static int builtin_posix_dataset_path (struct hio_module_t *module, char **path,
   return (0 > rc) ? hioi_err_errno (errno) : HIO_SUCCESS;
 }
 
-static int builtin_posix_mkdir (mode_t access_mode, const char *format, ...) {
-  char *path = NULL;
-  va_list args;
-  int rc;
-
-  va_start (args, format);
-
-  rc = vasprintf (&path, format, args);
-
-  va_end (args);
-
-  if (0 > rc) {
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
-  rc = mkdir (path, access_mode);
-  free (path);
-  return 0 > rc ? hioi_err_errno (errno) : HIO_SUCCESS;
-}
-
 static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset) {
   mode_t access_mode = posix_module->access_mode;
   hio_context_t context = posix_module->base.context;
@@ -73,25 +53,8 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
     return HIO_SUCCESS;
   }
 
-  rc = builtin_posix_mkdir (access_mode, "%s/%s.hio", posix_module->base.data_root, context->context_object.identifier);
-  if (HIO_SUCCESS != rc && EEXIST != errno) {
-    hio_err_push (hioi_err_errno (errno), context, NULL, "Error creating context directory: %s/%s.hio",
-                  posix_module->base.data_root, context->context_object.identifier);
-
-    return hioi_err_errno (errno);
-  }
-
-  rc = builtin_posix_mkdir (access_mode, "%s/%s.hio/%s", posix_module->base.data_root, context->context_object.identifier,
-                            posix_dataset->base.dataset_object.identifier);
-  if (HIO_SUCCESS != rc && EEXIST != errno) {
-    hio_err_push (hioi_err_errno (errno), context, NULL, "Error creating context directory: %s/%s.hio/%s",
-                  posix_module->base.data_root, context->context_object.identifier, posix_dataset->base.dataset_object.identifier);
-
-    return hioi_err_errno (errno);
-  }
-
-  rc = mkdir (posix_dataset->base_path, access_mode);
-  if (0 > rc) {
+  rc = hio_mkpath (posix_dataset->base_path, access_mode);
+  if (0 > rc || EEXIST == errno) {
     hio_err_push (hioi_err_errno (errno), context, NULL, "Error creating context directory: %s", posix_dataset->base_path);
 
     return hioi_err_errno (errno);
@@ -446,6 +409,7 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
                                               hio_element_t *element_out, const char *element_name,
                                               hio_flags_t flags) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
+  builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
   hio_context_t context = dataset->dataset_context;
   hio_element_t element;
 
@@ -497,13 +461,14 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
 
     /* it is not possible to get open with create without truncation using fopen so use a
      * combination of open and fdopen to get the desired effect */
-    fd = open (path, open_flags);
+    fd = open (path, open_flags, posix_module->access_mode);
+    fprintf (stderr, "**** open (%s, 0x%0x, 0%o) = %d (errno: %d)\n", path, open_flags, posix_module->access_mode, fd, errno);
     element->element_fh = fdopen (fd, file_mode);
 
     if (NULL == element->element_fh) {
       int hrc = hioi_err_errno (errno);
-      hio_err_push (hrc, dataset->dataset_context, &dataset->dataset_object, "Error opening element file %s",
-                    path);
+      hio_err_push (hrc, dataset->dataset_context, &dataset->dataset_object, "Error opening element file %s. "
+                    "Reason: %s", path, strerror(errno));
       free (path);
       hioi_element_release (element);
       return hrc;

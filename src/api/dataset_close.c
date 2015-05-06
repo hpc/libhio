@@ -19,6 +19,9 @@ int hio_dataset_close (hio_dataset_t *set) {
     return HIO_ERR_BAD_PARAM;
   }
 
+  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%llu",
+            (*set)->dataset_object.identifier, (*set)->dataset_id);
+
   rc = module->dataset_close (module, *set);
 
   hioi_dataset_release (set);

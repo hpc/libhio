@@ -41,7 +41,7 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
       rc = module->dataset_list (module, name, &set_ids, &num_set_ids);
       if (HIO_SUCCESS == rc) {
         for (int j = 0 ; j < num_set_ids ; ++j) {
-          if (set_ids[j] >= highest_id) {
+          if (set_ids[j] > highest_id) {
             highest_id = set_ids[j];
             best_module = module;
           }
@@ -66,6 +66,9 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
       return HIO_ERR_NOT_FOUND;
     }
   }
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%llu with flags 0x%x with backend module %p",
+            name, set_id, flags, module);
 
   /* Several things need to be done here:
    * 1) check if the user is requesting a specific dataset or the newest available,

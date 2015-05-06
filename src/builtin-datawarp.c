@@ -9,15 +9,17 @@
  * $HEADER$
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
 /* datawarp is just a posix+ interface */
 #include "builtin-posix_component.h"
 #include "hio_internal.h"
 #include <datawarp.h>
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
 
 typedef struct builtin_datawarp_module_t {
   hio_module_t base;
@@ -81,13 +83,60 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
 
   if (flags & HIO_FLAG_WRONLY) {
     hioi_config_add (context, &datawarp_dataset->base.dataset_object, &datawarp_dataset->stage_mode,
-                     "dataset_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
+                     "datawarp_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
                      "Datawarp stage mode to use with this dataset instance", 0);
   }
 
   *set_out = &datawarp_dataset->base;
 
   return HIO_SUCCESS;
+}
+
+/* remove once implemented in datawarp */
+static int temp_dw_stage_directory_out (const char *dataset_path, const char *pfs_path, int mode) {
+  DIR *dw_dir = opendir (dataset_path);
+  struct dirent *dw_entry;
+  int rc = 0;
+
+  if (NULL == dw_dir) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  while (NULL != (dw_entry = readdir (dw_dir))) {
+    char *dw_tmp, *pfs_tmp;
+    if ('.' == dw_entry->d_name[0]) {
+      continue;
+    }
+
+    rc = asprintf (&dw_tmp, "%s/%s", dataset_path, dw_entry->d_name);
+    if (0 > rc) {
+      break;
+    }
+
+    rc = asprintf (&pfs_tmp, "%s/%s", pfs_path, dw_entry->d_name);
+    if (0 > rc) {
+      free (dw_tmp);
+      break;
+    }
+
+    if (DT_DIR == dw_entry->d_type) {
+      mkdir (pfs_tmp);
+      rc = temp_dw_stage_directory_out (dw_tmp, pfs_tmp, mode);
+    } else {
+      rc = dw_stage_file_out (dw_tmp, pfs_tmp, mode);
+    }
+
+    free (dw_tmp);
+    free (pfs_tmp);
+
+    if (0 != rc) {
+      break;
+    }
+  }
+
+  closedir (dw_dir);
+  return rc;
 }
 
 static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, hio_dataset_t dataset) {
@@ -126,10 +175,17 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Staging datawarp directory %s to %s with mode %d",
               dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
-    rc = dw_stage_directory_out (dataset_path, pfs_path, datawarp_dataset->stage_mode);
-    free (dataset_path);
+    rc = hio_mkpath (pfs_path, datawarp_module->posix_module->access_mode);
+    if (HIO_SUCCESS != rc) {
+      free (dataset_path);
+      free (pfs_path);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    rc = temp_dw_stage_directory_out (dataset_path, pfs_path, datawarp_dataset->stage_mode);
     free (pfs_path);
     if (0 != rc) {
+      free (dataset_path);
       hio_err_push (HIO_ERROR, context, &dataset->dataset_object, "Error starting data stage. DWRC: %d", rc);
       return HIO_ERROR;
     }

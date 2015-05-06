@@ -136,4 +136,19 @@ int hioi_context_create_modules (hio_context_t context);
  */
 uint64_t hioi_gettime (void);
 
+/**
+ * Make the component directories of the specified path
+ *
+ * @param[in] path        path to make
+ * @param[in] access_mode permissions
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERROR on error
+ *
+ * Additional information on failures can be read from the
+ * errno global variable. See the man page for mkdir(2) for
+ * more information.
+ */
+int hio_mkpath (const char *path, mode_t access_mode);
+
 #endif /* !defined(HIO_INTERNAL_H) */
