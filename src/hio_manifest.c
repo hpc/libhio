@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include <libxml/parser.h>
 #include <libxml/xmlsave.h>
@@ -447,6 +448,14 @@ int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
 
   hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%lu from %s",
 	    dataset->dataset_object.identifier, dataset->dataset_id, path);
+
+  if (access (path, F_OK)) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  if (access (path, R_OK)) {
+    return HIO_ERR_PERM;
+  }
 
   xml_doc = xmlParseFile (path);
   if (NULL == xml_doc) {

@@ -19,6 +19,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h>
 
 typedef struct hio_error_stack_item_t {
   struct hio_error_stack_item_t *next;
