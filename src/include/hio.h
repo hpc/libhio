@@ -605,6 +605,19 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  * available. If the special value HIO_DATASET_ID_LAST is specified in {set_id} libhio
  * will attempt to open an existing dataset with the maximum id.
  *
+ * The flags should be an or'ed value consisting of any or none of the following:
+ *
+ *    HIO_FLAG_RDONLY          Open the file for read-only
+ *    HIO_FLAG_WRONLY          Open the file for write-only
+ *    HIO_FLAG_CREAT           Create the dataset if it does not already exist
+ *    HIO_FLAG_TRUNC           If the dataset exists unlink it and create an empty
+ *                             dataset
+ *
+ * @note libhio does not currently support opening a dataset for updating or both
+ *       read and write. If the caller attempts to open an existing dataset for
+ *       write without specifying HIO_FLAG_TRUNC an error will be returned. Future
+ *       releases of libhio may not have these restrictions.
+ *
  * libhio does not currently support opening an existing dataset, id pair with
  * a different mode than it was created with.
  */
