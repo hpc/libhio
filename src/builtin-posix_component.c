@@ -462,7 +462,6 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
     /* it is not possible to get open with create without truncation using fopen so use a
      * combination of open and fdopen to get the desired effect */
     fd = open (path, open_flags, posix_module->access_mode);
-    fprintf (stderr, "**** open (%s, 0x%0x, 0%o) = %d (errno: %d)\n", path, open_flags, posix_module->access_mode, fd, errno);
     element->element_fh = fdopen (fd, file_mode);
 
     if (NULL == element->element_fh) {
