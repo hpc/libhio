@@ -146,9 +146,9 @@ char * help =
   "\n"
   "  Numbers can be specified with suffixes k, ki, M, Mi, G, Gi, etc.\n"
   "\n"
-  "  Comments are delimited with /@ and @/, however those must stand alone in the \n"
+  "  Comments are delimited with /@, /@@ and @/, however those must stand alone in the \n"
   "  actions as separate tokens.  Also, /@ is only recognized if it is the first\n"
-  "  token of an action.  Comments may be nested.\n"
+  "  token of an action. Comments starting with /@@ are printed. Comments may be nested.\n"
   "\n"
   "\n"
   "  Example action sequences:\n"
@@ -1454,6 +1454,11 @@ ACTION_RUN(hgv_run) {
 
 #endif
 
+// Special action runner for printing out /@@ comments
+ACTION_RUN(cmsg_run) {
+  VERB1("%s", V0.s);
+}
+
 //----------------------------------------------------------------------------
 // k, x (signal, exit) action handlers
 //----------------------------------------------------------------------------
@@ -1571,15 +1576,31 @@ void parse_action() {
   #endif
 
   int comment_depth=0;
+  char * comment_msg = NULL;
 
   while ( ++t < tokc ) {
     if (0 == strcmp(tokv[t], "/@")) {
       comment_depth++;
       DBG3("comment start: tokv[%d]: %s depth: %d", t, tokv[t], comment_depth);
+    } else if (0 == strcmp(tokv[t], "/@@")) {
+      comment_depth++;
+      comment_msg = STRDUPX("***");
+      DBG3("comment start: tokv[%d]: %s depth: %d", t, tokv[t], comment_depth);
     } else if (0 == strcmp(tokv[t], "@/")) {
       comment_depth = MAX(0, comment_depth - 1); 
       DBG3("comment end: tokv[%d]: %s depth: %d", t, tokv[t], comment_depth);
+      if (comment_msg) {
+        nact.tokn = t;
+        nact.actn = actc;
+        nact.action = tokv[t];
+        nact.desc = ALLOC_PRINTF("action %d: /@@ %s", actc+1, comment_msg);
+        nact.runner = cmsg_run;
+        nact.v[0].s = comment_msg;
+        add2actv(&nact);
+        comment_msg = NULL;
+      }        
     } else if (comment_depth > 0) {
+      if (comment_msg) comment_msg = STRCATRX(STRCATRX(comment_msg, " "), tokv[t]); 
       DBG3("Token in comment skipped: tokv[%d]: %s depth: %d", t, tokv[t], comment_depth);
     } else {
       for (i = 0; i < DIM1(parse); ++i) { // loop over parse table

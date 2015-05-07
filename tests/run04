@@ -1,56 +1,46 @@
 #! /bin/bash
 . ./run_setup
 
-# Invalid parameter test case 
+# Invalid parameter test cases 
 # Much more needed 
 
 fails="
   name run04w v $verb_lev d $debug_lev mi 0
-  /@ HDO without prior init @/
+  /@@ HDO without prior init @/
     hxrc ERR_BAD_PARAM 
     hdo NT1_DS 98 WRONLY,CREAT SHARED
-  /@ HI file name @/
+
+  /@@ HI, HDO CREAT in non-writable context directory @/
     hi MY_CTX POSIX:/does_not_exist 
-    hxrc ERR_NOT_FOUND 
+    hxrc ERR_PERM 
     hdo NTN_DS 97 WRONLY,CREAT UNIQUE 
-  /@ HI bad prefix @/
+    hf
+
+  /@@ HI, HDO RDONLY in non-existant context directory @/
+    hi MY_CTX POSIX:/does_not_exist 
+    hxrc ERR_NOT_FOUND
+    hdo NTN_DS 97 RDONLY UNIQUE 
+    hf
+
+  /@@ HI, HDO invalid data root prefix @/
     hi MY_CTX WIERD_FS:/$root 
     hxrc ERR_NOT_FOUND 
     hdo NTN_DS 97 WRONLY,CREAT UNIQUE 
-  /@ HEO without hdo @/
+    hf
+
+  /@@ HEO without HDO @/
     hxrc ERR_BAD_PARAM 
-    heo MY_EL WRONLY,CREAT,TRUNC 20Mi        
-  /@ HDO RDONLY missing DS @/
+    heo MY_EL WRONLY,CREAT,TRUNC 20Mi
+
+  /@@ HI, HDO RDONLY non-existant DS ID  @/
     hi MY_CTX POSIX:$root 
     hxrc ERR_NOT_FOUND 
-    hdo NTN_DS 97 RDONLY UNIQUE 
+    hdo NTN_DS 97 RDONLY UNIQUE
+    hf
+
   mf
-"
-
-cmdw="
-  name run02w v $verb_lev d $debug_lev mi 0
-  hi MY_CTX POSIX:$root 
-  hdo NTN_DS 97 WRONLY,CREAT UNIQUE 
-  heo MY_EL WRONLY,CREAT,TRUNC 20Mi        
-  lc $nblk
-    hew -$blk $blk 
-  le 
-  hec hdc hf mf
-"
-
-cmdr="
-  name run02r v $verb_lev d $debug_lev mi 0
-  hi MY_CTX POSIX:$root 
-  hdo NTN_DS 97 RDONLY UNIQUE 
-  heo MY_EL RDONLY 20Mi 
-  hck on
-  lc $nblk
-    her -$blk $blk 
-  le 
-  hec hdc hf mf
 "
 
 set -x
 clean_root
 myrun ./xexec2.x $fails
-#myrun ./xexec2.x $cmdr
