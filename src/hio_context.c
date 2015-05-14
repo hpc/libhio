@@ -59,6 +59,8 @@ static hio_context_t hio_context_alloc (const char *identifier) {
 
   pthread_mutex_init (&new_context->context_lock, NULL);
 
+  hioi_list_init (new_context->context_dataset_data);
+
   return new_context;
 }
 
@@ -66,6 +68,7 @@ static hio_context_t hio_context_alloc (const char *identifier) {
  * Release all resources associated with a context
  */
 static void hio_context_release (hio_context_t *contextp) {
+  hio_dataset_data_t *ds_data, *next;
   hio_context_t context = *contextp;
 
   /* clean up the context mutex */
@@ -119,6 +122,14 @@ static void hio_context_release (hio_context_t *contextp) {
 
   if (context->context_data_roots) {
     free (context->context_data_roots);
+  }
+
+  /* clean up dataset data structures */
+  hioi_list_foreach_safe(ds_data, next, context->context_dataset_data, hio_dataset_data_t, dd_list) {
+    hioi_list_remove(ds_data, dd_list);
+
+    free ((void *) ds_data->dd_name);
+    free (ds_data);
   }
 
   free (context);

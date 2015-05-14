@@ -1042,6 +1042,7 @@ int hio_wait (hio_request_t *request, ssize_t *bytes_transferred);
  * @brief Get recommendation on if a checkpoint should be written
  *
  * @param[in]  ctx  hio context
+ * @param[in]  name Dataset name
  * @param[out] hint Recommendation on checkpoint
  *
  * This function determines if it is optimal to checkpoint at
@@ -1053,7 +1054,7 @@ int hio_wait (hio_request_t *request, ssize_t *bytes_transferred);
  * is HIO_SCP_MUST_CHECKPOINT it is strongly recommended that the application
  * checkpoint now.
  */
-void hio_should_checkpoint (hio_context_t ctx, int *hint);
+void hio_dataset_should_checkpoint (hio_context_t ctx, const char *name, int *hint);
 
 /**
  * @ingroup configuration

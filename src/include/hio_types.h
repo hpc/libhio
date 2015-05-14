@@ -139,7 +139,40 @@ struct hio_context_t {
   /** path to datawarp root */
   char                *context_datawarp_root;
 #endif
+
+  hio_list_t           context_dataset_data;
 };
+
+struct hio_dataset_data_t {
+  /** dataset data list */
+  hio_list_t  dd_list;
+
+  /** name of this dataset */
+  const char *dd_name;
+
+  /** last complete dataset id */
+  int64_t     dd_last_id;
+
+  /** last time a write completed */
+  time_t      dd_last_write_completion;
+
+  /** weighted average write time for a member of this dataset */
+  uint64_t    dd_average_write_time;
+
+  /** average dataset size */
+  size_t      dd_average_size;
+
+  hio_list_t  dd_backend_data;
+};
+typedef struct hio_dataset_data_t hio_dataset_data_t;
+
+struct hio_dataset_backend_data_t {
+  hio_list_t  dbd_list;
+
+  const char *dbd_backend_name;
+};
+typedef struct hio_dataset_backend_data_t hio_dataset_backend_data_t;
+
 
 typedef enum hio_dataset_file_mode {
   HIO_FILE_MODE_BASIC,
@@ -180,6 +213,9 @@ struct hio_dataset_t {
 
   /** aggregate write time */
   uint64_t            dataset_write_time;
+
+  /** data associated with this dataset */
+  hio_dataset_data_t *dataset_data;
 };
 
 struct hio_request_t {
@@ -220,8 +256,6 @@ struct hio_element_t {
   FILE               *element_fh;
 };
 
-/* context functions */
-
 /**
  * Allocate a new dataset object and populate it with common data (internal)
  *
@@ -259,6 +293,25 @@ void hioi_dataset_release (hio_dataset_t *set);
  * @param[in] element   element structure to add
  */
 void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element);
+
+/* context dataset persistent data functions */
+
+/**
+ * Allocate new and store backend data structure
+ *
+ * @param[in] data         dataset persistent data structure
+ * @param[in] backend_name name of the requesting backend
+ * @param[in] size         size of backend data structure
+ */
+hio_dataset_backend_data_t *hioi_dbd_alloc (hio_dataset_data_t *data, const char *backend_name, size_t size);
+
+/**
+ * Retrieve stored backend data
+ *
+ * @param[in] data         dataset persistent data structure
+ * @param[in] backend_name name of the requesting backend
+ */
+hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *data, const char *backend_name);
 
 /* element functions */
 

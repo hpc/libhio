@@ -58,10 +58,43 @@ void hioi_element_release (hio_element_t element) {
   }
 }
 
+static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data) {
+  hio_dataset_data_t *ds_data;
+
+  pthread_mutex_lock (&context->context_lock);
+  hioi_list_foreach (ds_data, context->context_dataset_data, hio_dataset_data_t, dd_list) {
+    if (0 == strcmp (ds_data->dd_name, name)) {
+      pthread_mutex_unlock (&context->context_lock);
+      *data = ds_data;
+      return HIO_SUCCESS;
+    }
+  }
+
+  ds_data = (hio_dataset_data_t *) calloc (1, sizeof (*ds_data));
+  if (NULL == ds_data) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  ds_data->dd_name = strdup (name);
+  if (NULL == ds_data->dd_name) {
+    free (ds_data);
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  ds_data->dd_last_id = -1;
+
+  hioi_list_init (ds_data->dd_backend_data);
+
+  *data = ds_data;
+
+  return HIO_SUCCESS;
+}
+
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
                                   hio_flags_t flags, hio_dataset_mode_t mode,
                                   size_t dataset_size) {
   hio_dataset_t new_dataset;
+  int rc;
 
   assert (dataset_size >= sizeof (*new_dataset));
 
@@ -78,6 +111,13 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   }
 
   new_dataset->dataset_object.type = HIO_OBJECT_TYPE_DATASET;
+
+  rc = hioi_dataset_data_lookup (context, name, &new_dataset->dataset_data);
+  if (HIO_SUCCESS != rc) {
+    free (new_dataset->dataset_object.identifier);
+    free (new_dataset);
+    return NULL;
+  }
 
   new_dataset->dataset_id = id;
   new_dataset->dataset_flags = flags;
@@ -158,4 +198,44 @@ int hioi_element_add_segment (hio_element_t element, off_t file_offset, uint64_t
   hioi_list_append (segment, element->element_segment_list, segment_list);
 
   return HIO_SUCCESS;
+}
+
+hio_dataset_backend_data_t *hioi_dbd_alloc (hio_dataset_data_t *data, const char *backend_name, size_t size) {
+  hio_dataset_backend_data_t *new_backend_data;
+  int rc;
+
+  assert (size >= sizeof (*new_backend_data));
+
+  new_backend_data = calloc (1, size);
+  if (NULL == new_backend_data) {
+    return NULL;
+  }
+
+  new_backend_data->dbd_backend_name = strdup (backend_name);
+  if (NULL == new_backend_data->dbd_backend_name) {
+    free (new_backend_data);
+    return NULL;
+  }
+
+  hioi_list_append (new_backend_data, data->dd_backend_data, dbd_list);
+
+  return new_backend_data;
+}
+
+/**
+ * Reteive stored backend data
+ *
+ * @param[in] data         dataset persistent data structure
+ * @param[in] backend_name name of the requesting backend
+ */
+hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *data, const char *backend_name) {
+  hio_dataset_backend_data_t *dbd_data;
+
+  hioi_list_foreach (dbd_data, data->dd_backend_data, hio_dataset_backend_data_t, dbd_list) {
+    if (0 == strcmp (dbd_data->dbd_backend_name, backend_name)) {
+      return dbd_data;
+    }
+  }
+
+  return NULL;
 }
