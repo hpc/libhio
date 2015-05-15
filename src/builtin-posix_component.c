@@ -53,9 +53,13 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
     return HIO_SUCCESS;
   }
 
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "creating dataset directory @ %s", posix_dataset->base_path);
+
   rc = hio_mkpath (posix_dataset->base_path, access_mode);
   if (0 > rc || EEXIST == errno) {
-    hio_err_push (hioi_err_errno (errno), context, NULL, "Error creating context directory: %s", posix_dataset->base_path);
+    if (EEXIST != errno) {
+      hio_err_push (hioi_err_errno (errno), context, NULL, "Error creating context directory: %s", posix_dataset->base_path);
+    }
 
     return hioi_err_errno (errno);
   }
@@ -128,8 +132,8 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   int rc = HIO_SUCCESS;
   char *path = NULL;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-posix/dataset_open: opening dataset %s:%lu",
-	    name, (unsigned long) set_id);
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-posix/dataset_open: opening dataset %s:%lu mpi: %d",
+	    name, (unsigned long) set_id, hioi_context_using_mpi (context));
 
   posix_dataset = (builtin_posix_module_dataset_t *)
     hioi_dataset_alloc (context, name, set_id, flags, mode,
@@ -205,7 +209,6 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   if ((flags & HIO_FLAG_CREAT) && (HIO_SUCCESS == rc)) {
     rc = builtin_posix_create_dataset_dirs (posix_module, posix_dataset);
   }
-
 
 #if HIO_USE_MPI
   /* need to barrier here to ensure directories are created before we try to open

@@ -331,10 +331,18 @@ int hio_mkpath (const char *path, mode_t access_mode) {
 
     *sep = '\0';
     errno = 0;
-    rc = mkdir (tmp, access_mode);
-    if (0 != rc && (EEXIST != errno)) {
-      free (tmp);
-      return HIO_ERROR;
+
+    hioi_log (NULL, HIO_VERBOSE_DEBUG_MED, "creating directory %s", tmp);
+
+    if (access (tmp, F_OK)) {
+      rc = mkdir (tmp, access_mode);
+      if (0 != rc && (EEXIST != errno)) {
+        hioi_log (NULL, HIO_VERBOSE_WARN, "could not create directory %s. errno: %d", tmp, errno);
+        free (tmp);
+        return HIO_ERROR;
+      }
+    } else {
+      errno = EEXIST;
     }
 
     *sep = '/';
