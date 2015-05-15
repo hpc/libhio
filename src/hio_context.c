@@ -126,7 +126,16 @@ static void hio_context_release (hio_context_t *contextp) {
 
   /* clean up dataset data structures */
   hioi_list_foreach_safe(ds_data, next, context->context_dataset_data, hio_dataset_data_t, dd_list) {
+    hio_dataset_backend_data_t *db_data, *db_next;
+
     hioi_list_remove(ds_data, dd_list);
+
+    /* clean up backend data */
+    hioi_list_foreach_safe(db_data, db_next, ds_data->dd_backend_data, hio_dataset_backend_data_t, dbd_list) {
+      hioi_list_remove(db_data, dbd_list);
+      free ((void *) db_data->dbd_backend_name);
+      free (db_data);
+    }
 
     free ((void *) ds_data->dd_name);
     free (ds_data);

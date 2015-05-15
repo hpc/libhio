@@ -66,6 +66,8 @@ void hioi_log (hio_context_t context, int level, char *format, ...) {
 
 int hioi_err_errno (int err) {
   switch (err) {
+  case 0:
+    return HIO_SUCCESS;
   case EPERM:
   case EACCES:
     return HIO_ERR_PERM;

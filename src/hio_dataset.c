@@ -61,6 +61,7 @@ void hioi_element_release (hio_element_t element) {
 static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data) {
   hio_dataset_data_t *ds_data;
 
+  /* look for existing persistent data */
   pthread_mutex_lock (&context->context_lock);
   hioi_list_foreach (ds_data, context->context_dataset_data, hio_dataset_data_t, dd_list) {
     if (0 == strcmp (ds_data->dd_name, name)) {
@@ -70,6 +71,7 @@ static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hi
     }
   }
 
+  /* allocate new persistent dataset data and add it to the context */
   ds_data = (hio_dataset_data_t *) calloc (1, sizeof (*ds_data));
   if (NULL == ds_data) {
     return HIO_ERR_OUT_OF_RESOURCE;
@@ -85,7 +87,10 @@ static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hi
 
   hioi_list_init (ds_data->dd_backend_data);
 
+  hioi_list_append (ds_data, context->context_dataset_data, dd_list);
+
   *data = ds_data;
+  pthread_mutex_unlock (&context->context_lock);
 
   return HIO_SUCCESS;
 }
@@ -96,14 +101,24 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hio_dataset_t new_dataset;
   int rc;
 
+  /* bozo check for invalid dataset object size */
   assert (dataset_size >= sizeof (*new_dataset));
 
+  /* allocate new dataset object */
   new_dataset = calloc (1, dataset_size);
   if (NULL == new_dataset) {
     return NULL;
   }
 
-  /* initialize dataset members */
+  /* lookup/allocate persistent dataset data. this data will keep track of per-dataset
+   * statistics (average write time, last successfull checkpoint, etc) */
+  rc = hioi_dataset_data_lookup (context, name, &new_dataset->dataset_data);
+  if (HIO_SUCCESS != rc) {
+    free (new_dataset);
+    return NULL;
+  }
+
+  /* initialize new dataset object */
   new_dataset->dataset_object.identifier = strdup (name);
   if (NULL == new_dataset->dataset_object.identifier) {
     free (new_dataset);
@@ -111,14 +126,6 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   }
 
   new_dataset->dataset_object.type = HIO_OBJECT_TYPE_DATASET;
-
-  rc = hioi_dataset_data_lookup (context, name, &new_dataset->dataset_data);
-  if (HIO_SUCCESS != rc) {
-    free (new_dataset->dataset_object.identifier);
-    free (new_dataset);
-    return NULL;
-  }
-
   new_dataset->dataset_id = id;
   new_dataset->dataset_flags = flags;
   new_dataset->dataset_mode = mode;
@@ -128,6 +135,14 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_config_add (context, &new_dataset->dataset_object, &new_dataset->dataset_file_mode,
                    "dataset_file_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
                    "Modes for writing dataset files. Valid values: (0: basic, 1: optimized)", 0);
+
+  /* set up performance variables */
+  hioi_perf_add (context, &new_dataset->dataset_object, &new_dataset->dataset_bytes_read, "total_bytes_read",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset instance", 0);
+
+  hioi_perf_add (context, &new_dataset->dataset_object, &new_dataset->dataset_bytes_written, "total_bytes_written",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
+
 
   hioi_list_init (new_dataset->dataset_element_list);
 

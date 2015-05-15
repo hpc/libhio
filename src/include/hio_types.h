@@ -37,10 +37,10 @@ typedef struct hio_list_t {
   for (item = hioi_list_item((head).next, type, member) ; &(item)->member != &(head) ; \
        item = hioi_list_item((item)->member.next, type, member))
 
-#define hioi_list_foreach_safe(item, next, head, type, member)          \
-  for (item = hioi_list_item((head).next, type, member), next = hioi_list_item((item)->member.next, type, member) ; \
+#define hioi_list_foreach_safe(item, next_item, head, type, member)          \
+  for (item = hioi_list_item((head).next, type, member), next_item = hioi_list_item((item)->member.next, type, member) ; \
        &(item)->member != &(head) ;                                     \
-       item = next, next = hioi_list_item((item)->member.next, type, member))
+       item = next_item, next_item = hioi_list_item((item)->member.next, type, member))
 
 #define hioi_list_remove(item, member)                        \
   do {                                                        \
@@ -208,20 +208,28 @@ struct hio_dataset_t {
   /** open time */
   struct timeval      dataset_open_time;
 
+  /** aggregate number of bytes read */
+  uint64_t            dataset_bytes_read;
   /** aggregate read time */
   uint64_t            dataset_read_time;
 
+  /** aggregate number of bytes written */
+  uint64_t            dataset_bytes_written;
   /** aggregate write time */
   uint64_t            dataset_write_time;
 
   /** data associated with this dataset */
   hio_dataset_data_t *dataset_data;
+
+  /** dataset status */
+  int                 dataset_status;
 };
 
 struct hio_request_t {
   struct hio_object_t request_object;
   bool         request_complete;
   size_t       request_transferred;
+  int          request_status;
 };
 
 typedef struct hio_manifest_segment_t {

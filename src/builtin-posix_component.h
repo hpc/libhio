@@ -26,8 +26,6 @@ typedef struct builtin_posix_module_dataset_t {
   struct hio_dataset_t base;
   pthread_mutex_t      lock;
   FILE                *fh;
-  uint64_t             bytes_read;
-  uint64_t             bytes_written;
   char                *base_path;
 } builtin_posix_module_dataset_t;
 

@@ -273,13 +273,6 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
   *set_out = &posix_dataset->base;
 
-  /* set up performance variables */
-  hioi_perf_add (context, &posix_dataset->base.dataset_object, &posix_dataset->bytes_read, "total_bytes_read",
-                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset instance", 0);
-
-  hioi_perf_add (context, &posix_dataset->base.dataset_object, &posix_dataset->bytes_written, "total_bytes_written",
-                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
-
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Successfully created posix dataset %s:%llu on data root %s",
             name, set_id, module->data_root);
 
@@ -334,40 +327,10 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
   }
 #endif
 
-  if (context->context_print_statistics) {
-    double speed, aggregate_time;
-    printf ("Dataset %s:%llu statistics:\n", dataset->dataset_object.identifier, dataset->dataset_id);
-
-    if (posix_dataset->bytes_read) {
-      aggregate_time = (double) dataset->dataset_read_time;
-      speed = ((double) posix_dataset->bytes_read) / aggregate_time;
-    } else {
-      speed = 0.0;
-      aggregate_time = 0.0;
-    }
-
-    printf ("  Bytes read: %" PRIu64 " in %llu usec (%1.2f MB/sec)\n", posix_dataset->bytes_read,
-            dataset->dataset_read_time, speed);
-
-    if (posix_dataset->bytes_written) {
-      aggregate_time = (double) dataset->dataset_write_time;
-      speed = ((double) posix_dataset->bytes_written) / aggregate_time;
-    } else {
-      speed = 0.0;
-      aggregate_time = 0.0;
-    }
-
-    printf ("  Bytes written: %" PRIu64 " in %llu usec (%1.2f MB/sec)\n", posix_dataset->bytes_written,
-            dataset->dataset_write_time, speed);
-  }
-
   if (posix_dataset->base_path) {
     free (posix_dataset->base_path);
     posix_dataset->base_path = NULL;
   }
-
-  context->context_bytes_read = posix_dataset->bytes_read;
-  context->context_bytes_written = posix_dataset->bytes_written;
 
   pthread_mutex_destroy (&posix_dataset->lock);
 
@@ -520,20 +483,25 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
 
   hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Writing %lu bytes to file offset %lu (%lu)", count * size, file_offset, ftell (fh));
 
+  errno = 0;
   if (0 < stride) {
     items_written = 0;
 
     for (int i = 0 ; i < count ; ++i) {
-      items_written += fwrite (ptr, size, 1, fh);
+      size_t ret = fwrite (ptr, size, 1, fh);
+      items_written += ret;
+      if (ret != size) {
+        break;
+      }
       ptr = (void *)((intptr_t) ptr + size + stride);
     }
   } else {
     items_written = fwrite (ptr, size, count, fh);
   }
 
-  hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Finished write. bytes written: %lu, file offset is now %lu", items_written * size, ftell (fh));
+  posix_dataset->base.dataset_status = hioi_err_errno (errno);
 
-  posix_dataset->bytes_written += items_written * size;
+  hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Finished write. bytes written: %lu, file offset is now %lu", items_written * size, ftell (fh));
 
   if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
     hioi_element_add_segment (element, file_offset, offset, 0, size * count);
@@ -548,14 +516,16 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
     }
 
     *request = new_request;
-    new_request->request_transferred = items_written * size;;
+    new_request->request_transferred = items_written * size;
     new_request->request_complete = true;
+    new_request->request_status = posix_dataset->base.dataset_status;
   }
 
   stop = hioi_gettime ();
+  posix_dataset->base.dataset_bytes_written += items_written * size;
   posix_dataset->base.dataset_write_time += stop - start;
 
-  return HIO_SUCCESS;
+  return posix_dataset->base.dataset_status;
 }
 
 static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *module, hio_element_t element,
@@ -623,7 +593,7 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
 
     pthread_mutex_unlock (&posix_dataset->lock);
 
-    posix_dataset->bytes_read += bytes_read;
+    posix_dataset->base.dataset_bytes_read += bytes_read;
 
     if (0 == bytes_read) {
       rc = hioi_err_errno (errno);

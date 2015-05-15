@@ -21,6 +21,8 @@
 #include <dirent.h>
 #include <errno.h>
 
+#include <sys/stat.h>
+
 typedef struct builtin_datawarp_module_t {
   hio_module_t base;
   char *pfs_path;
@@ -99,7 +101,7 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
 }
 
 /* remove once implemented in datawarp */
-static int temp_dw_stage_directory_out (const char *dataset_path, const char *pfs_path, int mode) {
+static int temp_dw_stage_directory_out (const char *dataset_path, const char *pfs_path, mode_t pfs_mode, int mode) {
   DIR *dw_dir = opendir (dataset_path);
   struct dirent *dw_entry;
   int rc = 0;
@@ -120,7 +122,7 @@ static int temp_dw_stage_directory_out (const char *dataset_path, const char *pf
       break;
     }
 
-    if (REVOKE_STAGE_AT_JOB_END != mode) {
+    if (DW_REVOKE_STAGE_AT_JOB_END != mode) {
       rc = asprintf (&pfs_tmp, "%s/%s", pfs_path, dw_entry->d_name);
       if (0 > rc) {
         free (dw_tmp);
@@ -129,15 +131,18 @@ static int temp_dw_stage_directory_out (const char *dataset_path, const char *pf
     }
 
     if (DT_DIR == dw_entry->d_type) {
-      mkdir (pfs_tmp);
-      rc = temp_dw_stage_directory_out (dw_tmp, pfs_tmp, mode);
+      if (DW_REVOKE_STAGE_AT_JOB_END != mode) {
+        mkdir (pfs_tmp, pfs_mode);
+      }
+
+      rc = temp_dw_stage_directory_out (dw_tmp, pfs_tmp, pfs_mode, mode);
     } else {
       rc = dw_stage_file_out (dw_tmp, pfs_tmp, mode);
     }
 
     free (dw_tmp);
 
-    if (REVOKE_STAGE_AT_JOB_END != mode) {
+    if (DW_REVOKE_STAGE_AT_JOB_END != mode) {
       free (pfs_tmp);
     }
 
@@ -155,6 +160,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
   builtin_posix_module_dataset_t *posix_dataset = datawarp_dataset->posix_dataset;
+  mode_t pfs_mode = posix_module->access_mode;
   hio_context_t context = module->context;
   char *dataset_path = NULL;
   int rc;
@@ -193,7 +199,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    rc = temp_dw_stage_directory_out (dataset_path, pfs_path, datawarp_dataset->stage_mode);
+    rc = temp_dw_stage_directory_out (dataset_path, pfs_path, pfs_mode, datawarp_dataset->stage_mode);
     free (pfs_path);
     free (dataset_path);
     if (0 != rc) {
@@ -201,12 +207,12 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       return HIO_ERROR;
     }
 
-    if (STAGE_AT_JOB_END == datawarp_dataset->stage_mode) {
+    if (DW_STAGE_AT_JOB_END == datawarp_dataset->stage_mode) {
       builtin_datawarp_dataset_backend_data_t *ds_data;
 
-      ds_data = hioi_dsd_lookup_backend_data (dataset->dataset_data, "datawarp");
+      ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (dataset->dataset_data, "datawarp");
       if (NULL == ds_data) {
-        ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dsd_alloc (ds_data, "datawarp",
+        ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_alloc (dataset->dataset_data, "datawarp",
                                                                               sizeof (*ds_data));
         if (NULL == ds_data) {
           return HIO_ERR_OUT_OF_RESOURCE;
@@ -216,14 +222,14 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         return HIO_SUCCESS;
       }
 
-      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", datawarp_module->data_root, context->context_object.identifier,
+      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", module->data_root, context->context_object.identifier,
                      dataset->dataset_object.identifier, ds_data->last_scheduled_stage_id);
       if (0 > rc) {
         return HIO_ERR_OUT_OF_RESOURCE;
       }
 
       /* revoke the end of job stage for the previous dataset */
-      rc = temp_dw_stage_directory_out (dataset_path, NULL, REVOKE_STAGE_AT_JOB_END);
+      rc = temp_dw_stage_directory_out (dataset_path, NULL, 0, DW_REVOKE_STAGE_AT_JOB_END);
       free (dataset_path);
       if (0 != rc) {
         return HIO_ERROR;
@@ -231,7 +237,8 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
       ds_data->last_scheduled_stage_id = dataset->dataset_id;
 
-      (void) posix_module->dataset_unlink (posix_module, dataset->dataset_object.identifier, ds_data->last_scheduled_stage_id);
+      (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->dataset_object.identifier,
+                                                ds_data->last_scheduled_stage_id);
     }
   }
 
