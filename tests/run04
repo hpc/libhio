@@ -5,7 +5,7 @@
 # Much more needed 
 
 fails="
-  name run04w v $verb_lev d $debug_lev mi 0
+  name run04w v $verbose_lev d $debug_lev mi 0
   /@@ HDO without prior init @/
     hxrc ERR_BAD_PARAM 
     hdo NT1_DS 98 WRONLY,CREAT SHARED
@@ -23,7 +23,7 @@ fails="
     hf
 
   /@@ HI, HDO invalid data root prefix @/
-    hi MY_CTX WIERD_FS:/$root 
+    hi MY_CTX WIERD:/does_not_exist 
     hxrc ERR_NOT_FOUND 
     hdo NTN_DS 97 WRONLY,CREAT UNIQUE 
     hf
@@ -33,7 +33,7 @@ fails="
     heo MY_EL WRONLY,CREAT,TRUNC 20Mi
 
   /@@ HI, HDO RDONLY non-existant DS ID  @/
-    hi MY_CTX POSIX:$root 
+    hi MY_CTX $HIO_TEST_ROOTS
     hxrc ERR_NOT_FOUND 
     hdo NTN_DS 97 RDONLY UNIQUE
     hf
@@ -41,6 +41,6 @@ fails="
   mf
 "
 
-set -x
-clean_root
-myrun ./xexec2.x $fails
+#set -x
+clean_roots $HIO_TEST_ROOTS
+myrun .libs/xexec2.x $fails

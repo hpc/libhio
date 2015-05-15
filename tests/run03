@@ -15,8 +15,8 @@ esac
 msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg" 
 
 cmdw="
-  name run03w v $verb_lev d $debug_lev mi 0
-  hi MY_CTX POSIX:$root
+  name run03w v $verbose_lev d $debug_lev mi 0
+  hi MY_CTX $HIO_TEST_ROOTS
   hdu NT1_DS 98 ALL 
   hdo NT1_DS 98 WRONLY,CREAT SHARED 
   heo MY_EL WRONLY,CREAT,TRUNC 20Mi        
@@ -30,8 +30,8 @@ cmdw="
 "
 
 cmdr="
-  name run03r v $verb_lev d $debug_lev mi 0
-  hi MY_CTX POSIX:$root 
+  name run03r v $verbose_lev d $debug_lev mi 0
+  hi MY_CTX $HIO_TEST_ROOTS 
   hdo NT1_DS 98 RDONLY SHARED 
   heo MY_EL RDONLY 20Mi 
   hck on
@@ -44,7 +44,7 @@ cmdr="
   hec hdc hf mf
 "
 
-set -x
-#clean_root
+#set -x
+clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $cmdw
 myrun .libs/xexec2.x $cmdr

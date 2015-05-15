@@ -157,13 +157,13 @@ rm -fR $tdir
 for v in $vers; do
   case $v in
     local    ) build_l;;
-    mu-gnu   ) build_r mu-fey "$rmt_dir/$v" $tarname  -l gcc   -l openmpi;;
-    mu-intel ) build_r mu-fey "$rmt_dir/$v" $tarname  -l intel -l openmpi;;
-    mu-pgi   ) build_r mu-fey "$rmt_dir/$v" $tarname  -l pgi   -l openmpi;;
-    ct-gnu   ) build_r ct-fe1 "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu;;
-    ct-intel ) build_r ct-fe1 "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel;;
-    ct-pgi   ) build_r ct-fe1 "$rmt_dir/$v" $tarname  ;;
-    ga-gnu   ) build_r iga-fe1"$rmt_dir/$v" $tarname  -s PrgEnv-cray PrgEnv-gnu -l craype-haswell -l cray-mpich;;
+    mu-gnu   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l gcc   -l openmpi;;
+    mu-intel ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l intel -l openmpi;;
+    mu-pgi   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l pgi   -l openmpi;;
+    ct-gnu   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu;;
+    ct-intel ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel;;
+    ct-pgi   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  ;;
+    ga-gnu   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu -l craype-haswell -l cray-mpich;;
   esac
 done
 

@@ -4,20 +4,20 @@
 #
 # Env vars used for input:
 #   HIO_BUILD - location of HIO build tree, defaults to $PWD/..
-#   HIO_ROOT  - location of data root directory for test, defaults to $PWD/.test_root1
 #
 # BASH variables set that can be used by test script:
 #        root - data root for test, created or emptied
 #        size - gross size of IO, per rank t|s|m|l|x
 #       ranks - number of MPI ranks
-#    verb_lev - xexec2 verbosity level
+#    verbose_lev - xexec2 verbosity level
 #   debug_lev - xexec2 debug level
+#   HIO_TEST_ROOT - if not set, will be set to default data root string  
 #
 # BASH functions that can be called by the test script:
-#   clean_root - creates or empties out data root
-#          cmd - logs and runs a command
-#          msg - logs a message
-#        myrun - issues mpirun or aprun command with -n specified 
+#   clean_roots - creates or empties out specified data roots
+#           cmd - logs and runs a command
+#           msg - logs a message
+#         myrun - issues mpirun or aprun command with -n specified 
 #
 # Change History: 
 #   20150501  cgw  Initial version
@@ -31,14 +31,14 @@ synexit() {
   echo "    $0"
   echo "        [-s <size>]]"
   echo "        [-n <num_ranks>]"
-  echo "        [-v <verb_level>]"
+  echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
   echo ""
   echo "  Options:"   
   echo "    -s <size>       Per rank run size t|s|m|l|x  (default s)"
   echo "    -n <num_ranks>  Number of MPI ranks.  Default is all allocated"
   echo "                    CPs or 2 on Mac OS"
-  echo "    -v <verb_lev>   Verbosity level for xexec2, default 1"
+  echo "    -v <verbose_lev>   Verbosity level for xexec2, default 1"
   echo "    -d <debug_lev>  Debug level for xexec2, default 0"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
@@ -48,7 +48,7 @@ synexit() {
 
 cmd() {
   echo "$host ---> $*"
-  eval $*             
+  eval "$*"             
 }
 
 msg() { 
@@ -59,7 +59,7 @@ msg() {
 # Parse arguments
 #----------------------------------------------------------------------------
 host=`hostname -s`
-verb_lev=1
+verbose_lev=1
 debug_lev=0
 
 # Platform specific defaults
@@ -86,7 +86,7 @@ while getopts "hs:n:v:d:" optname; do
     h ) synexit;;
     s ) size=$OPTARG;;
     n ) ranks=$OPTARG;;
-    v ) verb_lev=$OPTARG;;
+    v ) verbose_lev=$OPTARG;;
     d ) debug_lev=$OPTARG;;
    \? ) synexit "Error: invalid option";;
   esac
@@ -102,44 +102,106 @@ if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_
 elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
 else echo "run_setup: OSTYPE \"$OSTYPE\" not recognized"; exit; fi
 
-# Set data root and define function to create or clean out directory
-root=${HIO_ROOT:=$PWD/.test_root1}
-clean_root() {
-  if [ -e $root ]; then
-    if [ -d $root ]; then
-      if [ ! -w $root ]; then
-        echo "run_setup: Unable to write test root \"$root\""
-        exit
-      else
-        rm -fR $root/*
-      fi
-    else
-      echo "run_setup: Test root \"$root\" exists and is not a directory"
-      exit
-    fi
-  else
-    mkdir -p $root
-  fi
-}
-
-# function to invoke mpi on various platforms
-myrun() {
-  eval "$mympicmd -n $ranks $*"
-}
-
 # Load module environment recorded at build
 mod_script="hiobuild.modules.bash"
 if [[ -e $HIO_BUILD/$mod_script ]]; then . $HIO_BUILD/$mod_script; fi 
 
+#----------------------------------------------------------------------------
+# If HIO_TEST_ROOTS not set, set up default
+#----------------------------------------------------------------------------
+addifd() {
+  if [[ -d $1 ]]; then HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test"; fi
+}
+
+if [[ -z $HIO_TEST_ROOTS ]]; then
+  if [[ ${OSTYPE:0:6} == "darwin" ]]; then
+    HIO_TEST_ROOTS="posix:$PWD/.test_root1"
+  elif [[ ${HOSTNAME:0:3} == "ga-" ]]; then
+    HIO_TEST_ROOTS="DW"
+  fi;
+  addifd "/lscratch1/$LOGNAME"
+  addifd "/lscratch2/$LOGNAME"
+  addifd "/lscratch3/$LOGNAME"
+  addifd "/lscratch4/$LOGNAME"
+  addifd "/scratch1/users/$LOGNAME"
+  addifd "/lustre/scratch1/yellow/$LOGNAME"
+  if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
+fi
+
+#----------------------------------------------------------------------------
+# Clean data roots, i.e., create or empty them out 
+#----------------------------------------------------------------------------
+# Early DW Ph 1 - location of BB directory
+HIO_TEST_DW="/dwphase1/$LOGNAME"
+
+# This string contains the logic to check, empty or create a test data root
+# directory.  It needs to be executed on a compute node via aprun for datawarp.
+# It's also used for locally accessible directories for the sake of consistency.
+clean_cmd="
+  if [[ -z \$0 ]]; then
+    echo \"run_setup: zero length test root name0\"
+    exit
+  fi
+  if [ -e \$0 ]; then
+    if [ -d \$0 ]; then
+      if [ ! -w \$0 ]; then
+        echo \"run_setup: Unable to write to test root \$0\"
+        exit
+      else
+        echo \"---> rm -fR \$0/*\"
+        rm -fR \$0/*
+      fi
+    else
+      echo \"run_setup: Test root \$0 exists and is not a directory\"
+      exit
+    fi
+  else
+    echo \"---> mkdir -p \$0\"
+    mkdir -p \$0
+  fi
+"
+
+clean_roots() {
+  allroots=${1-HIO_TEST_ROOTS}
+  IFS=","; read -ra root <<< "$allroots"; unset IFS
+  for r in "${root[@]}"; do
+    echo "Cleaning: \"$r\""
+    if [[ "$r" == "DW" ]]; then
+      echo "===> aprun bash"
+      aprun -n 1 -b bash -c "$clean_cmd" $HIO_TEST_DW
+    elif [[ ${r:0:6} == "posix:" ]]; then
+      r=${r:6}
+      r=${r%"/"}
+      last=${r##*/}
+      if [[ $last == ${last/test} ]]; then
+        echo "Warning: skipping clean of non-test directory \"$r\""
+      else
+        bash -c "$clean_cmd" $r
+      fi
+    else 
+      echo "Error: data root \"$r\" type not recognized."
+      exit
+    fi 
+  done
+}
+
+
+
+
+# function to invoke mpi on various platforms
+myrun() {
+  cmd "$mympicmd -n $ranks $*"
+}
+
 # Display results of run_setup
-msg "run_setup:       PWD: \"$PWD\""
-msg "run_setup:     build: \"$build\""
-msg "run_setup:      libs: \"$libs\""
-msg "run_setup:      root: \"$root\""
-msg "run_setup:    mpicmd: \"$mympicmd\""
-msg "run_setup:      size: \"$size\""
-msg "run_setup:     ranks: $ranks"
-msg "run_setup:  verb_lev: $verb_lev"
-msg "run_setup: debug_lev: $debug_lev"
+msg "run_setup:            PWD: \"$PWD\""
+msg "run_setup:          build: \"$build\""
+msg "run_setup:           libs: \"$libs\""
+msg "run_setup: HIO_TEST_ROOTS: \"$HIO_TEST_ROOTS\""
+msg "run_setup:         mpicmd: \"$mympicmd\""
+msg "run_setup:           size: \"$size\""
+msg "run_setup:          ranks: $ranks"
+msg "run_setup:    verbose_lev: $verbose_lev"
+msg "run_setup:      debug_lev: $debug_lev"
 
 # --- end of run_setup ---
