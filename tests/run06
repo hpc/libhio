@@ -1,21 +1,21 @@
 #! /bin/bash
 . ./run_setup
 
-# Read and write N-1 test case with read data value checking.  
+# Read and write N-1 test case with irregular blocking and read data value checking.  
 
 case $size in
-  t ) blk=1k;   nblk=5;  segsz=5k;    nseg=2;;
-  s ) blk=20ki; nblk=8;  segsz=160ki; nseg=10;;
-  m ) blk=1Mi;  nblk=16; segsz=16Mi;  nseg=16;;
-  l ) blk=2Mi;  nblk=16; segsz=32Mi;  nseg=32;;
-  x ) blk=2Mi;  nblk=32; segsz=64Mi;  nseg=32;; 
+  t ) blk=1k;  nblk=5;  segsz=5k;   nseg=2;;
+  s ) blk=20k; nblk=7;  segsz=140k; nseg=11;;
+  m ) blk=1M;  nblk=15; segsz=15M;  nseg=17;;
+  l ) blk=2M;  nblk=15; segsz=30M;  nseg=33;;
+  x ) blk=2M;  nblk=31; segsz=62M;  nseg=33;; 
   * ) synexit "Error: invalid size $size";;
 esac
 
 msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg" 
 
 cmdw="
-  /@@ Write N-1 test case @/  
+  /@@ Write N-1 test case irregular blocking @/  
   name run03w v $verbose_lev d $debug_lev mi 0
   hi MY_CTX $HIO_TEST_ROOTS
   hdu NT1_DS 98 ALL 
@@ -31,7 +31,7 @@ cmdw="
 "
 
 cmdr="
-  /@@ Read N-1 test case with data checking @/  
+  /@@ Read N-1 test case with data checking irregular blocking @/  
   name run03r v $verbose_lev d $debug_lev mi 0
   hi MY_CTX $HIO_TEST_ROOTS 
   hdo NT1_DS 98 RDONLY SHARED 

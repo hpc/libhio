@@ -1672,7 +1672,7 @@ void parse_action() {
 void run_action() {
   int a = -1;
 
-  msg_context_set_verbose(MY_MSG_CTX, 0); 
+  msg_context_set_verbose(MY_MSG_CTX, 1); 
   msg_context_set_debug(MY_MSG_CTX, 0); 
 
   #ifdef DLFCN
@@ -1680,7 +1680,7 @@ void run_action() {
   #endif
 
   while ( ++a < actc ) {
-    DBG2("Running %s", actv[a].desc); 
+    VERB2("--- Running %s", actv[a].desc); 
     // Runner routine may modify variable a for looping
     if (actv[a].runner) actv[a].runner(&actv[a], &a);
     DBG3("Done %s; fails: %d qof: %d", actv[a].desc, fail_count, quit_on_fail);

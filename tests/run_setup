@@ -117,7 +117,7 @@ if [[ -z $HIO_TEST_ROOTS ]]; then
   if [[ ${OSTYPE:0:6} == "darwin" ]]; then
     HIO_TEST_ROOTS="posix:$PWD/.test_root1"
   elif [[ ${HOSTNAME:0:3} == "ga-" ]]; then
-    HIO_TEST_ROOTS="DW"
+    HIO_TEST_ROOTS="DataWarp"
   fi;
   addifd "/lscratch1/$LOGNAME"
   addifd "/lscratch2/$LOGNAME"
@@ -165,8 +165,9 @@ clean_roots() {
   allroots=${1-HIO_TEST_ROOTS}
   IFS=","; read -ra root <<< "$allroots"; unset IFS
   for r in "${root[@]}"; do
+    shopt -s nocasematch
     echo "Cleaning: \"$r\""
-    if [[ "$r" == "DW" ]]; then
+    if [[ "$r" == "dw" || "$r" == "datawarp" ]]; then
       echo "===> aprun bash"
       aprun -n 1 -b bash -c "$clean_cmd" $HIO_TEST_DW
     elif [[ ${r:0:6} == "posix:" ]]; then
@@ -182,6 +183,7 @@ clean_roots() {
       echo "Error: data root \"$r\" type not recognized."
       exit
     fi 
+    shopt -u nocasematch
   done
 }
 

@@ -188,7 +188,7 @@ int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name) {
 
 // Returns a pointer to a string containing the enum name. Not valid for multiple.
 char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
-  char * retval = "Invalid_Enum";
+  char * retval = "<Invalid_Enum>";
   if (etptr->multiple) ERRX("enum_name called for enum type multiple");
 
   // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
