@@ -181,7 +181,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     return rc;
   }
 
-  dataset_release ((hio_dataset_t *) &posix_dataset);
+  hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
 
   if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRONLY)) {
     char *pfs_path;
@@ -194,7 +194,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: staging datawarp dataset %s::%lld. "
-              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->dataset_object.idenfier,
+              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->dataset_object.identifier,
               dataset->dataset_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
     rc = hio_mkpath (pfs_path, datawarp_module->posix_module->access_mode);
@@ -209,11 +209,11 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     free (dataset_path);
     if (0 != rc) {
       hio_err_push (HIO_ERROR, context, &dataset->dataset_object, "builtin-datawarp/dataset_close: error starting "
-                    "data stage on dataset %s::%lld. DWRC: %d", dataset->dataset_object.idenfier, dataset->dataset_id, rc);
+                    "data stage on dataset %s::%lld. DWRC: %d", dataset->dataset_object.identifier, dataset->dataset_id, rc);
       return HIO_ERROR;
     }
 
-    if (DW_STAGE_AT_JOB_END == datawarp_dataset->stage_mode && ds_data->last_scheduled_stage_id != dataset->dataset_id) {
+    if (DW_STAGE_AT_JOB_END == datawarp_dataset->stage_mode) {
       builtin_datawarp_dataset_backend_data_t *ds_data;
 
       ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (dataset->dataset_data, "datawarp");
@@ -225,6 +225,10 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         }
 
         ds_data->last_scheduled_stage_id = dataset->dataset_id;
+        return HIO_SUCCESS;
+      }
+
+      if (ds_data->last_scheduled_stage_id == dataset->dataset_id) {
         return HIO_SUCCESS;
       }
 
