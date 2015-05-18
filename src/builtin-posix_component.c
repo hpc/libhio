@@ -468,6 +468,10 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
   long file_offset;
   FILE *fh;
 
+  if (!(posix_dataset->base.dataset_flags & HIO_FLAG_WRONLY)) {
+    return HIO_ERR_PERM;
+  }
+
   start = hioi_gettime ();
 
   pthread_mutex_lock (&posix_dataset->lock);
@@ -540,6 +544,10 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
   off_t file_offset;
   int rc = HIO_SUCCESS;
   FILE *fh;
+
+  if (!(posix_dataset->base.dataset_flags & HIO_FLAG_RDONLY)) {
+    return HIO_ERR_PERM;
+  }
 
   start = hioi_gettime ();
 

@@ -18,7 +18,7 @@ int main (int argc, char *argv[]) {
     exit (EXIT_FAILURE);
   }
 
-  rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRONLY | HIO_FLAG_CREAT,
+  rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRONLY | HIO_FLAG_CREAT | HIO_FLAG_TRUNC,
 			 HIO_SET_ELEMENT_SHARED);
   if (HIO_SUCCESS != rc) {
       if (HIO_ERR_EXISTS == rc) {
