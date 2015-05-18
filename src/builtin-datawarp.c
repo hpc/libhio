@@ -225,10 +225,12 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         }
 
         ds_data->last_scheduled_stage_id = dataset->dataset_id;
-        return HIO_SUCCESS;
       }
 
       if (ds_data->last_scheduled_stage_id == dataset->dataset_id) {
+        /* this dataset has the same identifier as the last know good one or this is the first successfull stage
+         * of this dataset in this context. destaging the dataset will undo the stage that was just performed so
+         * just return */
         return HIO_SUCCESS;
       }
 
