@@ -14,7 +14,6 @@
 
 #include "hio_types.h"
 #include "hio_component.h"
-#include "hio_module.h"
 
 /* data types */
 typedef struct builtin_posix_module_t {
