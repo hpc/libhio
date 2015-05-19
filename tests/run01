@@ -1,9 +1,9 @@
 #! /bin/bash 
 . ./run_setup
 
-cfg_file="$root/test01.cfg"
+cfg_file="test01.cfg"
 
 set -x
-echo "#HIO.data_roots=POSIX:$root" > $cfg_file
+echo "#HIO.data_roots=$HIO_TEST_ROOTS" > $cfg_file
 
 ./test01.x $cfg_file

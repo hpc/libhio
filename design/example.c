@@ -64,7 +64,7 @@ void checkpoint (void *data, size_t size, int timestep) {
    * later to ensure ordering when automatically rolling back to a prior
    * timestep on data failure. Specify that files in this dataset have unique
    * offset spaces. */
-  hrc = hio_dataset_open (hio_context, &hio_set, "restart", timestep, HIO_FLAG_CREAT | HIO_FLAG_WRONLY,
+  hrc = hio_dataset_open (hio_context, &hio_set, "restart", timestep, HIO_FLAG_CREAT | HIO_FLAG_WRITE,
                           HIO_SET_FILE_UNIQUE);
   if (HIO_SUCCESS != hrc) {
     PRINT_AND_EXIT("Could not open data set \"restart\"");
@@ -83,7 +83,7 @@ void checkpoint (void *data, size_t size, int timestep) {
     (void) hio_err_print_last (hio_context, "Could not set stripe width configuration on HIO dataset");
   }
 
-  hrc = hio_open (hio_set, &hio_element, "data", HIO_FLAG_CREAT | HIO_FLAG_EXCLUSIVE | HIO_FLAG_WRONLY, 0644);
+  hrc = hio_open (hio_set, &hio_element, "data", HIO_FLAG_CREAT | HIO_FLAG_EXCLUSIVE | HIO_FLAG_WRITE, 0644);
   if (HIO_SUCCESS != rc) {
     PRINT_AND_EXIT("Could not open element \"data\" for writing");
   }
@@ -125,14 +125,14 @@ void checkpoint (void *data, size_t size, int timestep) {
    * later to ensure ordering when automatically rolling back to a prior
    * timestep on data failure. Specify that files in this dataset have shared
    * offset spaces. */
-  hrc = hio_dataset_open (hio_context, &hio_set, "restartShared", timestep, HIO_FLAG_CREAT | HIO_FLAG_WRONLY,
+  hrc = hio_dataset_open (hio_context, &hio_set, "restartShared", timestep, HIO_FLAG_CREAT | HIO_FLAG_WRITE,
                           HIO_SET_FILE_SHARED);
   if (HIO_SUCCESS != hrc) {
     PRINT_AND_EXIT("Could not open data set \"restartShared\"");
   }
 
   /* example of writing out a shared file */
-  hrc = hio_open (hio_set, &hio_element, "shared", HIO_FLAG_CREAT | HIO_FLAG_SHARED | HIO_FLAG_WRONLY, 0644);
+  hrc = hio_open (hio_set, &hio_element, "shared", HIO_FLAG_CREAT | HIO_FLAG_SHARED | HIO_FLAG_WRITE, 0644);
   if (HIO_SUCCESS != rc) {
     PRINT_AND_EXIT("Could not open element \"shared\" for writing");
   }

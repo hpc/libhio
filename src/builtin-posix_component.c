@@ -227,7 +227,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   if (posix_dataset->base.dataset_backing_file) {
     const char *file_mode;
 
-    if (flags == HIO_FLAG_RDONLY) {
+    if (flags == HIO_FLAG_READ) {
       file_mode = "r";
     } else {
       file_mode = "w";
@@ -273,8 +273,8 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
   *set_out = &posix_dataset->base;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Successfully created posix dataset %s:%llu on data root %s",
-            name, set_id, module->data_root);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Successfully %s posix dataset %s:%llu on data root %s",
+            (flags & HIO_FLAG_CREAT) ? "created" : "opened", name, set_id, module->data_root);
 
   return HIO_SUCCESS;
 }
@@ -297,7 +297,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
     }
   }
 
-  if (dataset->dataset_flags & HIO_FLAG_WRONLY) {
+  if (dataset->dataset_flags & HIO_FLAG_WRITE) {
     if (HIO_FILE_MODE_BASIC != dataset->dataset_file_mode || 0 == context->context_rank) {
       char *path;
 
@@ -411,7 +411,7 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
     }
 
     /* determine the fopen file mode to use */
-    if (HIO_FLAG_WRONLY & dataset->dataset_flags) {
+    if (HIO_FLAG_WRITE & dataset->dataset_flags) {
       file_mode = "w";
       open_flags = O_CREAT | O_WRONLY;
     } else {
@@ -468,7 +468,7 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
   long file_offset;
   FILE *fh;
 
-  if (!(posix_dataset->base.dataset_flags & HIO_FLAG_WRONLY)) {
+  if (!(posix_dataset->base.dataset_flags & HIO_FLAG_WRITE)) {
     return HIO_ERR_PERM;
   }
 
@@ -545,7 +545,7 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
   int rc = HIO_SUCCESS;
   FILE *fh;
 
-  if (!(posix_dataset->base.dataset_flags & HIO_FLAG_RDONLY)) {
+  if (!(posix_dataset->base.dataset_flags & HIO_FLAG_READ)) {
     return HIO_ERR_PERM;
   }
 
@@ -632,7 +632,7 @@ static int builtin_posix_module_element_flush (struct hio_module_t *module, hio_
                                                hio_flush_mode_t mode) {
   hio_dataset_t dataset = element->element_dataset;
 
-  if (!(dataset->dataset_flags & HIO_FLAG_WRONLY)) {
+  if (!(dataset->dataset_flags & HIO_FLAG_WRITE)) {
     return HIO_ERR_PERM;
   }
 
@@ -642,7 +642,7 @@ static int builtin_posix_module_element_flush (struct hio_module_t *module, hio_
 static int builtin_posix_module_element_complete (struct hio_module_t *module, hio_element_t element) {
   hio_dataset_t dataset = element->element_dataset;
 
-  if (!(dataset->dataset_flags & HIO_FLAG_RDONLY)) {
+  if (!(dataset->dataset_flags & HIO_FLAG_READ)) {
     return HIO_ERR_PERM;
   }
 

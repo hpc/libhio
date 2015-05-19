@@ -19,8 +19,8 @@
 #include <libxml/parser.h>
 #include <libxml/xmlsave.h>
 
-#define HIO_MANIFEST_VERSION "0.3.1a"
-#define HIO_MANIFEST_COMPAT  "1.2"
+#define HIO_MANIFEST_VERSION "0.4"
+#define HIO_MANIFEST_COMPAT  "1.0"
 
 #define HIO_MANIFEST_PROP_VERSION     (const xmlChar *) "hio_version"
 #define HIO_MANIFEST_PROP_COMPAT      (const xmlChar *) "hio_compat"
@@ -30,8 +30,7 @@
 #define HIO_MANIFEST_KEY_BACKING_FILE (const xmlChar *) "hio_backing_file"
 #define HIO_MANIFEST_KEY_DATASET_MODE (const xmlChar *) "hio_dataset_mode"
 #define HIO_MANIFEST_KEY_FILE_MODE    (const xmlChar *) "hio_file_mode"
-#define HIO_MANIFEST_KEY_OPEN_TIME    (const xmlChar *) "hio_open_time"
-#define HIO_MANIFEST_KEY_CLOSE_TIME   (const xmlChar *) "hio_close_time"
+#define HIO_MANIFEST_KEY_MTIME        (const xmlChar *) "hio_mtime"
 #define HIO_MANIFEST_KEY_COMM_SIZE    (const xmlChar *) "hio_comm_size"
 #define HIO_MANIFEST_KEY_STATUS       (const xmlChar *) "hio_status"
 #define HIO_SEGMENT_KEY_FILE_OFFSET   (const xmlChar *) "file_offset"
@@ -112,13 +111,12 @@ static int hioi_manifest_get_number (xmlDocPtr xml_doc, xmlNodePtr node, const x
   return HIO_SUCCESS;
 }
 
-static xmlDocPtr hio_manifest_generate_xml_1_2 (hio_dataset_t dataset) {
+static xmlDocPtr hio_manifest_generate_xml_1_0 (hio_dataset_t dataset) {
   xmlNodePtr elements_node, element_node, segment_node, segments_node, top;
   hio_context_t context = dataset->dataset_context;
   hio_manifest_segment_t *segment;
   hio_element_t element;
   xmlDocPtr xml_doc;
-  char ctime_buf[26];
 
   xml_doc = xmlNewDoc ((const xmlChar *) "1.0");
   if (NULL == xml_doc) {
@@ -146,14 +144,7 @@ static xmlDocPtr hio_manifest_generate_xml_1_2 (hio_dataset_t dataset) {
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_FILE_MODE, (unsigned long) dataset->dataset_file_mode);
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_COMM_SIZE, (unsigned long) context->context_size);
   hioi_manifest_set_signed_number (top, HIO_MANIFEST_KEY_STATUS, (long) dataset->dataset_status);
-
-  /* get a string representation of the time */
-  ctime_r ((time_t *) &dataset->dataset_open_time.tv_sec, ctime_buf);
-
-  /* remove newline */
-  ctime_buf[strlen(ctime_buf) - 1] = '\0';
-
-  hioi_manifest_set_string (top, HIO_MANIFEST_KEY_OPEN_TIME, ctime_buf);
+  hioi_manifest_set_number (top, HIO_MANIFEST_KEY_MTIME, (unsigned long) time (NULL));
 
   if (HIO_FILE_MODE_BASIC == dataset->dataset_file_mode) {
     /* NTH: for now do not write elements for basic mode. this may change in future versions */
@@ -200,7 +191,7 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
   xmlDocPtr xml_doc;
   int size;
 
-  xml_doc = hio_manifest_generate_xml_1_2 (dataset);
+  xml_doc = hio_manifest_generate_xml_1_0 (dataset);
   if (NULL == xml_doc) {
     return HIO_ERROR;
   }
@@ -221,7 +212,7 @@ int hioi_manifest_save (hio_dataset_t dataset, const char *path) {
   xmlDocPtr xml_doc;
   long rc;
 
-  xml_doc = hio_manifest_generate_xml_1_2 (dataset);
+  xml_doc = hio_manifest_generate_xml_1_0 (dataset);
   if (NULL == xml_doc) {
     hio_err_push (HIO_ERROR, dataset->dataset_context, &dataset->dataset_object, "Could not generate manifest xml");
     return HIO_ERROR;
@@ -245,7 +236,7 @@ int hioi_manifest_save (hio_dataset_t dataset, const char *path) {
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_parse_segment_1_2 (hio_element_t element, xmlDocPtr xml_doc,
+static int hioi_manifest_parse_segment_1_0 (hio_element_t element, xmlDocPtr xml_doc,
 					    xmlNodePtr segment_node) {
   unsigned long file_offset, app_offset0, app_offset1, length;
   int rc;
@@ -277,7 +268,7 @@ static int hioi_manifest_parse_segment_1_2 (hio_element_t element, xmlDocPtr xml
   return hioi_element_add_segment (element, file_offset, app_offset0, app_offset1, length);
 }
 
-static int hioi_manifest_parse_segments_1_2 (hio_element_t element, xmlDocPtr xml_doc,
+static int hioi_manifest_parse_segments_1_0 (hio_element_t element, xmlDocPtr xml_doc,
 					     xmlNodePtr segments_node) {
   xmlNodePtr segment_node;
   int rc;
@@ -286,7 +277,7 @@ static int hioi_manifest_parse_segments_1_2 (hio_element_t element, xmlDocPtr xm
 
   while (segment_node) {
     if (!strcmp ((const char *) segment_node->name, "segment")) {
-      rc = hioi_manifest_parse_segment_1_2 (element, xml_doc, segment_node);
+      rc = hioi_manifest_parse_segment_1_0 (element, xml_doc, segment_node);
       if (HIO_SUCCESS != rc) {
         return rc;
       }
@@ -298,7 +289,7 @@ static int hioi_manifest_parse_segments_1_2 (hio_element_t element, xmlDocPtr xm
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_parse_element_1_2 (hio_dataset_t dataset, xmlDocPtr xml_doc,
+static int hioi_manifest_parse_element_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc,
 					    xmlNodePtr element_node) {
   hio_element_t element;
   xmlNodePtr segments_node;
@@ -332,7 +323,7 @@ static int hioi_manifest_parse_element_1_2 (hio_dataset_t dataset, xmlDocPtr xml
   segments_node = hioi_manifest_find_node (element_node, (const xmlChar *) "segments");
 
   if (NULL != segments_node) {
-    rc = hioi_manifest_parse_segments_1_2 (element, xml_doc, segments_node);
+    rc = hioi_manifest_parse_segments_1_0 (element, xml_doc, segments_node);
     if (HIO_SUCCESS != rc) {
       hioi_element_release (element);
       return rc;
@@ -347,7 +338,7 @@ static int hioi_manifest_parse_element_1_2 (hio_dataset_t dataset, xmlDocPtr xml
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_parse_elements_1_2 (hio_dataset_t dataset, xmlDocPtr xml_doc,
+static int hioi_manifest_parse_elements_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc,
 					     xmlNodePtr elements_node) {
   xmlNodePtr element_node;
   int rc;
@@ -356,7 +347,7 @@ static int hioi_manifest_parse_elements_1_2 (hio_dataset_t dataset, xmlDocPtr xm
 
   while (element_node) {
     if (!strcmp ((const char *) element_node->name, "element")) {
-      rc = hioi_manifest_parse_element_1_2 (dataset, xml_doc, element_node);
+      rc = hioi_manifest_parse_element_1_0 (dataset, xml_doc, element_node);
       if (HIO_SUCCESS != rc) {
         return rc;
       }
@@ -368,7 +359,7 @@ static int hioi_manifest_parse_elements_1_2 (hio_dataset_t dataset, xmlDocPtr xm
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_parse_1_2 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
+static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
   xmlNodePtr top, elements_node;
   xmlChar *tmp_string;
   unsigned long mode = 0;
@@ -390,7 +381,7 @@ static int hioi_manifest_parse_1_2 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
   hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Compatibilty version of manifest: %s",
 	    (char *) tmp_string);
 
-  if (strcmp ((char *) tmp_string, "1.2")) {
+  if (strcmp ((char *) tmp_string, "1.0")) {
     xmlFree (tmp_string);
     /* incompatible version */
     return HIO_ERROR;
@@ -428,7 +419,7 @@ static int hioi_manifest_parse_1_2 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
     return HIO_SUCCESS;
   }
 
-  rc = hioi_manifest_parse_elements_1_2 (dataset, xml_doc, elements_node);
+  rc = hioi_manifest_parse_elements_1_0 (dataset, xml_doc, elements_node);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
@@ -445,7 +436,7 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, unsigned char *data, size_
     return HIO_ERROR;
   }
 
-  rc = hioi_manifest_parse_1_2 (dataset, xml_doc);
+  rc = hioi_manifest_parse_1_0 (dataset, xml_doc);
   xmlFreeDoc (xml_doc);
 
   return rc;
@@ -473,7 +464,7 @@ int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
     return HIO_ERROR;
   }
 
-  rc = hioi_manifest_parse_1_2 (dataset, xml_doc);
+  rc = hioi_manifest_parse_1_0 (dataset, xml_doc);
   xmlFreeDoc (xml_doc);
 
   return rc;

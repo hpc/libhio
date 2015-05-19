@@ -54,7 +54,7 @@ int hio_dataset_close (hio_dataset_t *set) {
 
   rc = module->dataset_close (module, dataset);
 
-  if (HIO_SUCCESS == rc && (HIO_FLAG_WRONLY & dataset->dataset_flags)) {
+  if (HIO_SUCCESS == rc && (HIO_FLAG_WRITE & dataset->dataset_flags)) {
     hio_dataset_data_t *ds_data = dataset->dataset_data;
     /* update dataset data */
     ds_data->dd_last_id = (*set)->dataset_id;

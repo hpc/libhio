@@ -90,7 +90,7 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
   datawarp_dataset->posix_dataset = posix_dataset;
   datawarp_dataset->base.dataset_module = module;
 
-  if (flags & HIO_FLAG_WRONLY) {
+  if (flags & HIO_FLAG_WRITE) {
     hioi_config_add (context, &datawarp_dataset->base.dataset_object, &datawarp_dataset->stage_mode,
                      "datawarp_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
                      "Datawarp stage mode to use with this dataset instance", 0);
@@ -183,7 +183,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
   hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
 
-  if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRONLY)) {
+  if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRITE)) {
     char *pfs_path;
 
     rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->context_object.identifier,

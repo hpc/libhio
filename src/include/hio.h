@@ -363,16 +363,17 @@ typedef enum hio_return_t {
  */
 typedef enum hio_flags_t {
   /** Open the dataset read-only Can not be combined with
-   * HIO_FLAG_WRONLY. */
-  HIO_FLAG_RDONLY   = 0,
+   * HIO_FLAG_WRITE at this time. */
+  HIO_FLAG_READ     = 1,
   /** Open the dataset write-only. Can not be combined with
-   * HIO_FLAG_RDONLY. */
-  HIO_FLAG_WRONLY   = 1,
-  /** Create a new element */
+   * HIO_FLAG_READ at this time. */
+  HIO_FLAG_WRITE    = 2,
+  /** Create a new element. If the element exists and HIO_FLAG_TRUNC
+   * is not specified an error is returned. */
   HIO_FLAG_CREAT    = 64,
-  /** Remove all existing data associated with the dataset */
+  /** Remove all existing data associated with the dataset. */
   HIO_FLAG_TRUNC    = 512,
-  /** Append to an existing dataset */
+  /** Append to an existing dataset. Not supported at this time. */
   HIO_FLAG_APPEND   = 1024,
 } hio_flags_t;
 
@@ -607,8 +608,8 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  *
  * The flags should be an or'ed value consisting of any or none of the following:
  *
- *    HIO_FLAG_RDONLY          Open the file for read-only
- *    HIO_FLAG_WRONLY          Open the file for write-only
+ *    HIO_FLAG_READ          Open the file for read-only
+ *    HIO_FLAG_WRITE          Open the file for write-only
  *    HIO_FLAG_CREAT           Create the dataset if it does not already exist
  *    HIO_FLAG_TRUNC           If the dataset exists unlink it and create an empty
  *                             dataset
