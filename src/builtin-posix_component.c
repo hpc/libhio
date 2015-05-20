@@ -150,41 +150,39 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   }
   rc = HIO_SUCCESS;
 
-  if (!(flags & HIO_FLAG_CREAT)) {
-    if (!(flags & HIO_FLAG_TRUNC)) {
-      rc = asprintf (&path, "%s/manifest.basic.xml", posix_dataset->base_path);
-      if (0 > rc) {
-        /* out of memory. not much can be done now */
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-
-      if (!access (path, F_OK)) {
-        /* if a basic dataset manifest is found switch to basic mode for reading */
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: detected basic dataset. switching "
-                  "to basic mode for reading...");
-        posix_dataset->base.dataset_file_mode = HIO_FILE_MODE_BASIC;
-      }
-
-      if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
-        free (path);
-        rc = asprintf (&path, "%s/manifest%05d.xml", posix_dataset->base_path, context->context_rank);
-        if (0 > rc) {
-          /* out of memory. not much can be done now */
-          return HIO_ERR_OUT_OF_RESOURCE;
-        }
-      }
-
-      rc = hioi_manifest_load (&posix_dataset->base, path);
-    } else {
-      /* access works with directories on OSX and Linux but not work with directories everywhere */
+  if (flags & HIO_FLAG_TRUNC) {
+      /* access works with directories on OSX and Linux but may not work with directories on all systems */
       if (!context->context_rank && !access (path, F_OK)) {
         hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: removing existing dataset");
-        /* blow away an existing dataset */
+        /* blow away the existing dataset */
         rc = builtin_posix_module_dataset_unlink (module, path, set_id);
       }
 
       /* ensure we take the create path later */
       flags |= HIO_FLAG_CREAT;
+  }
+
+  if (!(flags & HIO_FLAG_CREAT)) {
+    rc = asprintf (&path, "%s/manifest.basic.xml", posix_dataset->base_path);
+    if (0 > rc) {
+      /* out of memory. not much can be done now */
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    if (!access (path, F_OK)) {
+      /* if a basic dataset manifest is found switch to basic mode for reading */
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: detected basic dataset. switching "
+                "to basic mode for reading...");
+      posix_dataset->base.dataset_file_mode = HIO_FILE_MODE_BASIC;
+    }
+
+    if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
+      free (path);
+      rc = asprintf (&path, "%s/manifest%05d.xml", posix_dataset->base_path, context->context_rank);
+      if (0 > rc) {
+        /* out of memory. not much can be done now */
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
     }
   }
 
