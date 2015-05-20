@@ -184,10 +184,13 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
         return HIO_ERR_OUT_OF_RESOURCE;
       }
     }
+
+    rc = hioi_manifest_load (&posix_dataset->base, path);
+    free (path);
   }
 
   /* basic datasets write a file per element so there is no dataset backing file */
-  if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
+  if ((HIO_SUCCESS == rc) && (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode)) {
     if (!posix_dataset->base.dataset_backing_file) {
       if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.dataset_mode) {
         rc = asprintf (&path, "data.%05d", context->context_rank);
