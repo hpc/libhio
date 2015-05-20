@@ -426,7 +426,7 @@ ACTION_CHECK(verbose_check) {
 ACTION_RUN(verbose_run) {
   int verbose = V0.u;
   msg_context_set_verbose(MY_MSG_CTX, verbose);
-  VERB0("Verbosity level set to %d", verbose);
+  VERB2("Verbosity level set to %d", verbose);
 }
 
 ACTION_CHECK(debug_check) {
@@ -436,7 +436,7 @@ ACTION_CHECK(debug_check) {
                               " (see comments in source.)", debug, DBGMAXLEV);
   if (A.actn == 0) {
     msg_context_set_debug(MY_MSG_CTX, debug);
-    VERB0("Parse debug level set to %d", debug);
+    VERB2("Parse debug level set to %d", debug);
   }
 }
 
@@ -444,7 +444,7 @@ ACTION_RUN(debug_run) {
   int debug = V0.u;
   if (A.actn != 0) {
     msg_context_set_debug(MY_MSG_CTX, debug);
-    VERB0("Run debug level set to %d", debug);
+    VERB2("Run debug level set to %d", debug);
   }
 }
 
@@ -453,7 +453,7 @@ ACTION_RUN(debug_run) {
 //----------------------------------------------------------------------------
 ACTION_RUN(qof_run) {
   quit_on_fail = V0.u;
-  VERB0("Quit on fail count set to %d", quit_on_fail);
+  VERB1("Quit on fail count set to %d", quit_on_fail);
 }
 
 ACTION_RUN(name_run) {
@@ -1226,7 +1226,7 @@ ACTION_RUN(heo_run) {
 
 ACTION_RUN(hck_run) {
   hio_check = V0.i;
-  VERB0("HIO read data checking is now %s", V0.s); 
+  VERB1("HIO read data checking is now %s", V0.s); 
 }
 
 ACTION_CHECK(hew_check) {
@@ -1356,7 +1356,7 @@ ACTION_RUN(hf_run) {
 
 ACTION_RUN(hxrc_run) {
   hio_rc_exp = V0.i;
-  VERB0("%s; HIO expected rc now %d(%s)", A.desc, V0.i, V0.s);
+  VERB1("%s; HIO expected rc now %d(%s)", A.desc, V0.i, V0.s);
 }
 
 ACTION_CHECK(hxct_check) {
@@ -1367,7 +1367,7 @@ ACTION_CHECK(hxct_check) {
 
 ACTION_RUN(hxct_run) {
   hio_cnt_exp = V0.u;
-  VERB0("%s; HIO expected count now %lld", A.desc, V0.u);
+  VERB1("%s; HIO expected count now %lld", A.desc, V0.u);
 }
 
 void get_config_var(hio_object_t object, char * obj_name, struct action * actionp) {
