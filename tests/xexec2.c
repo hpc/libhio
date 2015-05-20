@@ -1720,6 +1720,6 @@ int main(int argc, char * * argv) {
         fail_count ? "fail" : "pass", fail_count, test_name);
 
 
-  return 0;
+  return fail_count ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 // --- end of xexec.c ---
