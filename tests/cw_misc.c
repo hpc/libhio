@@ -199,6 +199,14 @@ char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
   if (nvp) {
     retval = nvp->name;
   }
+
+  // More detailed message - will cause memory leak for invalid - use for debugging
+  #if 1
+    else {
+      retval = ALLOC_PRINTF("<Invalid Enum 0x%X >", val);
+    }  
+  #endif
+
   return retval;
 }
 
