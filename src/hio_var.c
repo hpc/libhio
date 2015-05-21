@@ -329,7 +329,7 @@ int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, con
 static int hioi_config_kv_push (hio_context_t context, const char *identifier,
                                 hio_object_type_t type, const char *key, const char *value) {
   int new_index, value_length;
-  hio_config_kv_t *kv;
+  hio_config_kv_t *kv = NULL;
   void *tmp;
 
   for (int i = 0 ; i < context->context_file_configuration_count ; ++i) {
@@ -339,6 +339,7 @@ static int hioi_config_kv_push (hio_context_t context, const char *identifier,
                                    HIO_OBJECT_TYPE_ANY == kv->object_type)) {
       break;
     }
+
     kv = NULL;
   }
 
@@ -461,8 +462,6 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
   }
 
   line = strtok_r (buffer, "\n", &lastl);
-
-  rc = HIO_SUCCESS;
 
   hioi_config_parser_set_file_prefix (config_file_prefix);
 

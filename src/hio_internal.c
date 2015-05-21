@@ -144,7 +144,6 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
 
   if (0 >= rc) {
     /* couldn't allocate error string */
-    free (new_item);
     return;
   }
 
@@ -318,15 +317,14 @@ uint64_t hioi_gettime (void) {
 }
 
 int hio_mkpath (const char *path, mode_t access_mode) {
-  char *sep, *tmp = strdup (path);
+  char *tmp = strdup (path);
   int rc;
 
   if (NULL == tmp) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  sep = tmp;
-  for (sep = strchr (tmp, '/') ; sep ; sep = strchr (sep + 1, '/')) {
+  for (char *sep = strchr (tmp, '/') ; sep ; sep = strchr (sep + 1, '/')) {
     if (sep == tmp) {
       continue;
     }

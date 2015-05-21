@@ -111,6 +111,48 @@ static int hioi_manifest_get_number (xmlDocPtr xml_doc, xmlNodePtr node, const x
   return HIO_SUCCESS;
 }
 
+static int hioi_manifest_get_signed_number (xmlDocPtr xml_doc, xmlNodePtr node, const xmlChar *name,
+                                            long *value) {
+  xmlChar *string_value;
+  int rc;
+
+  rc = hioi_manifest_get_string (xml_doc, node, name, &string_value);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  *value = strtol ((char *) string_value, NULL, 0);
+  xmlFree (string_value);
+
+  return HIO_SUCCESS;
+}
+
+static int hioi_manifest_prop_get_string (xmlNodePtr node, const xmlChar *name,
+                                          xmlChar **string) {
+  *string = xmlGetProp (node, name);
+  if (!*string) {
+    return HIO_ERROR;
+  }
+
+  return HIO_SUCCESS;
+}
+
+static int hioi_manifest_prop_get_number (xmlNodePtr node, const xmlChar *name,
+                                          unsigned long *value) {
+  xmlChar *string_value;
+  int rc;
+
+  rc = hioi_manifest_prop_get_string (node, name, &string_value);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  *value = strtoul ((char *) string_value, NULL, 0);
+  xmlFree (string_value);
+
+  return HIO_SUCCESS;
+}
+
 static xmlDocPtr hio_manifest_generate_xml_1_0 (hio_dataset_t dataset) {
   xmlNodePtr elements_node, element_node, segment_node, segments_node, top;
   hio_context_t context = dataset->dataset_context;
@@ -363,6 +405,7 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
   xmlNodePtr top, elements_node;
   xmlChar *tmp_string;
   unsigned long mode = 0;
+  long status;
   int rc;
 
   top = xmlDocGetRootElement (xml_doc);
@@ -373,9 +416,9 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
   }
 
   /* check for compatibility with this manifest version */
-  tmp_string = xmlGetProp (top, HIO_MANIFEST_PROP_COMPAT);
-  if (NULL == tmp_string) {
-    return HIO_ERROR;
+  rc = hioi_manifest_prop_get_string (top, HIO_MANIFEST_PROP_COMPAT, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    return rc;
   }
 
   hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Compatibilty version of manifest: %s",
@@ -397,13 +440,19 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  hioi_manifest_get_number (xml_doc, top, HIO_MANIFEST_KEY_FILE_MODE, &mode);
-  if (mode != dataset->dataset_file_mode) {
-    hio_err_push (HIO_ERR_BAD_PARAM, dataset->dataset_context, &dataset->dataset_object,
-		  "Mismatch in dataset file mode. Requested mode: %d, File mode: %d", mode,
-		  dataset->dataset_file_mode);
+  rc = hioi_manifest_get_number (xml_doc, top, HIO_MANIFEST_KEY_FILE_MODE, &mode);
+  if (HIO_SUCCESS != rc) {
     return HIO_ERR_BAD_PARAM;
   }
+
+  dataset->dataset_file_mode = mode;
+
+  rc = hioi_manifest_get_signed_number (xml_doc, top, HIO_MANIFEST_KEY_STATUS, &status);
+  if (HIO_SUCCESS != rc) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  dataset->dataset_status = status;
 
   /* get the file name of the backing file for this manifest */
   rc = hioi_manifest_get_string (xml_doc, top, HIO_MANIFEST_KEY_BACKING_FILE, &tmp_string);
@@ -423,6 +472,71 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
   if (HIO_SUCCESS != rc) {
     return rc;
   }
+
+  return HIO_SUCCESS;
+}
+
+static int hioi_manifest_parse_header_1_0 (hio_context_t context, hio_dataset_header_t *header, xmlDocPtr xml_doc) {
+  xmlNodePtr top, elements_node;
+  xmlChar *tmp_string;
+  unsigned long value;
+  long svalue;
+  int rc;
+
+  top = xmlDocGetRootElement (xml_doc);
+  if (NULL == top) {
+    hio_err_push (HIO_ERROR, context, NULL, "Could not retrieve xml root element");
+    return HIO_ERROR;
+  }
+
+  /* check for compatibility with this manifest version */
+  rc = hioi_manifest_prop_get_string (top, HIO_MANIFEST_PROP_COMPAT, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Compatibilty version of manifest: %s", (char *) tmp_string);
+
+  if (strcmp ((char *) tmp_string, "1.0")) {
+    xmlFree (tmp_string);
+    /* incompatible version */
+    return HIO_ERROR;
+  }
+
+  xmlFree (tmp_string);
+
+  /* fill in header */
+  rc = hioi_manifest_get_number (xml_doc, top, HIO_MANIFEST_KEY_DATASET_MODE, &value);
+
+  if (HIO_SUCCESS != rc) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  header->dataset_mode = value;
+
+  rc = hioi_manifest_get_number (xml_doc, top, HIO_MANIFEST_KEY_FILE_MODE, &value);
+
+  if (HIO_SUCCESS != rc) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  header->dataset_file_mode = value;
+
+  rc = hioi_manifest_get_signed_number (xml_doc, top, HIO_MANIFEST_KEY_STATUS, &svalue);
+
+  if (HIO_SUCCESS != rc) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  header->dataset_status = svalue;
+
+  rc = hioi_manifest_prop_get_number (top, HIO_MANIFEST_PROP_DATASET_ID, &value);
+
+  if (HIO_SUCCESS != rc) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  header->dataset_id = value;
 
   return HIO_SUCCESS;
 }
@@ -465,6 +579,32 @@ int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
   }
 
   rc = hioi_manifest_parse_1_0 (dataset, xml_doc);
+  xmlFreeDoc (xml_doc);
+
+  return rc;
+}
+
+int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path) {
+  xmlDocPtr xml_doc;
+  int rc;
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest header from %s", path);
+
+  if (access (path, F_OK)) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  if (access (path, R_OK)) {
+    return HIO_ERR_PERM;
+  }
+
+  xml_doc = xmlParseFile (path);
+  if (NULL == xml_doc) {
+    hio_err_push (HIO_ERROR, context, NULL, "Could not parse manifest %s", path);
+    return HIO_ERROR;
+  }
+
+  rc = hioi_manifest_parse_header_1_0 (context, header, xml_doc);
   xmlFreeDoc (xml_doc);
 
   return rc;

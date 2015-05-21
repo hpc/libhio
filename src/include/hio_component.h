@@ -19,6 +19,7 @@
 #endif
 
 struct hio_module_t;
+struct hio_dataset_header_t;
 
 /**
  * Open a dataset with an hio module
@@ -232,7 +233,7 @@ typedef int
  */
 typedef int
 (*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name,
-                                 int64_t **set_ids, int *set_id_count);
+                                 struct hio_dataset_header_t **headers, int *count);
 
 /**
  * Finalize a module and release all resources.

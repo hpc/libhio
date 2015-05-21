@@ -326,6 +326,12 @@ typedef struct hio_object_t *hio_object_t;
 #define HIO_DATASET_ID_LAST (int64_t) -1
 
 /**
+ * @ingroup API
+ * @brief Most recently modified dataset id
+ */
+#define HIO_DATASET_ID_NEWEST (int64_t) -2
+
+/**
  * @ingroup errorhandling
  * @brief Error codes that may be returned by libhio routines
  *

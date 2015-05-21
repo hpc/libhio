@@ -131,7 +131,7 @@ static int hioi_dynamic_component_init (void) {
 #endif
 
 int hioi_component_init (void) {
-  int rc;
+  int rc = HIO_SUCCESS;
 
   if (hio_component_init_count++ > 0) {
     return HIO_SUCCESS;

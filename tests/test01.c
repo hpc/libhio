@@ -65,7 +65,58 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "Error closing dataset. reason: %d\n", rc);
   }
 
-  rc = hio_dataset_open (context, &dataset, "restart", HIO_DATASET_ID_LAST, HIO_FLAG_READ,
+
+
+  rc = hio_dataset_open (context, &dataset, "restart", 50, HIO_FLAG_WRITE | HIO_FLAG_CREAT | HIO_FLAG_TRUNC,
+			 HIO_SET_ELEMENT_SHARED);
+  if (HIO_SUCCESS != rc) {
+      if (HIO_ERR_EXISTS == rc) {
+          hio_dataset_unlink (context, "restart", 100, HIO_UNLINK_MODE_FIRST);
+          rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRITE | HIO_FLAG_CREAT,
+                                 HIO_SET_ELEMENT_SHARED);
+
+      }
+
+      if (HIO_SUCCESS != rc) {
+          fprintf (stderr, "Could not create restart dataset. reason: %d\n", rc);
+          hio_fini (&context);
+          return 1;
+      }
+  }
+
+  rc = hio_element_open (dataset, &element, "data", 0);
+  if (HIO_SUCCESS == rc) {
+    rc = hio_element_write (element, 0, 0, data, 10, sizeof (int));
+    if (0 > rc) {
+      fprintf (stderr, "Could not write data to offset 0. reason: %d\n", rc);
+    }
+
+    rc = hio_element_write (element, 40, 0, data, 10, sizeof (int));
+    if (0 > rc) {
+      fprintf (stderr, "Could not write data to offset 0. reason: %d\n", rc);
+    }
+
+    rc = hio_element_write (element, 1000, 0, data2, 10, sizeof (int));
+    if (0 > rc) {
+      fprintf (stderr, "Could not write data to offset 0. reason: %d\n", rc);
+    }
+
+    rc = hio_element_close (&element);
+    if (HIO_SUCCESS != rc) {
+      fprintf (stderr, "Error closing element. reason: %d\n", rc);
+    }
+  } else {
+      fprintf (stderr, "Could not create dataset element. reason: %d\n", rc);
+  }
+
+  rc = hio_dataset_close (&dataset);
+  if (HIO_SUCCESS != rc) {
+      fprintf (stderr, "Error closing dataset. reason: %d\n", rc);
+  }
+
+
+
+  rc = hio_dataset_open (context, &dataset, "restart", HIO_DATASET_ID_NEWEST, HIO_FLAG_READ,
 			 HIO_SET_ELEMENT_SHARED);
   if (HIO_SUCCESS != rc) {
       fprintf (stderr, "Could not load restart dataset. reason: %d\n", rc);

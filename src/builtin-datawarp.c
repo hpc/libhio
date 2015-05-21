@@ -50,11 +50,11 @@ static hio_var_enum_t builtin_datawarp_stage_modes = {
 };
 
 static int builtin_datawarp_module_dataset_list (struct hio_module_t *module, const char *name,
-                                                 int64_t **set_ids, int *set_id_count) {
+                                                 hio_dataset_header_t **headers, int *count) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
 
-  return datawarp_module->posix_module->base.dataset_list (&datawarp_module->posix_module->base, name, set_ids,
-                                                           set_id_count);
+  return datawarp_module->posix_module->base.dataset_list (&datawarp_module->posix_module->base, name, headers,
+                                                           count);
 }
 
 static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
@@ -166,7 +166,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
   char *dataset_path = NULL;
   int rc;
 
-  if (0 == context->context_rank) {
+  if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRITE)) {
     /* keep a copy of the base path used by the posix module */
     dataset_path = strdup (posix_dataset->base_path);
     if (NULL == dataset_path) {

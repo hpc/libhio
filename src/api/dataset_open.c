@@ -14,7 +14,7 @@
 #include <stdlib.h>
 
 struct hio_dataset_item_t {
-  int64_t set_id;
+  hio_dataset_header_t header;
   hio_module_t *module;
 };
 typedef struct hio_dataset_item_t hio_dataset_item_t;
@@ -46,6 +46,14 @@ static void hio_dataset_item_swap (hio_dataset_item_t *itema, hio_dataset_item_t
   *itemb = tmp;
 }
 
+static int hioi_dataset_header_highest_setid (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
+  return ha->dataset_id > hb->dataset_id;
+}
+
+static int hioi_dataset_header_newest (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
+  return ha->dataset_mtime > hb->dataset_mtime;
+}
+
 /**
  * Insert a potential set_id/module combination into the priority queue
  *
@@ -54,17 +62,19 @@ static void hio_dataset_item_swap (hio_dataset_item_t *itema, hio_dataset_item_t
  * @param[in]     set_id     identifier of dataset to insert
  * @param[in]     module     module associated with this dataset idenfier
  */
-static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count, int64_t set_id, hio_module_t *module) {
+static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header, hio_module_t *module,
+                                     hioi_dataset_header_compare_t compare) {
   int item_index = *item_count;
 
-  items[item_index].set_id = set_id;
+  items[item_index].header = *header;
   items[item_index].module = module;
 
   ++*item_count;
 
   while (item_index) {
     int parent = item_index >> 1;
-    if (items[parent].set_id <= set_id) {
+
+    if (compare (&items[parent].header, &items[item_index].header)) {
       break;
     }
 
@@ -85,14 +95,15 @@ static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count,
  * @returns HIO_SUCCESS on success
  * @returns HIO_ERR_NOT_FOUND on failure (empty queue)
  */
-static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, int64_t *set_id, hio_module_t **module) {
+static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header, hio_module_t **module,
+                                 hioi_dataset_header_compare_t compare) {
   int item_index = 0;
 
   if (0 == *item_count) {
     return HIO_ERR_NOT_FOUND;
   }
 
-  *set_id = items[0].set_id;
+  *header = items[0].header;
   *module = items[0].module;
 
   hio_dataset_item_swap (items, items + *item_count - 1);
@@ -101,11 +112,11 @@ static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, int
   while (item_index < *item_count/2) {
     int left = item_index << 1, right = left | 1, child = left;
 
-    if (right < *item_count && items[right].set_id > items[left].set_id) {
+    if (right < *item_count && compare (&items[right].header, &items[left].header)) {
       child = right;
     }
 
-    if (items[item_index].set_id > items[child].set_id) {
+    if (compare (&items[item_index].header, &items[child].header)) {
       break;
     }
 
@@ -118,42 +129,49 @@ static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, int
 }
 
 static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                                  hio_flags_t flags, hio_dataset_mode_t mode) {
-  int item_count = 0, rc, num_set_ids;
+                                  hio_flags_t flags, hio_dataset_mode_t mode,
+                                  hioi_dataset_header_compare_t compare) {
+  int item_count = 0, rc, count;
   hio_dataset_item_t *items = NULL;
-  int64_t *set_ids, set_id;
+  hio_dataset_header_t *headers, header;
   hio_module_t *module;
   void *tmp;
 
   for (int i = 0 ; i < context->context_module_count ; ++i) {
     module = context->context_modules[i];
 
-    rc = module->dataset_list (module, name, &set_ids, &num_set_ids);
-    if (HIO_SUCCESS == rc && num_set_ids) {
-      tmp = realloc ((void *) items, (item_count + num_set_ids) * sizeof (*items));
-      if (NULL == tmp) {
-        free (items);
-        free (set_ids);
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-
-      items = (hio_dataset_item_t *) tmp;
-
-      for (int j = 0 ; j < num_set_ids ; ++j) {
-        /* insert this set_id/module combination into the priority queue */
-        hio_dataset_item_insert (items, &item_count, set_ids[j], module);
-      }
+    rc = module->dataset_list (module, name, &headers, &count);
+    if (!(HIO_SUCCESS == rc && count)) {
+      continue;
     }
 
-    free (set_ids);
+    tmp = realloc ((void *) items, (item_count + count) * sizeof (*items));
+    if (NULL == tmp) {
+      free (items);
+      free (headers);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    items = (hio_dataset_item_t *) tmp;
+
+    for (int j = 0 ; j < count ; ++j) {
+      /* insert this set_id/module combination into the priority queue */
+      hio_dataset_item_insert (items, &item_count, headers + j, module, compare);
+    }
+
+    free (headers);
   }
 
   if (0 == item_count) {
+    if (items) {
+      free (items);
+    }
+
     return HIO_ERR_NOT_FOUND;
   }
 
-  while (HIO_SUCCESS == (rc = hio_dataset_item_pop (items, &item_count, &set_id, &module))) {
-    rc = hio_dataset_open_internal (module, set_out, name, set_id, flags, mode);
+  while (HIO_SUCCESS == (rc = hio_dataset_item_pop (items, &item_count, &header, &module, compare))) {
+    rc = hio_dataset_open_internal (module, set_out, name, header.dataset_id, flags, mode);
     if (HIO_SUCCESS == rc) {
       break;
     }
@@ -167,7 +185,7 @@ static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out,
 static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t *set_out, const char *name,
                                       int64_t set_id, hio_flags_t flags, hio_dataset_mode_t mode) {
   hio_module_t *module = hioi_context_select_module (context);
-  int rc;
+  int rc = HIO_ERR_NOT_FOUND;
 
   if (NULL == module) {
     hio_err_push (HIO_ERROR, context, NULL, "Could not select hio module");
@@ -205,7 +223,9 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
   }
 
   if (HIO_DATASET_ID_LAST == set_id) {
-    return hio_dataset_open_last (context, set_out, name, flags, mode);
+    return hio_dataset_open_last (context, set_out, name, flags, mode, hioi_dataset_header_highest_setid);
+  } else if (HIO_DATASET_ID_NEWEST == set_id) {
+    return hio_dataset_open_last (context, set_out, name, flags, mode, hioi_dataset_header_newest);
   }
 
   return hio_dataset_open_specific (context, set_out, name, set_id, flags, mode);

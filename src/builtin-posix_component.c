@@ -70,16 +70,16 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
 }
 
 static int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *name,
-                                              int64_t **set_ids, int *set_id_count) {
+                                              hio_dataset_header_t **headers, int *count) {
   hio_context_t context = module->context;
   int num_set_ids = 0, set_id_index = 0;
+  int rc = HIO_SUCCESS;
   struct dirent *dp;
   char *path = NULL;
   DIR *dir;
-  int rc;
 
-  *set_ids = NULL;
-  *set_id_count = 0;
+  *headers = NULL;
+  *count = 0;
 
   rc = asprintf (&path, "%s/%s.hio/%s/", module->data_root, context->context_object.identifier, name);
   if (0 > rc) {
@@ -87,7 +87,6 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
   }
 
   dir = opendir (path);
-  free (path);
   if (NULL == dir) {
     return HIO_SUCCESS;
   }
@@ -100,26 +99,47 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
 
   if (0 == num_set_ids) {
     closedir (dir);
+    free (path);
     return HIO_SUCCESS;
   }
 
   rewinddir (dir);
 
-  *set_ids = calloc (num_set_ids, sizeof (uint64_t));
-  if (NULL == *set_ids) {
+  *headers = (hio_dataset_header_t *) calloc (num_set_ids, sizeof (**headers));
+  if (NULL == *headers) {
     closedir (dir);
+    free (path);
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
   while (NULL != (dp = readdir (dir))) {
-    if (dp->d_name[0] != '.') {
-      set_ids[0][set_id_index++] = strtol (dp->d_name, NULL, 0);
+    if ('.' == dp->d_name[0]) {
+      continue;
+    }
+
+    char *manifest_path;
+
+    rc = asprintf (&manifest_path, "%s/%s/manifest.xml", path, dp->d_name);
+    if (0 > rc) {
+      free (*headers);
+      *headers = NULL;
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+
+    rc = hioi_manifest_read_header (context, headers[0] + set_id_index++, manifest_path);
+    free (manifest_path);
+    if (HIO_SUCCESS != rc) {
+      break;
     }
   }
 
-  *set_id_count = num_set_ids;
+  closedir (dir);
+  free (path);
 
-  return HIO_SUCCESS;
+  *count = num_set_ids;
+
+  return rc;
 }
 
 static int builtin_posix_module_dataset_open (struct hio_module_t *module,
@@ -152,41 +172,48 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
   if (flags & HIO_FLAG_TRUNC) {
       /* access works with directories on OSX and Linux but may not work with directories on all systems */
-      if (!context->context_rank && !access (path, F_OK)) {
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: removing existing dataset");
-        /* blow away the existing dataset */
-        rc = builtin_posix_module_dataset_unlink (module, path, set_id);
-      }
+    if (0 == context->context_rank) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: removing existing dataset");
+      /* blow away the existing dataset */
+      (void) builtin_posix_module_dataset_unlink (module, name, set_id);
+    }
 
-      /* ensure we take the create path later */
-      flags |= HIO_FLAG_CREAT;
+    /* ensure we take the create path later */
+    flags |= HIO_FLAG_CREAT;
+
+#if HIO_USE_MPI
+    /* need to barrier here to ensure old directories are removed */
+    if (hioi_context_using_mpi (context)) {
+      MPI_Barrier (context->context_comm);
+    }
+#endif
   }
 
   if (!(flags & HIO_FLAG_CREAT)) {
-    rc = asprintf (&path, "%s/manifest.basic.xml", posix_dataset->base_path);
+    rc = asprintf (&path, "%s/manifest.xml", posix_dataset->base_path);
     if (0 > rc) {
       /* out of memory. not much can be done now */
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    if (!access (path, F_OK)) {
-      /* if a basic dataset manifest is found switch to basic mode for reading */
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: detected basic dataset. switching "
-                "to basic mode for reading...");
-      posix_dataset->base.dataset_file_mode = HIO_FILE_MODE_BASIC;
+    if (access (path, F_OK)) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: could not find top-level manifest");
+      return HIO_ERR_NOT_FOUND;
     }
 
+    rc = hioi_manifest_load (&posix_dataset->base, path);
+    free (path);
+
     if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
-      free (path);
       rc = asprintf (&path, "%s/manifest%05d.xml", posix_dataset->base_path, context->context_rank);
       if (0 > rc) {
         /* out of memory. not much can be done now */
         return HIO_ERR_OUT_OF_RESOURCE;
       }
-    }
 
-    rc = hioi_manifest_load (&posix_dataset->base, path);
-    free (path);
+      rc = hioi_manifest_load (&posix_dataset->base, path);
+      free (path);
+    }
   }
 
   /* basic datasets write a file per element so there is no dataset backing file */
@@ -306,7 +333,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
         rc = asprintf (&path, "%s/manifest%05d.xml", posix_dataset->base_path,
                        context->context_rank);
       } else if (0 == context->context_rank) {
-        rc = asprintf (&path, "%s/manifest.basic.xml", posix_dataset->base_path);
+        rc = asprintf (&path, "%s/manifest.xml", posix_dataset->base_path);
       }
 
       if (0 < rc) {

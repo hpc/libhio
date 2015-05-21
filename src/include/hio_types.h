@@ -32,7 +32,6 @@ typedef struct hio_list_t {
 
 #define hioi_list_item(list, type, member)              \
   (type *)((intptr_t) list - offsetof (type, member))
-
 #define hioi_list_foreach(item, head, type, member)                     \
   for (item = hioi_list_item((head).next, type, member) ; &(item)->member != &(head) ; \
        item = hioi_list_item((item)->member.next, type, member))
@@ -264,6 +263,23 @@ struct hio_element_t {
   FILE               *element_fh;
 };
 
+struct hio_dataset_header_t {
+  int64_t  dataset_id;
+  time_t   dataset_mtime;
+  int      dataset_mode;
+  int      dataset_file_mode;
+  int      dataset_status;
+};
+typedef struct hio_dataset_header_t hio_dataset_header_t;
+
+/**
+ * Compare two headers
+ *
+ * Functions of this type return 1 if the first header is larger than the
+ * second, and 0 otherwise.
+ */
+typedef int (*hioi_dataset_header_compare_t) (hio_dataset_header_t *, hio_dataset_header_t *);
+
 /**
  * Allocate a new dataset object and populate it with common data (internal)
  *
@@ -376,6 +392,22 @@ int hioi_manifest_save (hio_dataset_t dataset, const char *path);
 
 int hioi_manifest_deserialize (hio_dataset_t dataset, unsigned char *data, size_t data_size);
 int hioi_manifest_load (hio_dataset_t dataset, const char *path);
+
+/**
+ * Read header data from a manifest
+ *
+ * @param[in]  context   hio context
+ * @param[out] header    hio dataset header to fill in
+ * @param[in]  path      hio manifest to read
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns hio error code on error
+ *
+ * This function reads the header data out of an hio manifest. This data includes
+ * the dataset id, file status, and modification time.
+ */
+int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path);
+
 
 /* context functions */
 
