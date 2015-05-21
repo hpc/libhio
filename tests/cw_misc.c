@@ -13,6 +13,9 @@
 #include <time.h>
 #include <sys/time.h>
 #include <math.h>
+#ifdef __linux__
+  #include <sched.h>
+#endif
 #include "cw_misc.h"
 
 //----------------------------------------------------------------------------
@@ -476,5 +479,30 @@ void * memdiff(const void * s1, const void *s2, size_t n) {
   }
   return NULL;
 }
+
+#ifdef __linux__
+//-----------------------------------------------------------------------------
+// Return CPU affinity in a form suitable for messages.  Single CPU affinity
+// returns a non-negative integer CPU number.  Multi CPU affinity returns the
+// negative of the bit mask of affine CPUs.  Affinity to no CPUs returns -1.
+//----------------------------------------------------------------------------
+I64 GetCPUaffinity(void) {
+  int numCPU = sysconf( _SC_NPROCESSORS_CONF );
+  cpu_set_t af;
+  I64 i, afmask = 0, afcount = 0, afCPU=-1;
+
+  sched_getaffinity(0, sizeof(af), &af);
+
+  for (i=0; i<numCPU; ++i) {
+    if (CPU_ISSET(i, &af)) {
+      afCPU = i;
+      afmask |= (1 << i);
+      afcount++;
+    }
+  }
+  if (afcount <= 1) return afCPU;
+  else return -afmask;
+}
+#endif
 
 // --- end of cw_misc.c ---

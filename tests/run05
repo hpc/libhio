@@ -18,7 +18,7 @@ cmdw="
   /@@ Create and reuse N-N dataset - i.e., ensure TRUNC works @/
   name run05w v $verbose_lev d $debug_lev mi 0
   hi MY_CTX $HIO_TEST_ROOTS 
-  hdo NTN_DS 97 WRITE,TRUNC UNIQUE
+  hdo NTN_DS 97 WRITE,CREAT,TRUNC UNIQUE
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
     hew -$blk $blk 

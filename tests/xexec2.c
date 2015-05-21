@@ -90,6 +90,9 @@ char * help =
   "  va <bytes>    malloc <bytes> of memory\n"
   "  vt <stride>   touch most recently allocated memory every <stride> bytes\n"
   "  vf            free most recently allocated memory\n"
+  #ifdef __linux__
+  "  dca           Display CPU Affinity\n"
+  #endif  
   #ifdef MPI
   "  mi <shift>    issue MPI_Init(), shift ranks by <shift> from original assignment\n"
   "  msr <size> <stride>\n"
@@ -719,6 +722,24 @@ ACTION_RUN(vf_run) {
     VERB0("mem_hand - Warning: no memory allocation to free");
   }
 }
+
+#ifdef __linux__
+//----------------------------------------------------------------------------
+// dca action handlers
+//----------------------------------------------------------------------------
+ACTION_RUN(dca_run) {
+  I64 aff = GetCPUaffinity();
+  long np = sysconf(_SC_NPROCESSORS_CONF);
+  if (aff >= 0) {
+    VERB0("_SC_NPROCESSORS_CONF: %d  CPU Affinity: %ld", np, aff);
+  } else if ( aff < -1 ) {
+    VERB0("_SC_NPROCESSORS_CONF: %d  CPU Affinity Mask: 0x%lX", np, -aff);
+  } else {
+    VERB0("_SC_NPROCESSORS_CONF: %d  CPU Affinity: None", np);
+  }
+}
+
+#endif
 
 //----------------------------------------------------------------------------
 // mi, mb, mf (MPI init, barrier, finalize) action handlers
@@ -1516,6 +1537,9 @@ struct parse {
   {"va",    {UINT, NONE, NONE, NONE, NONE}, va_check,      va_run      },
   {"vt",    {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
   {"vf",    {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
+  #ifdef __linux__
+  {"dca",   {NONE, NONE, NONE, NONE, NONE}, NULL,          dca_run     },
+  #endif
   #ifdef MPI
   {"mi",    {UINT, NONE, NONE, NONE, NONE}, NULL,          mi_run      },
   {"msr",   {PINT, PINT, NONE, NONE, NONE}, NULL,          msr_run     },

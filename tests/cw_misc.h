@@ -217,4 +217,12 @@ unsigned int crc32(unsigned int crc, const void *buf, size_t size);
 //----------------------------------------------------------------------------
 void * memdiff(const void * s1, const void *s2, size_t n);
  
+#ifdef __linux__
+//-----------------------------------------------------------------------------
+// Return CPU affinity in a form suitable for messages.  Single CPU affinity
+// returns a non-negative integer CPU number.  Multi CPU affinity returns the
+// negative of the bit mask of affine CPUs.  Affinity to no CPUs returns -1.
+//----------------------------------------------------------------------------
+I64 GetCPUaffinity(void);
+#endif
 // --- end of cw_misc.h ---
