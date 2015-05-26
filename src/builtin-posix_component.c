@@ -171,7 +171,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   rc = HIO_SUCCESS;
 
   if (flags & HIO_FLAG_TRUNC) {
-      /* access works with directories on OSX and Linux but may not work with directories on all systems */
+    /* access works with directories on OSX and Linux but may not work with directories on all systems */
     if (0 == context->context_rank) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: removing existing dataset");
       /* blow away the existing dataset */
@@ -728,6 +728,12 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
 
   /* skip posix: */
   data_root += 6;
+
+  if (access (data_root, F_OK)) {
+    hio_err_push (hioi_err_errno (errno), context, NULL, "posix: data root %d does not exist or can not be accessed",
+                  data_root);
+    return hioi_err_errno (errno);
+  }
 
   new_module = calloc (1, sizeof (builtin_posix_module_t));
   if (NULL == new_module) {
