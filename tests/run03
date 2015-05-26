@@ -27,7 +27,7 @@ cmdw="
       hew -$blk $blk 
     le 
   le 
-  hec hdc hf mf
+  hec hdc hf mgf mf
 "
 
 cmdr="
@@ -43,7 +43,7 @@ cmdr="
       her -$blk $blk 
     le 
   le 
-  hec hdc hf mf
+  hec hdc hf mgf mf
 "
 
 #set -x

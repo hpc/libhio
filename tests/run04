@@ -38,7 +38,7 @@ fails="
     hdo NTN_DS 97 READ UNIQUE
     hf
 
-  mf
+  mgf mf
 "
 
 #set -x

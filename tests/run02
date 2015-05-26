@@ -23,7 +23,7 @@ cmdw="
   lc $nblk
     hew -$blk $blk 
   le 
-  hec hdc hf mf
+  hec hdc hf mgf mf
 "
 
 cmdr="
@@ -36,7 +36,7 @@ cmdr="
   lc $nblk
     her -$blk $blk 
   le 
-  hec hdc hf mf
+  hec hdc hf mgf mf
 "
 
 clean_roots $HIO_TEST_ROOTS

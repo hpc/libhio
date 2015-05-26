@@ -99,6 +99,7 @@ char * help =
   "                issue MPI_Sendreceive with specified buffer <size> to and\n"
   "                from ranks <stride> above and below this rank\n"
   "  mb            issue MPI_Barrier()\n"
+  "  mgf           gather failures - send fails to and only report success from rank 0\n"
   "  mf            issue MPI_Finalize()\n"
   #endif
   "  fi <size> <count>\n"
@@ -181,8 +182,10 @@ char * help =
 //----------------------------------------------------------------------------
 char id_string[256] = "";
 int id_string_len = 0;
-int quit_on_fail = 1; // Quit after this many or more fails (0 = nevr quit)
-int fail_count = 0;   // Count of fails
+int quit_on_fail = 1;  // Quit after this many or more fails (0 = never quit)
+int local_fails = 0;   // Count of fails on this rank
+int global_fails = 0;  // Count of fails on all ranks
+int gather_fails = 0;  // local fails have been gathered into global fails
 char * test_name = "<unnamed>";
 #ifdef MPI
 int myrank, mpi_size = 0;
@@ -742,7 +745,7 @@ ACTION_RUN(dca_run) {
 #endif
 
 //----------------------------------------------------------------------------
-// mi, mb, mf (MPI init, barrier, finalize) action handlers
+// mi, mb, mf (MPI init, barrier, finalize) mgf action handlers
 //----------------------------------------------------------------------------
 #ifdef MPI
 static void *mpi_sbuf = NULL, *mpi_rbuf = NULL;
@@ -789,6 +792,15 @@ ACTION_RUN(msr_run) {
 
 ACTION_RUN(mb_run) {
   MPI_CK(MPI_Barrier(mpi_comm));
+}
+
+ACTION_RUN(mgf_run) {
+  int new_global_fails;
+  MPI_CK(MPI_Reduce(&local_fails, &new_global_fails, 1, MPI_INT, MPI_SUM, 0, mpi_comm));
+  DBG4("mgf: old local fails: %d new global fails: %d", local_fails, new_global_fails);
+  if (myrank == 0) global_fails += new_global_fails;
+  local_fails = 0;
+  gather_fails = 1;
 }
 
 ACTION_RUN(mf_run) {
@@ -1156,7 +1168,7 @@ static U64 rw_count[2];
 ETIMER hio_tmr;
 
 #define HRC_TEST(API_NAME)  {                                                      \
-  fail_count += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);  \
+  local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);  \
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                \
     MSG("%s: " #API_NAME " %s; rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK",   \
          enum_name(MY_MSG_CTX, &etab_herr, hrc),                                   \
@@ -1168,7 +1180,7 @@ ETIMER hio_tmr;
 
 #define HCNT_TEST(API_NAME)  {                                                               \
   if (HIO_CNT_REQ == hio_cnt_exp) hio_cnt_exp = hreq;                                        \
-  fail_count += (hio_fail = ( hcnt != hio_cnt_exp && hio_cnt_exp != HIO_CNT_ANY ) ? 1: 0);   \
+  local_fails += (hio_fail = ( hcnt != hio_cnt_exp && hio_cnt_exp != HIO_CNT_ANY ) ? 1: 0);   \
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                          \
     MSG("%s: " #API_NAME " %s; cnt: %d exp: %d", A.desc, hio_fail ? "FAIL": "OK",            \
          hcnt, hio_cnt_exp);                                                                 \
@@ -1318,7 +1330,7 @@ ACTION_RUN(her_run) {
     // Force error for unit test
     // *(char *)(rbuf+27) = '\0'; 
     if ((mis_comp = memdiff(rbuf, wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE), hreq))) {
-      fail_count++;
+      local_fails++;
       I64 offset = (char *)mis_comp - (char *)rbuf;
       I64 dump_start = MAX(0, offset - 16);
       VERB0("Error: hio_element_read data check miscompare; read ofs:%lld read size:%lld miscompare ofs: %lld",
@@ -1544,6 +1556,8 @@ struct parse {
   {"mi",    {UINT, NONE, NONE, NONE, NONE}, NULL,          mi_run      },
   {"msr",   {PINT, PINT, NONE, NONE, NONE}, NULL,          msr_run     },
   {"mb",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mb_run      },
+  {"mb",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mb_run      },
+  {"mgf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mgf_run     },
   {"mf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mf_run      },
   #endif
   {"fi",    {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
@@ -1707,13 +1721,13 @@ void run_action() {
     VERB2("--- Running %s", actv[a].desc); 
     // Runner routine may modify variable a for looping
     if (actv[a].runner) actv[a].runner(&actv[a], &a);
-    DBG3("Done %s; fails: %d qof: %d", actv[a].desc, fail_count, quit_on_fail);
-    if (quit_on_fail != 0 && fail_count >= quit_on_fail) {
-      VERB0("Quiting due to fails: %d >= qof: %d", fail_count, quit_on_fail); 
+    DBG3("Done %s; fails: %d qof: %d", actv[a].desc, local_fails, quit_on_fail);
+    if (quit_on_fail != 0 && local_fails >= quit_on_fail) {
+      VERB0("Quiting due to fails: %d >= qof: %d", local_fails, quit_on_fail); 
       break;
     }
   }
-  VERB0("Action execution ended, Fails: %d", fail_count);
+  VERB2("Action execution ended, Fails: %d", local_fails);
 
 }
 
@@ -1737,13 +1751,21 @@ int main(int argc, char * * argv) {
   parse_action();
   run_action();
 
-  VERB0("xexec done.  Result: %s  Fails: %d  Test name: %s",
-        fail_count ? "FAILURE" : "SUCCESS", fail_count, test_name);
+  // Suppress SUCCESS result message from all but rank 0
+  // Suppress  if gather_fails, not rank 0 and local fails = 0
+  if (gather_fails && myrank != 0 && local_fails == 0) {
+    // do nothing
+  } else {
+    VERB0("xexec done.  Result: %s  Fails: %d  Test name: %s",
+          (local_fails + global_fails) ? "FAILURE" : "SUCCESS",
+          local_fails + global_fails, test_name);
+    
+    // Pavilion message
+    printf("<result> %s <<< xexec done.  Test name: %s Fails: %d >>>\n",
+           (local_fails + global_fails) ? "fail" : "pass",
+           test_name, local_fails + global_fails);
+  }
 
-  printf("<result> %s xexec done.  Fails: %d  Test name: %s\n",
-        fail_count ? "fail" : "pass", fail_count, test_name);
-
-
-  return fail_count ? EXIT_FAILURE : EXIT_SUCCESS;
+  return (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 // --- end of xexec.c ---
