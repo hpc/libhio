@@ -21,7 +21,7 @@ fails="
     hdo NTN_DS 97 WRITE,CREAT UNIQUE
     hf
 
-  /@@ HI, HDO READ in non-existant data root directory @/
+  /@@ HI, HDO READ in non-existent data root directory @/
     hi MY_CTX posix:/does_not_exist 
     hxrc ERR_NOT_FOUND
     hdo NTN_DS 97 READ UNIQUE
@@ -37,7 +37,7 @@ fails="
     hxrc ERR_BAD_PARAM 
     heo MY_EL WRITE,CREAT,TRUNC 20Mi
 
-  /@@ HI, HDO READ non-existant DS ID  @/
+  /@@ HI, HDO READ non-existent DS ID  @/
     hi MY_CTX $HIO_TEST_ROOTS
     hxrc ERR_NOT_FOUND 
     hdo NTN_DS 97 READ UNIQUE
