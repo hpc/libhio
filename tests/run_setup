@@ -48,7 +48,8 @@ synexit() {
 
 cmd() {
   echo "$host ---> $*"
-  eval "$*"             
+  eval "$*"
+  return $?         
 }
 
 msg() { 
@@ -59,6 +60,7 @@ msg() {
 # Parse arguments
 #----------------------------------------------------------------------------
 host=`hostname -s`
+max_rc=0
 verbose_lev=1
 debug_lev=0
 
@@ -193,6 +195,18 @@ clean_roots() {
 # function to invoke mpi on various platforms
 myrun() {
   cmd "$mympicmd -n $ranks $*"
+  rc=$?
+  max_rc=$((rc > max_rc ? rc : max_rc)) 
+  return $rc
+}
+
+# Function to check max_rc and output a summary message
+check_rc(){
+  if [[ $max_rc > 0 ]]; then result="FAILURE"
+  else result="SUCCESS"; fi
+  echo "##################################################"
+  echo "# $0: Test $result"
+  echo "##################################################"
 }
 
 # Display results of run_setup

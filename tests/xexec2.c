@@ -1389,7 +1389,7 @@ ACTION_RUN(hf_run) {
 
 ACTION_RUN(hxrc_run) {
   hio_rc_exp = V0.i;
-  VERB1("%s; HIO expected rc now %d(%s)", A.desc, V0.i, V0.s);
+  VERB1("%s; HIO expected rc now %s(%d)", A.desc, V0.s, V0.i);
 }
 
 ACTION_CHECK(hxct_check) {
@@ -1761,7 +1761,7 @@ int main(int argc, char * * argv) {
           local_fails + global_fails, test_name);
     
     // Pavilion message
-    printf("<result> %s <<< xexec done.  Test name: %s Fails: %d >>>\n",
+    printf("<result> %s <<< xexec done.  Test name: %s  Fails: %d >>>\n",
            (local_fails + global_fails) ? "fail" : "pass",
            test_name, local_fails + global_fails);
   }

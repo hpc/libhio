@@ -42,3 +42,4 @@ cmdr="
 clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $cmdw
 myrun .libs/xexec2.x $cmdr
+check_rc

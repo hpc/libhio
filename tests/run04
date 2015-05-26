@@ -16,13 +16,13 @@ fails="
     hdo NT1_DS 98 WRITE,CREAT SHARED
 
   /@@ HI, HDO CREAT in non-writable data root directory @/
-    hi MY_CTX POSIX:$ro_dir 
+    hi MY_CTX posix:$ro_dir 
     hxrc ERR_PERM 
     hdo NTN_DS 97 WRITE,CREAT UNIQUE
     hf
 
   /@@ HI, HDO READ in non-existant data root directory @/
-    hi MY_CTX POSIX:/does_not_exist 
+    hi MY_CTX posix:/does_not_exist 
     hxrc ERR_NOT_FOUND
     hdo NTN_DS 97 READ UNIQUE
     hf
@@ -49,5 +49,5 @@ fails="
 #set -x
 clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $fails
-
+check_rc
 cmd rmdir $ro_dir
