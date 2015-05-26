@@ -53,18 +53,19 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
     return HIO_SUCCESS;
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "creating dataset directory @ %s", posix_dataset->base_path);
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix: creating dataset directory @ %s", posix_dataset->base_path);
 
   rc = hio_mkpath (posix_dataset->base_path, access_mode);
   if (0 > rc || EEXIST == errno) {
     if (EEXIST != errno) {
-      hio_err_push (hioi_err_errno (errno), context, NULL, "Error creating context directory: %s", posix_dataset->base_path);
+      hio_err_push (hioi_err_errno (errno), context, NULL, "posix: error creating context directory: %s",
+                    posix_dataset->base_path);
     }
 
     return hioi_err_errno (errno);
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Successfully created dataset directories");
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: successfully created dataset directories");
 
   return HIO_SUCCESS;
 }
@@ -152,8 +153,8 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   int rc = HIO_SUCCESS;
   char *path = NULL;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-posix/dataset_open: opening dataset %s:%lu mpi: %d",
-	    name, (unsigned long) set_id, hioi_context_using_mpi (context));
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_open: opening dataset %s:%lu mpi: %d flags: 0x%x mode: 0x%x",
+	    name, (unsigned long) set_id, hioi_context_using_mpi (context), flags, mode);
 
   posix_dataset = (builtin_posix_module_dataset_t *)
     hioi_dataset_alloc (context, name, set_id, flags, mode,
@@ -173,7 +174,6 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   if (flags & HIO_FLAG_TRUNC) {
     /* access works with directories on OSX and Linux but may not work with directories on all systems */
     if (0 == context->context_rank) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: removing existing dataset");
       /* blow away the existing dataset */
       (void) builtin_posix_module_dataset_unlink (module, name, set_id);
     }
@@ -197,7 +197,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
     }
 
     if (access (path, F_OK)) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-posix/dataset_open: could not find top-level manifest");
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: could not find top-level manifest");
       return HIO_ERR_NOT_FOUND;
     }
 
@@ -301,7 +301,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
   *set_out = &posix_dataset->base;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Successfully %s posix dataset %s:%llu on data root %s",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully %s posix dataset %s:%llu on data root %s",
             (flags & HIO_FLAG_CREAT) ? "created" : "opened", name, set_id, module->data_root);
 
   return HIO_SUCCESS;
@@ -340,7 +340,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
         rc = hioi_manifest_save (dataset, path);
         free (path);
         if (HIO_SUCCESS != rc) {
-          hio_err_push (rc, context, &dataset->dataset_object, "error writing local manifest");
+          hio_err_push (rc, context, &dataset->dataset_object, "posix: error writing dataset manifest");
         }
       } else {
         rc = HIO_ERR_OUT_OF_RESOURCE;
@@ -388,11 +388,15 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
     return hioi_err_errno (errno);
   }
 
+  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "posix: unlinking existing dataset %s::%llu",
+            name, set_id);
+
   /* use tree walk depth-first to remove all of the files for this dataset */
   rc = nftw (path, builtin_posix_unlink_cb, 32, FTW_DEPTH | FTW_PHYS);
   free (path);
   if (0 > rc) {
-    fprintf (stderr, "Could not unlink dataset. errno = %d\n", errno);
+    hio_err_push (hioi_err_errno (errno), module->context, NULL, "posix: could not unlink dataset. errno: %d",
+                  errno);
     return hioi_err_errno (errno);
   }
 
@@ -460,8 +464,8 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
 
     if (NULL == element->element_fh) {
       int hrc = hioi_err_errno (errno);
-      hio_err_push (hrc, dataset->dataset_context, &dataset->dataset_object, "Error opening element file %s. "
-                    "Reason: %s", path, strerror(errno));
+      hio_err_push (hrc, dataset->dataset_context, &dataset->dataset_object, "posix: error opening element file %s. "
+                    "errno: %d", path, errno);
       free (path);
       hioi_element_release (element);
       return hrc;
@@ -472,8 +476,9 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
 
   hioi_dataset_add_element (dataset, element);
 
-  hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Created new element %p (idenfier %s) for dataset %s",
-	    element, element_name, dataset->dataset_object.identifier);
+  hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "posix: %s element %p (identifier %s) for dataset %s",
+	    (HIO_FLAG_WRITE & dataset->dataset_flags) ? "created" : "opened", element, element_name,
+            dataset->dataset_object.identifier);
 
   *element_out = element;
 
@@ -513,7 +518,8 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
     fh = element->element_fh;
   }
 
-  hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Writing %lu bytes to file offset %lu (%lu)", count * size, file_offset, ftell (fh));
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: writing %lu bytes to file offset %lu (%lu)", count * size,
+            file_offset, ftell (fh));
 
   errno = 0;
   if (0 < stride) {
@@ -533,7 +539,8 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
 
   posix_dataset->base.dataset_status = hioi_err_errno (errno);
 
-  hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Finished write. bytes written: %lu, file offset is now %lu", items_written * size, ftell (fh));
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: finished write. bytes written: %lu",
+            items_written * size);
 
   if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
     hioi_element_add_segment (element, file_offset, offset, 0, size * count);
@@ -678,7 +685,7 @@ static int builtin_posix_module_element_complete (struct hio_module_t *module, h
 }
 
 static int builtin_posix_module_fini (struct hio_module_t *module) {
-  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Finalizing posix filesystem module for data root %s",
+  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "posix: finalizing module for data root %s",
 	    module->data_root);
 
   free (module->data_root);
@@ -721,7 +728,7 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
   builtin_posix_module_t *new_module;
 
   if (strncasecmp("posix:", data_root, 6)) {
-    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Module posix does not match for data root %s",
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: module does not match data root %s",
 	      data_root);
     return HIO_ERR_NOT_AVAILABLE;
   }
@@ -748,11 +755,11 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
   /* get the current umask */
   new_module->access_mode = umask (0);
   umask (new_module->access_mode);
-  new_module->access_mode ^= 0777;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Created posix filesystem module for data root %s. access mode %o",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: created module for data root %s. using umask %o",
 	    data_root, new_module->access_mode);
 
+  new_module->access_mode ^= 0777;
   *module = &new_module->base;
 
   return HIO_SUCCESS;
