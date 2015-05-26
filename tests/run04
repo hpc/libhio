@@ -4,26 +4,31 @@
 # Invalid parameter test cases 
 # Much more needed 
 
+ro_dir="$PWD/non-writable-test-directory"
+
+cmd mkdir $ro_dir
+cmd chmod 555 $ro_dir
+
 fails="
   name run04w v $verbose_lev d $debug_lev mi 0
   /@@ HDO without prior init @/
     hxrc ERR_BAD_PARAM 
     hdo NT1_DS 98 WRITE,CREAT SHARED
 
-  /@@ HI, HDO CREAT in non-writable context directory @/
-    hi MY_CTX POSIX:/does_not_exist 
+  /@@ HI, HDO CREAT in non-writable data root directory @/
+    hi MY_CTX POSIX:$ro_dir 
     hxrc ERR_PERM 
     hdo NTN_DS 97 WRITE,CREAT UNIQUE
     hf
 
-  /@@ HI, HDO READ in non-existant context directory @/
+  /@@ HI, HDO READ in non-existant data root directory @/
     hi MY_CTX POSIX:/does_not_exist 
     hxrc ERR_NOT_FOUND
     hdo NTN_DS 97 READ UNIQUE
     hf
 
   /@@ HI, HDO invalid data root prefix @/
-    hi MY_CTX WIERD:/does_not_exist 
+    hi MY_CTX WIERD:$PWD 
     hxrc ERR_NOT_FOUND 
     hdo NTN_DS 97 WRITE,CREAT UNIQUE
     hf
@@ -44,3 +49,5 @@ fails="
 #set -x
 clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $fails
+
+cmd rmdir $ro_dir
