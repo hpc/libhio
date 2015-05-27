@@ -697,17 +697,20 @@ ACTION_RUN(va_run) {
 ACTION_RUN(vt_run) {
   U64 stride = V0.u;
   char *p, *end_p1;
+  ETIMER tmr;
   if (memcount > 0) {
-    p = (char*)memptr;
+    p = (char*)memptr + sizeof(struct memblk);
     end_p1 = p + memptr->size;
     DBG4("Touching memory at %p, length 0x%llx, stride: %lld", p, memptr->size, stride);
+    ETIMER_START(&tmr);
     while (p < end_p1) {
-      if (p - (char *)memptr >= sizeof(struct memblk)) {
-        DBG5("touch memptr: %p memlen: 0x%llx: end_p1: %p p: %p", memptr, memptr->size, end_p1, p);
-        *p = 'x';
-      }
+      DBG5("touch memptr: %p memlen: 0x%llx: end_p1: %p p: %p", memptr, memptr->size, end_p1, p);
+      *p = 'x';
       p += stride;
     }
+    double delta_t = ETIMER_ELAPSED(&tmr);
+    U64 count = memptr->size / stride;
+    VERB2("vt done; touches: %ld  time: %f Seconds, MTpS: %e", count, delta_t, (double)count / delta_t / 1E6);
   } else {
     VERB0("mem_hand - Warning: no memory allocation to touch");
   }
