@@ -737,7 +737,7 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
   data_root += 6;
 
   if (access (data_root, F_OK)) {
-    hio_err_push (hioi_err_errno (errno), context, NULL, "posix: data root %d does not exist or can not be accessed",
+    hio_err_push (hioi_err_errno (errno), context, NULL, "posix: data root %s does not exist or can not be accessed",
                   data_root);
     return hioi_err_errno (errno);
   }
