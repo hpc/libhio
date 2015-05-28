@@ -101,61 +101,6 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
   return HIO_SUCCESS;
 }
 
-/* remove once implemented in datawarp */
-static int temp_dw_stage_directory_out (const char *dataset_path, const char *pfs_path, mode_t pfs_mode, int mode) {
-  DIR *dw_dir = opendir (dataset_path);
-  struct dirent *dw_entry;
-  int rc = 0;
-
-  if (NULL == dw_dir) {
-    errno = ENOENT;
-    return -1;
-  }
-
-  while (NULL != (dw_entry = readdir (dw_dir))) {
-    char *dw_tmp, *pfs_tmp = NULL;
-    if ('.' == dw_entry->d_name[0]) {
-      continue;
-    }
-
-    rc = asprintf (&dw_tmp, "%s/%s", dataset_path, dw_entry->d_name);
-    if (0 > rc) {
-      break;
-    }
-
-    if (DW_REVOKE_STAGE_AT_JOB_END != mode) {
-      rc = asprintf (&pfs_tmp, "%s/%s", pfs_path, dw_entry->d_name);
-      if (0 > rc) {
-        free (dw_tmp);
-        break;
-      }
-    }
-
-    if (DT_DIR == dw_entry->d_type) {
-      if (DW_REVOKE_STAGE_AT_JOB_END != mode) {
-        mkdir (pfs_tmp, pfs_mode);
-      }
-
-      rc = temp_dw_stage_directory_out (dw_tmp, pfs_tmp, pfs_mode, mode);
-    } else {
-      rc = dw_stage_file_out (dw_tmp, pfs_tmp, mode);
-    }
-
-    free (dw_tmp);
-
-    if (DW_REVOKE_STAGE_AT_JOB_END != mode) {
-      free (pfs_tmp);
-    }
-
-    if (0 != rc) {
-      break;
-    }
-  }
-
-  closedir (dw_dir);
-  return rc;
-}
-
 static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, hio_dataset_t dataset) {
   builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) dataset;
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
@@ -197,14 +142,14 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
               "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->dataset_object.identifier,
               dataset->dataset_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
-    rc = hio_mkpath (pfs_path, datawarp_module->posix_module->access_mode);
+    rc = hio_mkpath (pfs_path, pfs_mode);
     if (HIO_SUCCESS != rc) {
       free (dataset_path);
       free (pfs_path);
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    rc = temp_dw_stage_directory_out (dataset_path, pfs_path, pfs_mode, datawarp_dataset->stage_mode);
+    rc = dw_stage_directory_out (dataset_path, pfs_path, datawarp_dataset->stage_mode);
     free (pfs_path);
     free (dataset_path);
     if (0 != rc) {
@@ -241,7 +186,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       }
 
       /* revoke the end of job stage for the previous dataset */
-      rc = temp_dw_stage_directory_out (dataset_path, NULL, 0, DW_REVOKE_STAGE_AT_JOB_END);
+      rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
       free (dataset_path);
       if (0 != rc) {
         hio_err_push (HIO_ERROR, context, &dataset->dataset_object, "builtin-datawarp/dataset_close: error revoking prior "
