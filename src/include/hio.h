@@ -218,22 +218,23 @@
  *   list including any of the following: BB (burst buffer), or PFS:path (parallel file
  *   system).
  *
- * - @b checkpoint_size - Expected size of checkpoint data. This is used to help libhio determine the
- *   appropriate checkpoint interval for the job.
+ * - @b print_statistics - Print IO statistics when hio_fini() is called. This value is only meaningful
+ *   on the first IO rank.
  *
- * - @b print_statistics - Print IO statistics when hio_fini() is called.
- *
- * - @b context_verbose - Verbosity level of libhio (0-100). The default is a verbosity level of 0
- *   which outputs errors only from libhio. Higher levels will output more and more detailed
- *   debugging information.
+ * - @b context_base_verbose - Verbosity level of libhio (0-100). The default is a verbosity level of 0
+ *   which outputs hio errors. Higher levels will output warnings and more detailed debugging information.
+ *   The maximum verbosity is 100. The context verbosity can be set independently on any rank(s).
  *
  * @subsubsection subsubsec_configuration_dataset Dataset Specific Variables
  *
- * - @b stage_mode - Mode to use for staging files to more permanent data stores (ex: BB \-\> PFS).
- *   Available modes: lazy (stage periodically or at end of job), immediate (stage when the dataset
- *   is closed).
+ * - @b datawarp_stage_mode - Mode to use for staging files to more permanent data stores (ex: BB \-\> PFS).
+ *   Available modes: end_of_job (stage at end of job), immediate (stage when the dataset is closed).
  *
- * - @b stripe_width - Filesystem striping width. Passed to the underlying filesystem if supported.
+ * - @b stripe_width - Filesystem striping width. This value will be passed along to the underlying
+ *   file system if it is supported.
+ *
+ * - @b expected_size - Expected total size of a checkpoint. This value will be used when calculating
+ *   the appropriate output interval for a dataset.
  *
  * @page page_example Examples
  * @section sec_example_c C Example
