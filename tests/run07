@@ -1,0 +1,59 @@
+#! /bin/bash 
+. ./run_setup
+
+# Read and write N-N test case with read data value checking.
+# Dataset staged to scratch and deleted from DataWarp prior 
+# to read.  
+
+if [[ ${HIO_TEST_ROOTS/DataWarp//} == $HIO_TEST_ROOTS ]]; then 
+  echo "Test $0 only valid valid with DataWarp.  Exiting."  
+  exit 12
+fi
+
+case $size in
+  t ) blk=1k;   nblk=5;;
+  s ) blk=20ki; nblk=8;;   
+  m ) blk=1Mi;  nblk=200;;
+  l ) blk=2Mi;  nblk=512;;
+  x ) blk=2Mi;  nblk=1024;;
+  * ) synexit "Error: invalid size $size";;
+esac
+
+msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg" 
+
+cmdw="
+  /@@ Read and write N-N test case with read data value checking @/
+  name run07w v $verbose_lev d $debug_lev mi 0
+  hi MYCTX $HIO_TEST_ROOTS 
+  hdo NTNDS 97 WRITE,CREAT UNIQUE
+  hpv
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  lc $nblk
+    hew -$blk $blk 
+  le 
+  hec hdc hf mgf mf
+"
+
+cmdr="
+  /@@ Read and write N-N test case with read data value checking @/
+  name run07r v $verbose_lev d $debug_lev mi 32
+  hi MYCTX $HIO_TEST_ROOTS 
+  hdo NTNDS 97 READ UNIQUE
+  heo MY_EL READ 20Mi
+  hck on
+  lc $nblk
+    her -$blk $blk 
+  le 
+  hec hdc hf mgf mf
+"
+
+clean_roots $HIO_TEST_ROOTS
+export HIO_context_MYCTX_dataset_NTNDS_datawarp_stage_mode="immediate"
+myrun .libs/xexec2.x $cmdw
+# Sleep long enough for data stage to complete - need method to wait for complete
+cmd sleep 300
+cmd aprun -b -n 1 find /dwphase1/cornell -ls
+clean_roots "DataWarp"
+cmd aprun -b -n 1 find /dwphase1/cornell -ls
+myrun .libs/xexec2.x $cmdr
+check_rc

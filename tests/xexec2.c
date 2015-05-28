@@ -142,7 +142,9 @@ char * help =
   "  hck <ON|OFF>  Enable read data checking\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
-  "  hgv           Print (verbose 1) all hio config and perf vars\n"
+  "  hpv           Print (verbose 1) all hio config and perf vars\n"
+  "  hsdv <name> <value>  Set dataset config value on current open dataset\n"        
+  "  hgdv <name>   Print (verbose 1) current open dataset config value\n"
   #endif
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
@@ -1478,7 +1480,7 @@ void get_perf_var(hio_object_t object, char * obj_name, struct action * actionp)
   }                                                                                             
 }
 
-ACTION_RUN(hgv_run) {
+ACTION_RUN(hpv_run) {
   RANK_SERIALIZE_START;
   // bug 35912 get_config_var(NULL, "Global", actionp);
   if (context) get_config_var((hio_object_t) context, "Context", actionp);
@@ -1587,7 +1589,9 @@ struct parse {
   {"hf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
   {"hxrc",  {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
   {"hxct",  {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
-  {"hgv",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hgv_run     },
+  {"hpv",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hpv_run     },
+//{"hsdv",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hsdv_run    },
+//{"hgdv",  {STR,  NONE, NONE, NONE, NONE}, NULL,          hgdv_run    },
   #endif
   {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",     {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
