@@ -2,7 +2,7 @@
 // xexec.c - xexec is a multi-purpose HPC system testing tool.  See the help 
 // text a few lines below for a description of its capabilities.
 //----------------------------------------------------------------------------
-#define _GNU_SOURCE
+#define _GNU_SOURCE 1
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#include <regex.h>
 #ifdef DLFCN
 #include <dlfcn.h>
 #endif
@@ -19,6 +20,10 @@
 #endif
 #ifdef HIO
 #include "hio.h"
+#include "hio_config.h"
+#if HIO_USE_DATAWARP
+#include <datawarp.h>
+#endif
 #endif
 //----------------------------------------------------------------------------
 // DBGMAXLEV controls which debug messages are compiled into the program.
@@ -142,13 +147,21 @@ char * help =
   "  hck <ON|OFF>  Enable read data checking\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
-  "  hpv           Print (verbose 1) all hio config and perf vars\n"
-  "  hsdv <name> <value>  Set dataset config value on current open dataset\n"        
-  "  hgdv <name>   Print (verbose 1) current open dataset config value\n"
+  "  hvp <type regex> <name regex> Prints config and performance variables that match\n"
+  "                the type and name regex's.  Types are two letter codes {c|p} {c|d|e}\n"
+  "                where c|p is config or perf and c|d|e is context or dataset or element\n"
+  "                \"hvp . .\" will print everything\n"
+  "                \"hvp p total\" will print all perf vars containing \"total\" in the name\n"
+  "  hvsc <name> <value>  Set hio context variable\n"
+  "  hvsd <name> <value>  Set hio dataset variable\n"
+  "  hvse <name> <value>  Set hio elementq variable\n"
+  #if HIO_USE_DATAWARP
+  "  dwds <directory> Issue dw_wait_directory_stage\n"
+  #endif
   #endif
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
-  "  find <string> <file>  Read <file>, print (verbose 1) any lines containg string\n"
+  "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines\n"
   "\n"
   "  Numbers can be specified with suffixes k, ki, M, Mi, G, Gi, etc.\n"
   "\n"
@@ -156,6 +169,7 @@ char * help =
   "  actions as separate tokens.  Also, /@ is only recognized if it is the first\n"
   "  token of an action. Comments starting with /@@ are printed. Comments may be nested.\n"
   "\n"
+  "  <regex> parameters are POSIX extended regular expressions. See man 7 regex\n"
   "\n"
   "  Example action sequences:\n"
   "    v 1 d 1\n"
@@ -200,7 +214,8 @@ typedef struct pval {
   U64 u;
   char * s;
   int i;  // Use for enums
-  double d; 
+  double d;
+  regex_t * rxp;  // Compiled regular expressions 
 } PVAL;
 
 #define MAX_PARAM 5
@@ -428,7 +443,7 @@ void lfsr_test(void) {
 //----------------------------------------------------------------------------
 ACTION_CHECK(verbose_check) {
   int verbose = V0.u;
-  if (verbose > MAX_VERBOSE) ERRX("Verbosity level %d > maximum %d", verbose, MAX_VERBOSE);
+  if (verbose > MAX_VERBOSE) ERRX("%s: Verbosity level %d > maximum %d", A.desc, verbose, MAX_VERBOSE);
 }
 
 ACTION_RUN(verbose_run) {
@@ -439,9 +454,9 @@ ACTION_RUN(verbose_run) {
 
 ACTION_CHECK(debug_check) {
   int debug = V0.u;
-  if (debug > DBGMAXLEV) ERRX("requested debug level %d > maximum %d."
+  if (debug > DBGMAXLEV) ERRX("%s: requested debug level %d > maximum %d."
                               " Rebuild with -DDBGMAXLEV=<n> to increase"
-                              " (see comments in source.)", debug, DBGMAXLEV);
+                              " (see comments in source.)", A.desc, debug, DBGMAXLEV);
   if (A.actn == 0) {
     msg_context_set_debug(MY_MSG_CTX, debug);
     VERB2("Parse debug level set to %d", debug);
@@ -490,14 +505,14 @@ ACTION_CHECK(imbed_check) {
     char * fn = V0.s;
     if (!strcmp(fn, "-")) file = stdin;
     else file = fopen(fn, "r");
-    if (!file) ERRX("unable to open file %s: %s", fn, strerror(errno));
+    if (!file) ERRX("%s: unable to open file %s: %s", A.desc, fn, strerror(errno));
     #define BUFSZ 1024*1024
     void * p = MALLOCX(BUFSZ);
     size_t size;
     size = fread(p, 1, BUFSZ, file);
     DBG4("fread %s returns %d", fn, size);
-    if (ferror(file)) ERRX("error reading file %s %d %s", fn, ferror(file), strerror(ferror(file)));
-    if (!feof(file)) ERRX("imbed file %s larger than buffer (%d bytes)", fn, BUFSZ);
+    if (ferror(file)) ERRX("%s: error reading file %s %d %s", A.desc, fn, ferror(file), strerror(ferror(file)));
+    if (!feof(file)) ERRX("%s: imbed file %s larger than buffer (%d bytes)", A.desc, fn, BUFSZ);
     fclose(file);
     p = REALLOCX(p, size);
 
@@ -542,11 +557,11 @@ ACTION_CHECK(loop_check) {
        !strcmp(A.action, "ls") ||
     #endif
        !strcmp(A.action, "lt") ) {
-    if (++lcur - lctl >= MAX_LOOP) ERRX("Maximum nested loop depth of %d exceeded", MAX_LOOP);
+    if (++lcur - lctl >= MAX_LOOP) ERRX("%s: Maximum nested loop depth of %d exceeded", A.desc, MAX_LOOP);
   } else if (!strcmp(A.action, "le")) {
-    if (lcur <= lctl) ERRX("loop end when no loop active - more loop ends than loop starts");
+    if (lcur <= lctl) ERRX("%s: loop end when no loop active - more loop ends than loop starts", A.desc);
     lcur--;
-  } else ERRX("internal error loop_hand invalid action: %s", A.action);
+  } else ERRX("%s: internal error loop_hand invalid action: %s", A.desc, A.action);
 }
 
 ACTION_RUN(lc_run) {
@@ -621,7 +636,7 @@ ACTION_RUN(le_run) {
       break;
     #endif
     default:
-      ERRX("internal error le_run invalid looptype %d", lcur->type);
+      ERRX("%s: internal error le_run invalid looptype %d", A.desc, lcur->type);
   }
 }
 
@@ -671,11 +686,11 @@ ACTION_CHECK(va_check) {
 }
 
 ACTION_CHECK(vt_check) {
-  if (memcount <= 0) ERRX("Touch without cooresponding allocate");
+  if (memcount <= 0) ERRX("%s: touch without cooresponding allocate", A.desc);
 }
 
 ACTION_CHECK(vf_check) {
-  if (memcount-- <= 0) ERRX("Free without cooresponding allocate");
+  if (memcount-- <= 0) ERRX("%s: free without cooresponding allocate", A.desc);
 }
 
 
@@ -1005,7 +1020,7 @@ ACTION_RUN(hx_run) {
     ETIMER_START(&tmr);
     blk[n].ptr = malloc(blk[n].size);
     stat[b].atime += ETIMER_ELAPSED(&tmr);
-    if (!blk[n].ptr) ERRX("heapx: malloc %td bytes failed", blk[n].size);
+    if (!blk[n].ptr) ERRX("%s: heapx: malloc %td bytes failed", A.desc, blk[n].size);
     total += blk[n].size;
     stat[b].count++;
     memset(blk[n].ptr, 0xA5, blk[n].size);
@@ -1173,7 +1188,7 @@ static U64 rw_count[2];
 ETIMER hio_tmr;
 
 #define HRC_TEST(API_NAME)  {                                                      \
-  local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);  \
+  local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0); \
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                \
     MSG("%s: " #API_NAME " %s; rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK",   \
          enum_name(MY_MSG_CTX, &etab_herr, hrc),                                   \
@@ -1185,7 +1200,7 @@ ETIMER hio_tmr;
 
 #define HCNT_TEST(API_NAME)  {                                                               \
   if (HIO_CNT_REQ == hio_cnt_exp) hio_cnt_exp = hreq;                                        \
-  local_fails += (hio_fail = ( hcnt != hio_cnt_exp && hio_cnt_exp != HIO_CNT_ANY ) ? 1: 0);   \
+  local_fails += (hio_fail = ( hcnt != hio_cnt_exp && hio_cnt_exp != HIO_CNT_ANY ) ? 1: 0);  \
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                          \
     MSG("%s: " #API_NAME " %s; cnt: %d exp: %d", A.desc, hio_fail ? "FAIL": "OK",            \
          hcnt, hio_cnt_exp);                                                                 \
@@ -1408,37 +1423,70 @@ ACTION_RUN(hxct_run) {
   VERB1("%s; HIO expected count now %lld", A.desc, V0.u);
 }
 
-void get_config_var(hio_object_t object, char * obj_name, struct action * actionp) {
+//----------------------------------------------------------------------------
+// Compile regex, handle errors
+//----------------------------------------------------------------------------
+void rx_comp(int n, struct action * actionp) {
+  A.v[n].rxp = MALLOCX(sizeof(regex_t));
+
+  int rc = regcomp(A.v[n].rxp, A.v[n].s, REG_EXTENDED | REG_NOSUB);
+  if (rc) {
+    char buf[512];
+    regerror(rc, NULL, buf, sizeof(buf));
+    ERRX("%s; regex: %s", A.desc, buf);
+  } 
+}
+//----------------------------------------------------------------------------
+// Compare regex, handle errors. Returns 0 on match or REG_NOMATCH
+//----------------------------------------------------------------------------
+int rx_run(int n, struct action * actionp, char * line) {
+  int rc = regexec(A.v[n].rxp, line, 0, NULL, 0);
+  if (rc != 0 && rc != REG_NOMATCH) {
+    char buf[512];
+    regerror(rc, A.v[n].rxp, buf, sizeof(buf));
+    ERRX("%s; regex: %s", A.desc, buf);
+  }
+  return rc;
+}
+
+//----------------------------------------------------------------------------
+// hvp action handlers
+//----------------------------------------------------------------------------
+void pr_cfg(hio_object_t object, char * obj_name, struct action * actionp) {
   hio_return_t hrc;                                                                             
   int count;                                                                                   
   hrc = hio_config_get_count((hio_object_t) object, &count);                                 
   HRC_TEST("hio_config_get_count");                                                         
-  VERB1("hio_config_get_count %s returns count: %d", obj_name, count);                      
+  DBG3("hio_config_get_count %s returns count: %d", obj_name, count);
+ 
   for (int i = 0; i< count; i++) {                                                             
     char * name;                                                                                
     hio_config_type_t type;                                                                     
     bool ro;                                                                                    
-    char * value = NULL;                                                                               
+    char * value = NULL;
+                                                                               
     hrc = hio_config_get_info((hio_object_t) object, i, &name, &type, &ro);                  
     HRC_TEST("hio_config_get_info");                                                        
-    if (HIO_SUCCESS == hrc) {                                                                   
-      hrc = hio_config_get_value((hio_object_t) object, name, &value);                       
-      HRC_TEST("hio_config_get_value");                                                     
-      if (HIO_SUCCESS == hrc) {                                                                 
-        VERB1("%s Config name: %s type: %s  %s value: %s", obj_name, name,                             
-              enum_name(MY_MSG_CTX, &etab_hcfg, type), ro ? "RO": "RW", value);                 
-      }                                                                                         
-      value = FREEX(value);
+    if (HIO_SUCCESS == hrc) {        
+      if (!rx_run(1, actionp, name)) {
+        hrc = hio_config_get_value((hio_object_t) object, name, &value);                       
+        HRC_TEST("hio_config_get_value");                                                     
+        if (HIO_SUCCESS == hrc) {                                                                 
+          VERB1("%s Config (%6s, %s) %30s = %s", obj_name,                              
+                enum_name(MY_MSG_CTX, &etab_hcfg, type), ro ? "RO": "RW", name, value);                 
+        }                                                                                         
+        value = FREEX(value);
+      }
     }                                                                                           
   }                                                                                             
 }
 
-void get_perf_var(hio_object_t object, char * obj_name, struct action * actionp) {
+void pr_perf(hio_object_t object, char * obj_name, struct action * actionp) {
   hio_return_t hrc;                                                                             
   int count;                                                                                   
   hrc = hio_perf_get_count((hio_object_t) object, &count);                                 
   HRC_TEST("hio_perf_get_count");                                                         
-  VERB1("hio_perf_get_count %s returns count: %d", obj_name, count);                      
+  DBG3("hio_perf_get_count %s returns count: %d", obj_name, count);                      
   for (int i = 0; i< count; i++) {                                                             
     char * name;                                                                                
     hio_config_type_t type;                                                                     
@@ -1457,40 +1505,76 @@ void get_perf_var(hio_object_t object, char * obj_name, struct action * actionp)
     hrc = hio_perf_get_info((hio_object_t) object, i, &name, &type);                  
     HRC_TEST("hio_perf_get_info");                                                        
     if (HIO_SUCCESS == hrc) {                                                                   
-      hrc = hio_perf_get_value((hio_object_t) object, name, &value, sizeof(value));                       
-      HRC_TEST("hio_perf_get_value");                                                     
-      if (HIO_SUCCESS == hrc) {                                                                 
-        #define PM(FMT, VAR)                                                 \
-          VERB1("%s Perf name: %s type: %s value: " #FMT, obj_name, name,    \
-                enum_name(MY_MSG_CTX, &etab_hcfg, type), VAR);                 
+      if (!rx_run(1, actionp, name)) {
+        hrc = hio_perf_get_value((hio_object_t) object, name, &value, sizeof(value));                       
+        HRC_TEST("hio_perf_get_value");  
+        if (HIO_SUCCESS == hrc) {                                                                 
+          #define PM2(FMT, VAR)                                         \
+            VERB1("%s Perf   (%6s) %30s = " #FMT, obj_name,             \
+                  enum_name(MY_MSG_CTX, &etab_hcfg, type), name, VAR);                 
 
-        switch (type) {
-          case HIO_CONFIG_TYPE_BOOL:   PM(%d,   value.BOOL  ); break;
-          case HIO_CONFIG_TYPE_STRING: PM(%s,   value.STRING); break;
-          case HIO_CONFIG_TYPE_INT32:  PM(%ld,  value.INT32 ); break;
-          case HIO_CONFIG_TYPE_UINT32: PM(%lu,  value.UINT32); break;
-          case HIO_CONFIG_TYPE_INT64:  PM(%lld, value.INT64 ); break;
-          case HIO_CONFIG_TYPE_UINT64: PM(%llu, value.UINT64); break;
-          case HIO_CONFIG_TYPE_FLOAT:  PM(%f,   value.FLOAT) ; break;
-          case HIO_CONFIG_TYPE_DOUBLE: PM(%f,   value.DOUBLE); break;
-          default: ERRX("get_perf_var: Invalid hio_config_type_t: %d", type);  
-        }
-      }                                                                                         
-    }                                                                                           
+          switch (type) {
+            case HIO_CONFIG_TYPE_BOOL:   PM2(%d,   value.BOOL  ); break;
+            case HIO_CONFIG_TYPE_STRING: PM2(%s,   value.STRING); break;
+            case HIO_CONFIG_TYPE_INT32:  PM2(%ld,  value.INT32 ); break;
+            case HIO_CONFIG_TYPE_UINT32: PM2(%lu,  value.UINT32); break;
+            case HIO_CONFIG_TYPE_INT64:  PM2(%lld, value.INT64 ); break;
+            case HIO_CONFIG_TYPE_UINT64: PM2(%llu, value.UINT64); break;
+            case HIO_CONFIG_TYPE_FLOAT:  PM2(%f,   value.FLOAT) ; break;
+            case HIO_CONFIG_TYPE_DOUBLE: PM2(%f,   value.DOUBLE); break;
+            default: ERRX("%s: invalid hio_config_type_t: %d", A.desc, type);  
+          }
+        }                                                                                         
+      }                                                                                             
+    }                                                                                             
   }                                                                                             
 }
 
-ACTION_RUN(hpv_run) {
-  RANK_SERIALIZE_START;
-  // bug 35912 get_config_var(NULL, "Global", actionp);
-  if (context) get_config_var((hio_object_t) context, "Context", actionp);
-  if (dataset) get_config_var((hio_object_t) dataset, "Dataset", actionp);
-  if (context) get_perf_var((hio_object_t) context, "Context", actionp);
-  if (dataset) get_perf_var((hio_object_t) dataset, "Dataset", actionp);
-  RANK_SERIALIZE_END;
+ACTION_CHECK(hvp_check) {
+  rx_comp(0, actionp);
+  rx_comp(1, actionp);
 }
 
-#endif
+ACTION_RUN(hvp_run) {
+  RANK_SERIALIZE_START
+  if (!rx_run(0, actionp, "cc") && context) pr_cfg((hio_object_t)context, "Context", actionp);
+  if (!rx_run(0, actionp, "cd") && dataset) pr_cfg((hio_object_t)dataset, "Dataset", actionp);
+  if (!rx_run(0, actionp, "ce") && element) pr_cfg((hio_object_t)element, "Element", actionp);
+  if (!rx_run(0, actionp, "pc") && context) pr_perf((hio_object_t)context, "Context", actionp);
+  if (!rx_run(0, actionp, "pd") && dataset) pr_perf((hio_object_t)dataset, "Dataset", actionp);
+  if (!rx_run(0, actionp, "pe") && element) pr_perf((hio_object_t)element, "Element", actionp);
+  RANK_SERIALIZE_END
+}
+
+ACTION_RUN(hvsc_run) {
+  hio_return_t hrc;                                                                             
+  if (!context) ERRX("%s: hio context not established", A.desc);
+  hrc = hio_config_set_value((hio_object_t) context, V0.s, V1.s);                                 
+  HRC_TEST("hio_config_set_value");                                                         
+}  
+
+ACTION_RUN(hvsd_run) {
+  hio_return_t hrc;                                                                             
+  if (!dataset) ERRX("%s: hio dataset not open", A.desc);
+  hrc = hio_config_set_value((hio_object_t) dataset, V0.s, V1.s);                                 
+  HRC_TEST("hio_config_set_value");                                                         
+}  
+
+ACTION_RUN(hvse_run) {
+  hio_return_t hrc;                                                                             
+  if (!context) ERRX("%s: hio element not open", A.desc);
+  hrc = hio_config_set_value((hio_object_t) element, V0.s, V1.s);                                 
+  HRC_TEST("hio_config_set_value");                                                         
+}  
+
+#if HIO_USE_DATAWARP
+ACTION_RUN(dwds_run) {
+  int rc = dw_wait_directory_stage(V0.s);
+  VERB1("dw_wait_directory_stage(%s) rc: %d", V0.s, rc);
+}
+#endif // HIO_USE_DATAWARP
+
+#endif //HIO
 
 // Special action runner for printing out /@@ comments
 ACTION_RUN(cmsg_run) {
@@ -1511,18 +1595,23 @@ ACTION_RUN(exit_run) {
 }
 
 //----------------------------------------------------------------------------
-// find action handler
+// grep action handler
 //----------------------------------------------------------------------------
-ACTION_RUN(find_run) {
+
+ACTION_CHECK(grep_check) {
+  rx_comp(0, actionp);
+}
+
+ACTION_RUN(grep_run) {
   char line[512];
   FILE * f = fopen(V1.s, "r");
-  if (!f) ERRX("Error opening \"%s\" %s", V1.s, strerror(errno));
+  if (!f) ERRX("%s: error opening \"%s\" %s", A.desc, V1.s, strerror(errno));
   while (fgets(line, sizeof(line), f)) {
-    if (strcasestr(line, V0.s)) {
+    if (!rx_run(0, actionp, line)) {
       char * last = line + strlen(line) - 1;
       if ('\n' == *last) *last = '\0';
-      VERB1("Find: %s", line);
-    }
+      VERB1("grep: %s", line);
+    } 
   }
   fclose(f);
 }
@@ -1589,13 +1678,17 @@ struct parse {
   {"hf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
   {"hxrc",  {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
   {"hxct",  {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
-  {"hpv",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hpv_run     },
-//{"hsdv",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hsdv_run    },
-//{"hgdv",  {STR,  NONE, NONE, NONE, NONE}, NULL,          hgdv_run    },
+  {"hvp",   {STR,  STR,  NONE, NONE, NONE}, hvp_check,     hvp_run     },
+  {"hvsc",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsc_run    },
+  {"hvsd",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsd_run    },
+  {"hvse",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvse_run    },
+  #if HIO_USE_DATAWARP
+  {"dwds",  {STR,  NONE,  NONE, NONE, NONE}, NULL,         dwds_run    },
+  #endif
   #endif
   {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",     {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
-  {"find",  {STR, STR,   NONE, NONE, NONE}, NULL,          find_run    },
+  {"grep",  {STR, STR,   NONE, NONE, NONE}, grep_check,    grep_run    },
 };
 
 //----------------------------------------------------------------------------

@@ -26,7 +26,8 @@ cmdw="
   name run07w v $verbose_lev d $debug_lev mi 0
   hi MYCTX $HIO_TEST_ROOTS 
   hdo NTNDS 97 WRITE,CREAT UNIQUE
-  hpv
+  hvsd datawarp_stage_mode immediate
+  hvp . .
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
     hew -$blk $blk 
@@ -48,12 +49,14 @@ cmdr="
 "
 
 clean_roots $HIO_TEST_ROOTS
-export HIO_context_MYCTX_dataset_NTNDS_datawarp_stage_mode="immediate"
 myrun .libs/xexec2.x $cmdw
-# Sleep long enough for data stage to complete - need method to wait for complete
-cmd sleep 300
-cmd aprun -b -n 1 find /dwphase1/cornell -ls
+
+# Wait for directory stage out to complete
+cmd aprun -n 1 .libs/xexec2.x v 3 dwds /dwphase1/cornell/MYCTX.hio/NTNDS/97
+
+# delete the datawarp directory
 clean_roots "DataWarp"
-cmd aprun -b -n 1 find /dwphase1/cornell -ls
+
+# Now read the dataset from 2nd data root (PFS)
 myrun .libs/xexec2.x $cmdr
 check_rc
