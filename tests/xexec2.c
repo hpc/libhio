@@ -1569,8 +1569,11 @@ ACTION_RUN(hvse_run) {
 
 #if HIO_USE_DATAWARP
 ACTION_RUN(dwds_run) {
+  ETIMER tmr;
+  ETIMER_START(&tmr);
   int rc = dw_wait_directory_stage(V0.s);
-  VERB1("dw_wait_directory_stage(%s) rc: %d", V0.s, rc);
+  if (rc) local_fails++;
+  VERB1("dw_wait_directory_stage(%s) rc: %d  time: %f Sec", V0.s, rc, ETIMER_ELAPSED(&tmr));
 }
 #endif // HIO_USE_DATAWARP
 
