@@ -111,8 +111,14 @@ if [[ -e $HIO_BUILD/$mod_script ]]; then . $HIO_BUILD/$mod_script; fi
 #----------------------------------------------------------------------------
 # If HIO_TEST_ROOTS not set, set up default
 #----------------------------------------------------------------------------
+if [[ -n $PBS_JOBID ]]; then
+  job_dir="/${PBS_JOBID%%.*}"
+else
+  job_dir=""
+fi
+
 addifd() {
-  if [[ -d $1 ]]; then HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test"; fi
+  if [[ -d $1 ]]; then HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"; fi
 }
 
 if [[ -z $HIO_TEST_ROOTS ]]; then
@@ -134,11 +140,8 @@ fi
 # Clean data roots, i.e., create or empty them out 
 #----------------------------------------------------------------------------
 # Early DW Ph 1 - location of BB directory
-HIO_TEST_DW="/dwphase1/$LOGNAME"
-if [[ -n $PBS_JOBID ]]; then
-  HIO_TEST_DW="$HIO_TEST_DW/${PBS_JOBID%%.*}"
-  export HIO_context_datawarp_root=$HIO_TEST_DW
-fi
+HIO_TEST_DW="/dwphase1/$LOGNAME$job_dir"
+export HIO_context_datawarp_root=$HIO_TEST_DW
 
 # This string contains the logic to check, empty or create a test data root
 # directory.  It needs to be executed on a compute node via aprun for datawarp.
@@ -178,9 +181,9 @@ clean_roots() {
       aprun -n 1 -b bash -c "$clean_cmd" $HIO_TEST_DW
     elif [[ ${r:0:6} == "posix:" ]]; then
       r=${r:6}
-      r=${r%"/"}
-      last=${r##*/}
-      if [[ $last == ${last/test} ]]; then
+      # r=${r%"/"}
+      # last=${r##*/}
+      if [[ $r == ${r/test} ]]; then
         echo "Warning: skipping clean of non-test directory \"$r\""
       else
         bash -c "$clean_cmd" $r
