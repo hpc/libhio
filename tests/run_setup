@@ -135,6 +135,10 @@ fi
 #----------------------------------------------------------------------------
 # Early DW Ph 1 - location of BB directory
 HIO_TEST_DW="/dwphase1/$LOGNAME"
+if [[ -n $PBS_JOBID ]]; then
+  HIO_TEST_DW="$HIO_TEST_DW/${PBS_JOBID%%.*}"
+  export HIO_context_datawarp_root=$HIO_TEST_DW
+fi
 
 # This string contains the logic to check, empty or create a test data root
 # directory.  It needs to be executed on a compute node via aprun for datawarp.
@@ -219,5 +223,8 @@ msg "run_setup:           size: \"$size\""
 msg "run_setup:          ranks: $ranks"
 msg "run_setup:    verbose_lev: $verbose_lev"
 msg "run_setup:      debug_lev: $debug_lev"
+if [[ -n HIO_context_datawarp_root ]]; then
+  msg "run_setup: HIO_context_datawarp_root: \"$HIO_context_datawarp_root\""
+fi
 
 # --- end of run_setup ---

@@ -17,18 +17,21 @@ fails="
 
   /@@ HI, HDO CREAT in non-writable data root directory @/
     hi MY_CTX posix:$ro_dir 
+    hvp c. .
     hxrc ERR_PERM 
     hdo NTN_DS 97 WRITE,CREAT UNIQUE
     hf
 
   /@@ HI, HDO READ in non-existent data root directory @/
     hi MY_CTX posix:/does_not_exist 
+    hvp c. .
     hxrc ERR_NOT_FOUND
     hdo NTN_DS 97 READ UNIQUE
     hf
 
   /@@ HI, HDO invalid data root prefix @/
     hi MY_CTX WIERD:$PWD 
+    hvp c. .
     hxrc ERR_NOT_FOUND 
     hdo NTN_DS 97 WRITE,CREAT UNIQUE
     hf
@@ -39,6 +42,7 @@ fails="
 
   /@@ HI, HDO READ non-existent DS ID  @/
     hi MY_CTX $HIO_TEST_ROOTS
+    hvp c. .
     hxrc ERR_NOT_FOUND 
     hdo NTN_DS 97 READ UNIQUE
     hf
@@ -51,3 +55,4 @@ clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $fails
 check_rc
 cmd rmdir $ro_dir
+clean_roots $HIO_TEST_ROOTS

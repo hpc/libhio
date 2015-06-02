@@ -20,7 +20,8 @@ cmdw="
   hi MY_CTX $HIO_TEST_ROOTS
   hdu NT1_DS 98 ALL 
   hdo NT1_DS 98 WRITE,CREAT SHARED 
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi        
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  hvp c. .     
   lc $nseg
     hsegr 0 $segsz 0
     lc $nblk
@@ -36,6 +37,7 @@ cmdr="
   hi MY_CTX $HIO_TEST_ROOTS 
   hdo NT1_DS 98 READ SHARED 
   heo MY_EL READ 20Mi 
+  hvp c. .     
   hck on
   lc $nseg
     hsegr 0 $segsz 17
@@ -51,3 +53,4 @@ clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $cmdw
 myrun .libs/xexec2.x $cmdr
 check_rc
+clean_roots $HIO_TEST_ROOTS

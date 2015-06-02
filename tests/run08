@@ -3,7 +3,7 @@
 
 # Read and write N-N test case with read data value checking.
 # Dataset staged to scratch and deleted from DataWarp prior 
-# to read.  
+# to read. Multiple dataset staged. 
 
 if [[ ${HIO_TEST_ROOTS/DataWarp//} == $HIO_TEST_ROOTS ]]; then 
   echo "Test $0 only valid valid with DataWarp.  Exiting."  
@@ -25,6 +25,7 @@ cmdw="
   /@@ Read and write N-N test case with read data value checking @/
   name run07w v $verbose_lev d $debug_lev mi 0
   hi MYCTX $HIO_TEST_ROOTS
+
   hdo NTNDS 97 WRITE,CREAT UNIQUE
   hvsd datawarp_stage_mode immediate
   hvp c. .
@@ -32,14 +33,34 @@ cmdw="
   lc $nblk
     hew -$blk $blk 
   le 
-  hec hdc hf mgf mf
+  hec hdc
+
+  hdo NTNDS 98 WRITE,CREAT UNIQUE
+  hvsd datawarp_stage_mode immediate
+  hvp c. .
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  lc $nblk
+    hew -$blk $blk 
+  le 
+  hec hdc
+
+  hdo NTNDS 99 WRITE,CREAT UNIQUE
+  hvsd datawarp_stage_mode immediate
+  hvp c. .
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  lc $nblk
+    hew -$blk $blk 
+  le 
+  hec hdc
+
+  hf mgf mf
 "
 
 cmdr="
   /@@ Read and write N-N test case with read data value checking @/
   name run07r v $verbose_lev d $debug_lev mi 32
   hi MYCTX $HIO_TEST_ROOTS 
-  hdo NTNDS 97 READ UNIQUE
+  hdo NTNDS 99 READ UNIQUE
   heo MY_EL READ 20Mi
   hvp c. .     
   hck on
@@ -53,7 +74,10 @@ clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $cmdw
 
 # Wait for directory stage out to complete
+cmd aprun -n 1 -b find /dwphase1/cornell -ls
 cmd aprun -n 1 .libs/xexec2.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/97
+cmd aprun -n 1 .libs/xexec2.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/98
+cmd aprun -n 1 .libs/xexec2.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/99
 
 # delete the datawarp directory
 clean_roots "DataWarp"

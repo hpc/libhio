@@ -20,6 +20,7 @@ cmdw="
   hi MY_CTX $HIO_TEST_ROOTS 
   hdo NTN_DS 97 WRITE,CREAT,TRUNC UNIQUE
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  hvp c. .
   lc $nblk
     hew -$blk $blk 
   le 
@@ -32,6 +33,7 @@ cmdr="
   hi MY_CTX $HIO_TEST_ROOTS 
   hdo NTN_DS 97 READ UNIQUE
   heo MY_EL READ 20Mi
+  hvp c. .
   hck on
   lc $nblk
     her -$blk $blk 
@@ -44,3 +46,4 @@ myrun .libs/xexec2.x $cmdw
 myrun .libs/xexec2.x $cmdw
 myrun .libs/xexec2.x $cmdr
 check_rc
+clean_roots $HIO_TEST_ROOTS
