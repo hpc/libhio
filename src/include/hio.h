@@ -248,6 +248,10 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
+#if __cplusplus
+extern "C" {
+#endif
+
 /**
  * @ingroup API
  * @brief HIO library context
@@ -1196,5 +1200,9 @@ int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_t
  * to it's type.
  */
 int hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
+
+#if __cplusplus
+}
+#endif
 
 #endif /* !defined(HIO_H) */
