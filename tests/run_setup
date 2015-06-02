@@ -208,9 +208,9 @@ myrun() {
 check_rc(){
   if [[ $max_rc > 0 ]]; then result="FAILURE"
   else result="SUCCESS"; fi
-  echo "##################################################"
-  echo "# $0: Test $result"
-  echo "##################################################"
+  echo "############################################################"
+  echo "# TEST: $0   `date "+%Y-%m-%d %H:%M:%S"`   RESULT: $result"
+  echo "############################################################"
 }
 
 # Display results of run_setup
