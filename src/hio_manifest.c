@@ -19,7 +19,7 @@
 #include <libxml/parser.h>
 #include <libxml/xmlsave.h>
 
-#define HIO_MANIFEST_VERSION "0.4"
+#define HIO_MANIFEST_VERSION "1.0"
 #define HIO_MANIFEST_COMPAT  "1.0"
 
 #define HIO_MANIFEST_PROP_VERSION     (const xmlChar *) "hio_version"
