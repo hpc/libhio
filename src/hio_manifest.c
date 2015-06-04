@@ -530,6 +530,14 @@ static int hioi_manifest_parse_header_1_0 (hio_context_t context, hio_dataset_he
 
   header->dataset_status = svalue;
 
+  rc = hioi_manifest_get_number (xml_doc, top, HIO_MANIFEST_KEY_MTIME, &value);
+
+  if (HIO_SUCCESS != rc) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  header->dataset_mtime = value;
+
   rc = hioi_manifest_prop_get_number (top, HIO_MANIFEST_PROP_DATASET_ID, &value);
 
   if (HIO_SUCCESS != rc) {
