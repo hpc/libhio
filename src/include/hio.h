@@ -261,7 +261,7 @@ extern "C" {
  * hio_finalize(). It is possible to have multiple active contexts at any time
  * during execution. This type is opaque.
  */
-typedef struct hio_context_t *hio_context_t;
+typedef struct hio_context *hio_context_t;
 
 /**
  * @ingroup API
@@ -270,7 +270,7 @@ typedef struct hio_context_t *hio_context_t;
  * HIO datasets represent one or more HIO "files" on the data store. This type
  * is opaque.
  */
-typedef struct hio_dataset_t *hio_dataset_t;
+typedef struct hio_dataset *hio_dataset_t;
 
 /**
  * @ingroup API
@@ -283,7 +283,7 @@ typedef struct hio_dataset_t *hio_dataset_t;
  * The special value HIO_ELEMENT_NULL is a sentinel value used for
  * non-existent elements.
  */
-typedef struct hio_element_t *hio_element_t;
+typedef struct hio_element *hio_element_t;
 
 /**
  * @ingroup API
@@ -295,7 +295,7 @@ typedef struct hio_element_t *hio_element_t;
  * The special value HIO_REQUEST_NULL is a sentinel value used for
  * non-existent requests.
  */
-typedef struct hio_request_t *hio_request_t;
+typedef struct hio_request *hio_request_t;
 
 /**
  * @ingroup API
@@ -304,7 +304,7 @@ typedef struct hio_request_t *hio_request_t;
  * This type is used as a placeholder for any hio object including
  * hio_context_t, hio_dataset_t, and hio_element_t.
  */
-typedef struct hio_object_t *hio_object_t;
+typedef struct hio_object *hio_object_t;
 
 /**
  * @ingroup API
@@ -615,7 +615,9 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  * be made by all ranks in the context. There is no restriction on the number
  * of elements opened by any rank. This number is only limited by the resources
  * available. If the special value HIO_DATASET_ID_LAST is specified in {set_id} libhio
- * will attempt to open an existing dataset with the maximum id.
+ * will attempt to open an existing dataset with the maximum id. If the special value
+ * HIO_DATASET_ID_NEWEST is specified in {set_id} libhio will attempt to open an
+ * an existing dataset with the newest modification time.
  *
  * The flags should be an or'ed value consisting of any or none of the following:
  *
@@ -634,7 +636,7 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  * a different mode than it was created with.
  */
 int hio_dataset_open (hio_context_t ctx, hio_dataset_t *set_out, const char *name,
-                      int64_t set_id, hio_flags_t flags, hio_dataset_mode_t mode);
+                      int64_t set_id, int flags, hio_dataset_mode_t mode);
 
 /**
  * @ingroup API
@@ -700,7 +702,7 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio
  * exclusive access (see @ref HIO_FLAG_EXCL) is requested.
  */
 int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
-                      hio_flags_t flags);
+                      int flags);
 
 /**
  * @ingroup API
@@ -759,8 +761,8 @@ int hio_element_close (hio_element_t *element);
  * longer needed by hio and is free to be modified. Completion of a write
  * does not guarantee the data has been written to the data store.
  */
-ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long reserved0, void *ptr,
-                           size_t count, size_t size);
+ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long reserved0,
+                           const void *ptr, size_t count, size_t size);
 
 
 /**
@@ -785,13 +787,13 @@ ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long re
  * or hio_join() on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the write
  * will be reported by either hio_element_flush() or hio_dataset_flush().
- * The hio implementation is free to return HIO_REQUEST_NULL if the write is complete.
+ * The hio implementation is free to return HIO_OBJECT_NULL if the write is complete.
  * In the context of writes a request is complete when the buffer specified by
  * {ptr} is free to be modified. Completion of a write request does not guarantee
  * the data has been written.
  */
 int hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                          unsigned long reserved0, void *ptr, size_t count, size_t size);
+                          unsigned long reserved0, const void *ptr, size_t count, size_t size);
 
 /**
  * @ingroup blocking
@@ -814,7 +816,7 @@ int hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t o
  * written to the data store.
  */
 ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned long reserved0,
-                                   void *ptr, size_t count, size_t size, size_t stride);
+                                   const void *ptr, size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking
@@ -840,13 +842,14 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
  * or hio_join() on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the write
  * will be reported by either hio_element_flush() or hio_dataset_flush().
- * The hio implementation is free to return HIO_REQUEST_NULL if the write is complete.
+ * The hio implementation is free to return HIO_OBJECT_NULL if the write is complete.
  * In the context of writes a request is complete when the buffer specified by
  * {ptr} is free to be modified. Completion of a write request does not guarantee
  * the data has been written.
  */
 int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                                  unsigned long reserved0, void *ptr, size_t count, size_t size, size_t stride);
+                                  unsigned long reserved0, const void *ptr, size_t count, size_t size,
+                                  size_t stride);
 
 /**
  * @ingroup nonblocking

@@ -73,7 +73,7 @@ struct hio_config_t;
 /**
  * Base of all hio objects
  */
-struct hio_object_t {
+struct hio_object {
   hio_object_type_t type;
 
   /** identifer for this object (context, dataset, or element name) */
@@ -90,8 +90,8 @@ struct hio_object_t {
   hio_var_array_t   performance;
 };
 
-struct hio_context_t {
-  struct hio_object_t context_object;
+struct hio_context {
+  struct hio_object context_object;
 
 #if HIO_USE_MPI
   /** internal communicator for this context */
@@ -178,14 +178,14 @@ typedef enum hio_dataset_file_mode {
   HIO_FILE_MODE_OPTIMIZED,
 } hio_dataset_file_mode_t;
 
-struct hio_dataset_t {
+struct hio_dataset {
   /** allows for type detection */
-  struct hio_object_t dataset_object;
+  struct hio_object dataset_object;
 
   /** dataset identifier */
   uint64_t            dataset_id;
   /** flags used during creation of this dataset */
-  hio_flags_t         dataset_flags;
+  int                 dataset_flags;
   /** open mode */
   hio_dataset_mode_t  dataset_mode;
 
@@ -224,8 +224,8 @@ struct hio_dataset_t {
   int                 dataset_status;
 };
 
-struct hio_request_t {
-  struct hio_object_t request_object;
+struct hio_request {
+  struct hio_object request_object;
   bool         request_complete;
   size_t       request_transferred;
   int          request_status;
@@ -239,8 +239,8 @@ typedef struct hio_manifest_segment_t {
   uint64_t               segment_length;
 } hio_manifest_segment_t;
 
-struct hio_element_t {
-  struct hio_object_t element_object;
+struct hio_element {
+  struct hio_object element_object;
 
   /** elements are held in a list on the associated dataset */
   hio_list_t          element_list;
@@ -302,7 +302,7 @@ typedef int (*hioi_dataset_header_compare_t) (hio_dataset_header_t *, hio_datase
  * the shared bit above).
  */
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
-                                  hio_flags_t flags, hio_dataset_mode_t mode,
+                                  int flags, hio_dataset_mode_t mode,
                                   size_t dataset_size);
 
 /**

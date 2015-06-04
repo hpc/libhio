@@ -31,7 +31,7 @@ typedef struct builtin_datawarp_module_t {
 } builtin_datawarp_module_t;
 
 typedef struct builtin_datawarp_module_dataset_t {
-  struct hio_dataset_t base;
+  struct hio_dataset base;
   char *pfs_path;
   int stage_mode;
   builtin_posix_module_dataset_t *posix_dataset;
@@ -59,7 +59,7 @@ static int builtin_datawarp_module_dataset_list (struct hio_module_t *module, co
 
 static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
                                                  hio_dataset_t *set_out, const char *name,
-                                                 int64_t set_id, hio_flags_t flags,
+                                                 int64_t set_id, int flags,
                                                  hio_dataset_mode_t mode) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
@@ -213,7 +213,7 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
 
 static int builtin_datawarp_module_element_open (struct hio_module_t *module, hio_dataset_t dataset,
                                                  hio_element_t *element_out, const char *element_name,
-                                                 hio_flags_t flags) {
+                                                 int flags) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) dataset;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
@@ -230,7 +230,7 @@ static int builtin_datawarp_module_element_close (struct hio_module_t *module, h
 }
 
 static int builtin_datawarp_module_element_write_strided_nb (struct hio_module_t *module, hio_element_t element,
-                                                          hio_request_t *request, off_t offset, void *ptr,
+                                                          hio_request_t *request, off_t offset, const void *ptr,
                                                           size_t count, size_t size, size_t stride) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   return datawarp_module->posix_module->base.element_write_strided_nb (&datawarp_module->posix_module->base,

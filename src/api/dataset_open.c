@@ -20,7 +20,7 @@ struct hio_dataset_item_t {
 typedef struct hio_dataset_item_t hio_dataset_item_t;
 
 static int hio_dataset_open_internal (hio_module_t *module, hio_dataset_t *set_out, const char *name,
-                                      int64_t set_id, hio_flags_t flags, hio_dataset_mode_t mode) {
+                                      int64_t set_id, int flags, hio_dataset_mode_t mode) {
   int rc;
 
   hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%llu with flags 0x%x with backend module %p",
@@ -129,8 +129,7 @@ static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio
 }
 
 static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                                  hio_flags_t flags, hio_dataset_mode_t mode,
-                                  hioi_dataset_header_compare_t compare) {
+                                  int flags, hio_dataset_mode_t mode, hioi_dataset_header_compare_t compare) {
   int item_count = 0, rc, count;
   hio_dataset_item_t *items = NULL;
   hio_dataset_header_t *headers, header;
@@ -183,7 +182,7 @@ static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out,
 }
 
 static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                                      int64_t set_id, hio_flags_t flags, hio_dataset_mode_t mode) {
+                                      int64_t set_id, int flags, hio_dataset_mode_t mode) {
   hio_module_t *module = hioi_context_select_module (context);
   int rc = HIO_ERR_NOT_FOUND;
 
@@ -207,7 +206,7 @@ static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t *set_
 }
 
 int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                      int64_t set_id, hio_flags_t flags, hio_dataset_mode_t mode) {
+                      int64_t set_id, int flags, hio_dataset_mode_t mode) {
   int rc;
 
   if (NULL == context || NULL == set_out || NULL == name) {

@@ -96,8 +96,7 @@ static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hi
 }
 
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
-                                  hio_flags_t flags, hio_dataset_mode_t mode,
-                                  size_t dataset_size) {
+                                  int flags, hio_dataset_mode_t mode, size_t dataset_size) {
   hio_dataset_t new_dataset;
   int rc;
 
@@ -161,7 +160,7 @@ void hioi_dataset_release (hio_dataset_t *set) {
   module = (*set)->dataset_module;
   context = (*set)->dataset_context;
 
-  hioi_list_foreach_safe(element, next, (*set)->dataset_element_list, struct hio_element_t, element_list) {
+  hioi_list_foreach_safe(element, next, (*set)->dataset_element_list, struct hio_element, element_list) {
     if (element->element_is_open) {
       hioi_log (context, HIO_VERBOSE_WARN, "element still open at dataset close");
       module->element_close (module, element);

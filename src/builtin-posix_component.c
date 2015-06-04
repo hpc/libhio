@@ -145,7 +145,7 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
 
 static int builtin_posix_module_dataset_open (struct hio_module_t *module,
                                               hio_dataset_t *set_out, const char *name,
-                                              int64_t set_id, hio_flags_t flags,
+                                              int64_t set_id, int flags,
                                               hio_dataset_mode_t mode) {
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
   hio_context_t context = module->context;
@@ -318,7 +318,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
     posix_dataset->fh = NULL;
   }
 
-  hioi_list_foreach(element, dataset->dataset_element_list, struct hio_element_t, element_list) {
+  hioi_list_foreach(element, dataset->dataset_element_list, struct hio_element, element_list) {
     if (element->element_fh) {
       fclose (element->element_fh);
       element->element_fh = NULL;
@@ -405,13 +405,13 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 
 static int builtin_posix_module_element_open (struct hio_module_t *module, hio_dataset_t dataset,
                                               hio_element_t *element_out, const char *element_name,
-                                              hio_flags_t flags) {
+                                              int flags) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
   hio_context_t context = dataset->dataset_context;
   hio_element_t element;
 
-  hioi_list_foreach (element, dataset->dataset_element_list, struct hio_element_t, element_list) {
+  hioi_list_foreach (element, dataset->dataset_element_list, struct hio_element, element_list) {
     if (!strcmp (element->element_object.identifier, element_name)) {
       *element_out = element;
       element->element_is_open = true;
@@ -491,7 +491,7 @@ static int builtin_posix_module_element_close (struct hio_module_t *module, hio_
 }
 
 static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *module, hio_element_t element,
-                                                          hio_request_t *request, off_t offset, void *ptr,
+                                                          hio_request_t *request, off_t offset, const void *ptr,
                                                           size_t count, size_t size, size_t stride) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) element->element_dataset;
   hio_context_t context = posix_dataset->base.dataset_context;

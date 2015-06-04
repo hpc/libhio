@@ -41,7 +41,7 @@ struct hio_dataset_header_t;
 typedef int
 (*hio_module_dataset_open_fn_t) (struct hio_module_t *module,
 				 hio_dataset_t *set_out, const char *name,
-				 int64_t set_id, hio_flags_t flags,
+				 int64_t set_id, int flags,
 				 hio_dataset_mode_t mode);
 
 /**
@@ -108,7 +108,7 @@ typedef int
 				 hio_dataset_t set,
 				 hio_element_t *element_out,
 				 const char *element_name,
-				 hio_flags_t flags);
+				 int flags);
 
 /**
  * Write to an hio dataset element
@@ -134,7 +134,7 @@ typedef int
 (*hio_module_element_write_strided_nb_fn_t) (struct hio_module_t *module,
                                              hio_element_t element,
                                              hio_request_t *request,
-                                             off_t offset, void *ptr,
+                                             off_t offset, const void *ptr,
                                              size_t count, size_t size, size_t stride);
 
 /**

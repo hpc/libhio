@@ -199,7 +199,7 @@ static xmlDocPtr hio_manifest_generate_xml_1_0 (hio_dataset_t dataset) {
     return NULL;
   }
 
-  hioi_list_foreach(element, dataset->dataset_element_list, struct hio_element_t, element_list) {
+  hioi_list_foreach(element, dataset->dataset_element_list, struct hio_element, element_list) {
     element_node = xmlNewChild (elements_node, NULL, (const xmlChar *) "element", NULL);
 
     xmlNewProp (element_node, HIO_MANIFEST_PROP_IDENTIFIER, (const xmlChar *) element->element_object.identifier);

@@ -22,10 +22,10 @@ typedef struct builtin_posix_module_t {
 } builtin_posix_module_t;
 
 typedef struct builtin_posix_module_dataset_t {
-  struct hio_dataset_t base;
-  pthread_mutex_t      lock;
-  FILE                *fh;
-  char                *base_path;
+  struct hio_dataset base;
+  pthread_mutex_t    lock;
+  FILE              *fh;
+  char              *base_path;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;
