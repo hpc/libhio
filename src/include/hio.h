@@ -652,6 +652,19 @@ int hio_dataset_close (hio_dataset_t *set);
 
 /**
  * @ingroup API
+ * @brief Get the identifier for a dataset
+ *
+ * @param[in]  set    hio dataset handle
+ * @param[out] set_id identifier for this dataset
+ *
+ * This function can be used to get the identifier for an open dataset. This is
+ * useful for determining which dataset was opened by hio_dataset_open() when
+ * using HIO_DATASET_ID_LAST or HIO_DATASET_ID_NEWEST as the set id.
+ */
+int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
+
+/**
+ * @ingroup API
  * @brief Unlink an hio dataset
  *
  * @param[in] ctx     hio context
