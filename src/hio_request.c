@@ -29,11 +29,13 @@ hio_request_t hioi_request_alloc (hio_context_t context) {
 }
 
 void hioi_request_release (hio_request_t request) {
-  free (request);
+  if (HIO_OBJECT_NULL != request) {
+    free (request);
+  }
 }
 
 int hio_test (hio_request_t *request, ssize_t *bytes_transferred, bool *complete) {
-  if (*request == HIO_REQUEST_NULL) {
+  if (*request == HIO_OBJECT_NULL) {
     *bytes_transferred = 0;
     *complete = true;
     return HIO_SUCCESS;
@@ -42,14 +44,14 @@ int hio_test (hio_request_t *request, ssize_t *bytes_transferred, bool *complete
   if ((*request)->request_complete) {
     *complete = true;
     *bytes_transferred = (*request)->request_transferred;
-    *request = HIO_REQUEST_NULL;
+    *request = HIO_OBJECT_NULL;
   }
 
   return HIO_SUCCESS;
 }
 
 int hio_wait (hio_request_t *request, ssize_t *bytes_transferred) {
-  if (*request == HIO_REQUEST_NULL) {
+  if (*request == HIO_OBJECT_NULL) {
     *bytes_transferred = 0;
     return HIO_SUCCESS;
   }
@@ -60,6 +62,8 @@ int hio_wait (hio_request_t *request, ssize_t *bytes_transferred) {
   }
 
   *bytes_transferred = (*request)->request_transferred;
-  *request = HIO_REQUEST_NULL;
+
+  hioi_request_release (*request);
+  *request = HIO_OBJECT_NULL;
   return HIO_SUCCESS;
 }

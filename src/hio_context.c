@@ -142,7 +142,7 @@ static void hio_context_release (hio_context_t *contextp) {
   }
 
   free (context);
-  *contextp = NULL;
+  *contextp = HIO_OBJECT_NULL;
 }
 
 int hioi_context_create_modules (hio_context_t context) {

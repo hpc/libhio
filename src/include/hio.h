@@ -308,15 +308,9 @@ typedef struct hio_object *hio_object_t;
 
 /**
  * @ingroup API
- * @brief NULL element
+ * @brief NULL object
  */
-#define HIO_ELEMENT_NULL NULL
-
-/**
- * @ingroup API
- * @brief NULL request
- */
-#define HIO_REQUEST_NULL NULL
+#define HIO_OBJECT_NULL NULL
 
 /**
  * @ingroup API
@@ -739,7 +733,7 @@ int hio_dataset_construct (hio_dataset_t dataset, const char *destination, int f
  * @returns hio_return_t
  *
  * This function finalizes all outstanding I/O on an open element. On success
- * {hio_element} is set to HIO_ELEMENT_NULL.
+ * {hio_element} is set to HIO_OBJECT_NULL.
  */
 int hio_element_close (hio_element_t *element);
 
@@ -938,7 +932,7 @@ ssize_t hio_element_read (hio_element_t element, off_t offset, unsigned long res
  * hio_join() on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the read
  * will be reported by hio_complete().
- * The hio implementation is free to return HIO_REQUEST_NULL in {request} if the
+ * The hio implementation is free to return HIO_OBJECT_NULL in {request} if the
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
  */
@@ -992,7 +986,7 @@ ssize_t hio_element_read_strided (hio_element_t element, off_t offset, unsigned 
  * hio_join() on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the read
  * will be reported by hio_complete().
- * The hio implementation is free to return HIO_REQUEST_NULL in {request} if the
+ * The hio implementation is free to return HIO_OBJECT_NULL in {request} if the
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
  */
@@ -1024,9 +1018,9 @@ int hio_complete (hio_element_t element);
  *
  * This function combines the hio requests specified by {requests} and {count} and
  * combines them into a single hio request. The new request is complete when all
- * the joined requests are complete. The special value HIO_REQUEST_NULL stored
+ * the joined requests are complete. The special value HIO_OBJECT_NULL stored
  * at any entry in {requests} is ignored. If every entry in the {requests} array
- * is HIO_REQUEST_NULL then HIO_REQUEST_NULL is returned in {request}.
+ * is HIO_OBJECT_NULL then HIO_OBJECT_NULL is returned in {request}.
  */
 int hio_request_join (hio_request_t *requests, int count, hio_request_t *request);
 
@@ -1039,10 +1033,10 @@ int hio_request_join (hio_request_t *requests, int count, hio_request_t *request
  *
  * This function checks for the completion of an IO request. If the hio
  * request is complete the number of bytes transferred is stored in
- * {bytes_transferred} and the special value HIO_REQUEST_NULL is stored in
+ * {bytes_transferred} and the special value HIO_OBJECT_NULL is stored in
  * {request}. Additionally, if the request is complete this function releases
  * the resources associated with the hio request. Calling this function with
- * {request} pointing to the special value HIO_REQUEST_NULL sets
+ * {request} pointing to the special value HIO_OBJECT_NULL sets
  * {bytes_transferred} to 0 and {complete} to true and returns immediately.
  */
 int hio_test (hio_request_t *request, ssize_t *bytes_transferred,
@@ -1058,9 +1052,9 @@ int hio_test (hio_request_t *request, ssize_t *bytes_transferred,
  * This function waits for the completion of an IO request. On completion
  * of the hio request this function stores the number of bytes transferred
  * to {bytes_transferred} and sets the value pointed to by {request} to
- * HIO_REQUEST_NULL. Before returning this function also releases the
+ * HIO_OBJECT_NULL. Before returning this function also releases the
  * resources associated with the hio request. Calling this function with
- * {request} pointing to the special value HIO_REQUEST_NULL sets
+ * {request} pointing to the special value HIO_OBJECT_NULL sets
  * {bytes_transferred} to 0 and returns immediately.
  */
 int hio_wait (hio_request_t *request, ssize_t *bytes_transferred);

@@ -22,7 +22,7 @@ int hio_element_close (hio_element_t *element) {
 
   rc = module->element_close (module, *element);
 
-  *element = HIO_ELEMENT_NULL;
+  *element = HIO_OBJECT_NULL;
 
   return rc;
 }
