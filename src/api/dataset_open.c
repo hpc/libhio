@@ -72,7 +72,7 @@ static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count,
   ++*item_count;
 
   while (item_index) {
-    int parent = item_index >> 1;
+    int parent = (item_index - 1) >> 1;
 
     if (compare (&items[parent].header, &items[item_index].header)) {
       break;
@@ -109,8 +109,8 @@ static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio
   hio_dataset_item_swap (items, items + *item_count - 1);
 
   --*item_count;
-  while (item_index < *item_count/2) {
-    int left = item_index << 1, right = left | 1, child = left;
+  while (item_index < *item_count - 1) {
+    int left = (item_index << 1) | 1, right = left + 1, child = left;
 
     if (right < *item_count && compare (&items[right].header, &items[left].header)) {
       child = right;
