@@ -539,9 +539,6 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
 
   posix_dataset->base.dataset_status = hioi_err_errno (errno);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: finished write. bytes written: %lu",
-            items_written * size);
-
   if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
     hioi_element_add_segment (element, file_offset, offset, 0, size * count);
   }
@@ -563,6 +560,9 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
   stop = hioi_gettime ();
   posix_dataset->base.dataset_bytes_written += items_written * size;
   posix_dataset->base.dataset_write_time += stop - start;
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: finished write. bytes written: %lu, time: %llu usec",
+            items_written * size, stop - start);
 
   return posix_dataset->base.dataset_status;
 }
