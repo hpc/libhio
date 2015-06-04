@@ -1,0 +1,92 @@
+#! /bin/bash 
+. ./run_setup
+
+# Read and write N-N test case with read data value checking.
+# Test various ID values on read.
+
+case $size in
+  t ) blk=1k;   nblk=5;;
+  s ) blk=20ki; nblk=8;;   
+  m ) blk=1Mi;  nblk=200;;
+  l ) blk=2Mi;  nblk=512;;
+  x ) blk=2Mi;  nblk=1024;;
+  * ) synexit "Error: invalid size $size";;
+esac
+
+msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg" 
+
+cmdw="
+  /@@ Read and write N-N test case with read data value checking @/
+  name run09w v $verbose_lev d $debug_lev mi 0
+  hi MYCTX $HIO_TEST_ROOTS
+
+  hdo NTNDS 98 WRITE,CREAT UNIQUE
+  hvp c. .
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  lc $nblk
+    hew -$blk $blk 
+  le 
+  hec hdc
+
+  hdo NTNDS 97 WRITE,CREAT UNIQUE
+  hvp c. .
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  lc $nblk
+    hew -$blk $blk 
+  le 
+  hec hdc
+
+  hdo NTNDS 96 WRITE,CREAT UNIQUE
+  hvp c. .
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  lc $nblk
+    hew -$blk $blk 
+  le 
+  hec hdc
+
+  hf mgf mf
+"
+
+cmdr="
+  /@@ Read and write N-N test case with read data value checking @/
+  name run09r v $verbose_lev d $debug_lev mi 32
+  hi MYCTX $HIO_TEST_ROOTS 
+
+  hxdi 97
+  hdo NTNDS 97 READ UNIQUE
+  heo MY_EL READ 20Mi
+  hvp c. .     
+  hck on
+  lc $nblk
+    her -$blk $blk 
+  le 
+  hec hdc
+
+  hxdi 98
+  hdo NTNDS ID_LAST READ UNIQUE
+  heo MY_EL READ 20Mi
+  hvp c. .     
+  hck on
+  lc $nblk
+    her -$blk $blk 
+  le 
+  hec hdc
+
+  qof 2 hxdi 96
+  hdo NTNDS ID_NEWEST READ UNIQUE
+  heo MY_EL READ 20Mi
+  hvp c. .     
+  hck on
+  lc $nblk
+    her -$blk $blk 
+  le 
+  hec hdc
+
+  hf mgf mf
+"
+
+clean_roots $HIO_TEST_ROOTS
+myrun .libs/xexec2.x $cmdw
+myrun .libs/xexec2.x $cmdr
+check_rc
+clean_roots $HIO_TEST_ROOTS

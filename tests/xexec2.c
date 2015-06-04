@@ -147,6 +147,7 @@ char * help =
   "  hck <ON|OFF>  Enable read data checking\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
+  "  hxdi <id> Expect dataset ID on next hdo\n"
   "  hvp <type regex> <name regex> Prints config and performance variables that match\n"
   "                the type and name regex's.  Types are two letter codes {c|p} {c|d|e}\n"
   "                where c|p is config or perf and c|d|e is context or dataset or element\n"
@@ -320,7 +321,7 @@ void get_id() {
   MY_MSG_CTX->id_string=id_string;
 }
 
-enum ptype { SINT, UINT, PINT, DOUB, STR, HFLG, HDSM, HERR, HULM, ONFF, NONE };
+enum ptype { SINT, UINT, PINT, DOUB, STR, HFLG, HDSM, HERR, HULM, HDSI, ONFF, NONE };
 
 long long int get_mult(char * str) {
   long long int n;
@@ -1163,19 +1164,27 @@ ENUM_NAMP(HIO_UNLINK_MODE_, FIRST)
 ENUM_NAMP(HIO_UNLINK_MODE_, ALL)
 ENUM_END(etab_hulm, 0, NULL)
 
+ENUM_START(etab_hdsi) // hio_dataset_id
+ENUM_NAMP(HIO_DATASET_, ID_NEWEST)
+ENUM_NAMP(HIO_DATASET_, ID_LAST)
+ENUM_END(etab_hdsi, 0, NULL)
+
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
-char * hio_context_name;
-char * hio_dataset_name;
-U64 hio_dataset_id;
-hio_flags_t hio_dataset_flags;
-hio_dataset_mode_t hio_dataset_mode;
-char * hio_element_name;
-U64 hio_element_hash;
+static char * hio_context_name;
+static char * hio_dataset_name;
+static I64 hio_ds_id_req;
+static I64 hio_ds_id_act;
+static hio_flags_t hio_dataset_flags;
+static hio_dataset_mode_t hio_dataset_mode;
+static char * hio_element_name;
+static U64 hio_element_hash;
 #define EL_HASH_MODULUS 65521 // A prime a little less than 2**16
 static hio_return_t hio_rc_exp = HIO_SUCCESS;
 static I64 hio_cnt_exp = HIO_CNT_REQ;
+static I64 hio_dsid_exp = -999;
+static int hio_dsid_exp_set = 0;
 static int hio_fail = 0;
 static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
@@ -1185,7 +1194,7 @@ static I64 hseg_start = 0;
 static I64 hseg_size_per_rank = 0;
 static I64 hseg_rank_shift = 0;
 static U64 rw_count[2];
-ETIMER hio_tmr;
+static ETIMER hio_tmr;
 
 #define HRC_TEST(API_NAME)  {                                                      \
   local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0); \
@@ -1238,14 +1247,28 @@ ACTION_RUN(hi_run) {
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
   hio_dataset_name = V0.s;
-  hio_dataset_id = V1.u;
+  hio_ds_id_req = V1.u;
   hio_dataset_flags = V2.i;
   hio_dataset_mode = V3.i;
   rw_count[0] = rw_count[1] = 0;
   MPI_CK(MPI_Barrier(mpi_comm));
   ETIMER_START(&hio_tmr);
-  hrc = hio_dataset_open (context, &dataset, hio_dataset_name, hio_dataset_id, hio_dataset_flags, hio_dataset_mode);
-  HRC_TEST(hio_dataset_open)
+  DBG2("hdo hio_ds_id_req: %ld", hio_ds_id_req);
+  hrc = hio_dataset_open (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
+  HRC_TEST(hio_dataset_open);
+  hrc = hio_dataset_get_id(dataset, &hio_ds_id_act);
+  HRC_TEST(hio_dataset_get_id);
+  local_fails += hio_fail = (hio_dsid_exp_set && hio_dsid_exp != hio_ds_id_act);
+  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
+    if (hio_dsid_exp_set) {                                
+      MSG("%s: hio_dataset_get_id %s actual %ld exp: %ld", A.desc, hio_fail ? "FAIL": "OK",
+          hio_ds_id_act, hio_dsid_exp); 
+    } else {
+      MSG("%s: hio_dataset_get_id actual %ld", A.desc, hio_ds_id_act); 
+    } 
+  }
+  hio_dsid_exp = -999;
+  hio_dsid_exp_set = 0;
 }
 
 ACTION_CHECK(heo_check) {
@@ -1269,7 +1292,7 @@ ACTION_RUN(heo_run) {
 
   // Calculate element hash which is added to the offset for read verification
   char * hash_str = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
-                                 hio_dataset_id, hio_element_name, 
+                                 hio_ds_id_act, hio_element_name, 
                                  (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) ? myrank: 0);
   hio_element_hash = crc32(0, hash_str, strlen(hash_str)) % EL_HASH_MODULUS;
   DBG4("heo hash: \"%s\" 0x%04X", hash_str, hio_element_hash);
@@ -1421,6 +1444,12 @@ ACTION_CHECK(hxct_check) {
 ACTION_RUN(hxct_run) {
   hio_cnt_exp = V0.u;
   VERB1("%s; HIO expected count now %lld", A.desc, V0.u);
+}
+
+ACTION_RUN(hxdi_run) {
+  hio_dsid_exp = V0.u;
+  hio_dsid_exp_set = 1;
+  VERB1("%s; HIO expected dataset id now %lld", A.desc, hio_dsid_exp);
 }
 
 //----------------------------------------------------------------------------
@@ -1668,7 +1697,7 @@ struct parse {
   #endif
   #ifdef HIO
   {"hi",    {STR,  STR,  NONE, NONE, NONE}, NULL,          hi_run      },
-  {"hdo",   {STR,  UINT, HFLG, HDSM, NONE}, NULL,          hdo_run     },
+  {"hdo",   {STR,  HDSI, HFLG, HDSM, NONE}, NULL,          hdo_run     },
   {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
   {"heo",   {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
   {"hsega", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsega_run   },
@@ -1681,6 +1710,7 @@ struct parse {
   {"hf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
   {"hxrc",  {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
   {"hxct",  {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
+  {"hxdi",  {HDSI, NONE, NONE, NONE, NONE}, NULL,          hxdi_run    },
   {"hvp",   {STR,  STR,  NONE, NONE, NONE}, hvp_check,     hvp_run     },
   {"hvsc",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsc_run    },
   {"hvsd",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsd_run    },
@@ -1703,6 +1733,19 @@ void decode(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL * val
                desc, name, tok, enum_list(MY_MSG_CTX, etptr));
   rc = enum2str(MY_MSG_CTX, etptr, val->i, &val->s); 
   if (rc) ERRX("%s ...; invalid %s \"%s\"", desc, name, tok);
+}
+
+void decode_int(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL * val, ACTION * actionp) {
+  int i;
+  int rc = str2enum(MY_MSG_CTX, etptr, tok, &i);
+  val->u = (U64)i;
+   
+  if (rc) {
+    // Need a way to defer this message until integer decode fails
+    MSG("\"%s\" not a recognized %s, trying integer. recognized values are %s",
+          tok, name, enum_list(MY_MSG_CTX, etptr));
+    (*val).u = getI64(tok, SINT, actionp);
+  } 
 }
 
 void parse_action() {
@@ -1782,6 +1825,9 @@ void parse_action() {
                 break;
               case HULM:
                 decode(&etab_hulm, tokv[t], "hio unlink mode", nact.desc, &nact.v[j]);
+                break;
+              case HDSI:
+                decode_int(&etab_hdsi, tokv[t], "hio dataset ID", nact.desc, &nact.v[j], &nact);
                 break;
               #endif
               case ONFF:

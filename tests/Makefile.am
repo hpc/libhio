@@ -1,6 +1,6 @@
 LDADD = ../src/libhio.la
 AM_CPPFLAGS = -I../src/include
-EXTRA_DIST = run_setup run01 run02 run03 run04 run05 run06 run07 run08
+EXTRA_DIST = run_setup run01 run02 run03 run04 run05 run06 run07 run08 run09
 
 clean-local:
 	-rm -rf .test_root1
