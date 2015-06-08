@@ -7,6 +7,7 @@ AC_INIT([libhio], [1.0], [hjelmn@lanl.gov])
 AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
+AM_MAINTAINER_MODE([disable])
 
 if test -n "$XTOS_VERSION" ; then
     # Work around Cray idiosyncrasies
@@ -25,6 +26,7 @@ AM_INIT_AUTOMAKE
 LT_INIT
 
 PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
+hio_pkgconfig_requires="libxml-2.0 >= 2.4"
 
 # Check for datawarp availability
 AC_ARG_WITH(datawarp, [AS_HELP_STRING([--with-datawarp=DIR], [enable support for Cray datawarp @<:@default=auto@:>@])],
@@ -33,10 +35,13 @@ AC_ARG_WITH(datawarp, [AS_HELP_STRING([--with-datawarp=DIR], [enable support for
 use_datawarp=0
 if test "$with_datawarp" = "auto" ; then
     PKG_CHECK_MODULES(datawarp, cray-datawarp, [use_datawarp=1], [use_datawarp=0])
-    # PKG_CHECK_MODULES sets the CFLAGS variable but it only adds -I/path/to/datawarp so
-    # just add it to the CPPFLAGS
-    CPPFLAGS="$CPPFLAGS $datawarp_CFLAGS"
-    LIBS="$LIBS $datawarp_LIBS"
+    if test $use_datawarp = 1 ; then
+        # PKG_CHECK_MODULES sets the CFLAGS variable but it only adds -I/path/to/datawarp so
+        # just add it to the CPPFLAGS
+        CPPFLAGS="$CPPFLAGS $datawarp_CFLAGS"
+        LIBS="$LIBS $datawarp_LIBS"
+        hio_pkgconfig_requires="$hio_pkgconfig_requires, datawarp"
+    fi
 elif test "$with_datawarp" != "no" ; then
     LDFLAGS="$LDFLAGS -L$with_datawarp/lib64 -Wl,-rpath -Wl,$with_datawarp/lib64 -ldatawarp"
     CPPFLAGS="$CPPFLAGS -I$with_datawarp/include"
@@ -95,8 +100,10 @@ AC_DEFINE_UNQUOTED([HIO_PREFIX], ["$prefix"], [HIO install prefix])
 AC_DEFINE_UNQUOTED([HIO_USE_DATAWARP], [$use_datawarp], [Whether to use datawarp for bb])
 AM_CONDITIONAL([DATAWARP_AVAILABLE], [test x$use_datawarp = x1])
 
+AC_SUBST([HIO_PKGCONFIG_REQUIRES], [$hio_pkgconfig_requires])
+
 # Checks for library functions.
 
-AC_CONFIG_FILES([Makefile design/Makefile src/Makefile tests/Makefile])
+AC_CONFIG_FILES([Makefile design/Makefile src/Makefile tests/Makefile libhio.pc])
 
 AC_OUTPUT

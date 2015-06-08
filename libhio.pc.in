@@ -1,0 +1,12 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libhio
+Description: High performance I/O library
+Version: @VERSION@
+Libs: -L${libdir} -lhio
+Libs.private: @LIBS@
+Cflags: -I${includedir}
+Requires: @HIO_PKGCONFIG_REQUIRES@
