@@ -34,13 +34,13 @@ AC_ARG_WITH(datawarp, [AS_HELP_STRING([--with-datawarp=DIR], [enable support for
 
 use_datawarp=0
 if test "$with_datawarp" = "auto" ; then
-    PKG_CHECK_MODULES(datawarp, cray-datawarp, [use_datawarp=1], [use_datawarp=0])
+    PKG_CHECK_MODULES(datawarp, cray-datawarp >= 1.0, [use_datawarp=1], [use_datawarp=0])
     if test $use_datawarp = 1 ; then
         # PKG_CHECK_MODULES sets the CFLAGS variable but it only adds -I/path/to/datawarp so
         # just add it to the CPPFLAGS
         CPPFLAGS="$CPPFLAGS $datawarp_CFLAGS"
         LIBS="$LIBS $datawarp_LIBS"
-        hio_pkgconfig_requires="$hio_pkgconfig_requires, datawarp"
+        hio_pkgconfig_requires="$hio_pkgconfig_requires, cray-datawarp >= 1.0"
     fi
 elif test "$with_datawarp" != "no" ; then
     LDFLAGS="$LDFLAGS -L$with_datawarp/lib64 -Wl,-rpath -Wl,$with_datawarp/lib64 -ldatawarp"
