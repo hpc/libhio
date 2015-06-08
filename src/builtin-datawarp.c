@@ -185,6 +185,10 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         return HIO_ERR_OUT_OF_RESOURCE;
       }
 
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: revoking end-of-job stage for datawarp dataset %s::%lld. "
+                "burst-buffer directory: %s",  dataset->dataset_object.identifier, ds_data->last_scheduled_stage_id,
+                dataset_path);
+
       /* revoke the end of job stage for the previous dataset */
       rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
       free (dataset_path);
