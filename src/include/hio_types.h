@@ -110,8 +110,6 @@ struct hio_context {
   pthread_mutex_t     context_lock;
   /** comma-separated list of data roots available */
   char               *context_data_roots;
-  /** expected checkpoint size */
-  uint64_t            context_checkpoint_size;
   /** print statistics on close */
   bool                context_print_statistics;
   /** number of bytes written to this context (local) */

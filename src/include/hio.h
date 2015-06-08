@@ -221,7 +221,7 @@
  * - @b print_statistics - Print IO statistics when hio_fini() is called. This value is only meaningful
  *   on the first IO rank.
  *
- * - @b context_base_verbose - Verbosity level of libhio (0-100). The default is a verbosity level of 0
+ * - @b verbose - Verbosity level of libhio (0-100). The default is a verbosity level of 0
  *   which outputs hio errors. Higher levels will output warnings and more detailed debugging information.
  *   The maximum verbosity is 100. The context verbosity can be set independently on any rank(s).
  *

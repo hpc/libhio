@@ -47,7 +47,6 @@ static hio_context_t hio_context_alloc (const char *identifier) {
 
   /* default context configuration */
   new_context->context_verbose          = HIO_VERBOSE_ERROR;
-  new_context->context_checkpoint_size  = 0;
   new_context->context_print_statistics = false;
   new_context->context_rank = 0;
   new_context->context_size = 1;
@@ -212,27 +211,23 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   }
 
   hioi_config_add (context, &context->context_object, &context->context_verbose,
-                   "context_verbose", HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
+                   "verbose", HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Set context verbosity to %d", context->context_verbose);
 
   hioi_config_add (context, &context->context_object, &context->context_data_roots,
-                   "context_data_roots", HIO_CONFIG_TYPE_STRING, NULL,
+                   "data_roots", HIO_CONFIG_TYPE_STRING, NULL,
                    "Comma-separated list of data roots to use with this context "
                    "(default: posix:$PWD)", 0);
 
-  hioi_config_add (context, &context->context_object, &context->context_checkpoint_size,
-                   "context_checkpoint_size", HIO_CONFIG_TYPE_UINT64, NULL,
-                   "hio hint for expected checkpoint size (default: 0 -- auto)", 0);
-
   hioi_config_add (context, &context->context_object, &context->context_print_statistics,
-                   "context_print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
+                   "print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
                    "to stdout when the context is closed (default: 0)", 0);
 
 #if HIO_USE_DATAWARP
   context->context_datawarp_root = strdup ("auto");
   hioi_config_add (context, &context->context_object, &context->context_datawarp_root,
-                   "context_datawarp_root", HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
+                   "datawarp_root", HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
                    "for datawarp (burst-buffer) (default: auto-detect)", 0);
 #endif
 
