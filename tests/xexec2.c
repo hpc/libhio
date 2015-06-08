@@ -1222,7 +1222,7 @@ ACTION_RUN(hi_run) {
   hio_return_t hrc;
   hio_context_name = V0.s;
   char * data_root = V1.s;
-  char * root_var_name = "context_data_roots";
+  char * root_var_name = "data_roots";
 
   DBG2("Calling hio_init_mpi(&context, &mpi_comm, NULL, NULL, \"%s\")", hio_context_name);
   hrc = hio_init_mpi(&context, &mpi_comm, NULL, NULL, hio_context_name);
