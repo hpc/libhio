@@ -136,10 +136,10 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                    "Modes for writing dataset files. Valid values: (0: basic, 1: optimized)", 0);
 
   /* set up performance variables */
-  hioi_perf_add (context, &new_dataset->dataset_object, &new_dataset->dataset_bytes_read, "total_bytes_read",
+  hioi_perf_add (context, &new_dataset->dataset_object, &new_dataset->dataset_bytes_read, "bytes_read",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->dataset_object, &new_dataset->dataset_bytes_written, "total_bytes_written",
+  hioi_perf_add (context, &new_dataset->dataset_object, &new_dataset->dataset_bytes_written, "bytes_written",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
 
 

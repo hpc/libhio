@@ -232,11 +232,11 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
 #endif
 
   hioi_perf_add (context, &context->context_object, &context->context_bytes_read,
-                 "context_bytes_read", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
+                 "bytes_read", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
                  "read in this context", 0);
 
   hioi_perf_add (context, &context->context_object, &context->context_bytes_written,
-                 "context_bytes_written", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
+                 "bytes_written", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
                  "written in this context", 0);
 
   if (context->context_verbose > HIO_VERBOSE_MAX) {
