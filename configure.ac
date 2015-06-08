@@ -104,6 +104,6 @@ AC_SUBST([HIO_PKGCONFIG_REQUIRES], [$hio_pkgconfig_requires])
 
 # Checks for library functions.
 
-AC_CONFIG_FILES([Makefile design/Makefile src/Makefile tests/Makefile libhio.pc])
+AC_CONFIG_FILES([Makefile design/Makefile src/Makefile tests/Makefile libhio.pc design/doxygen.conf])
 
 AC_OUTPUT

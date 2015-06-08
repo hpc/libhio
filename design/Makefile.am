@@ -1,5 +1,5 @@
 subdirs=template
-EXTRA_DIST=doxygen.conf example.c
+EXTRA_DIST=doxygen.conf.in example.c
 
 latex: doxygen.conf template/header.tex template/footer.tex template/style.sty ${top_srcdir}/src/include/hio.h
 	doxygen doxygen.conf
