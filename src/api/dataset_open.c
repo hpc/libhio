@@ -221,7 +221,7 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
     }
   }
 
-  if (HIO_DATASET_ID_LAST == set_id) {
+  if (HIO_DATASET_ID_HIGHEST == set_id) {
     return hio_dataset_open_last (context, set_out, name, flags, mode, hioi_dataset_header_highest_setid);
   } else if (HIO_DATASET_ID_NEWEST == set_id) {
     return hio_dataset_open_last (context, set_out, name, flags, mode, hioi_dataset_header_newest);

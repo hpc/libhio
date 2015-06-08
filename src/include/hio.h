@@ -322,13 +322,13 @@ typedef struct hio_object *hio_object_t;
  * @ingroup API
  * @brief Highest available dataset id
  */
-#define HIO_DATASET_ID_LAST (int64_t) -1
+#define HIO_DATASET_ID_HIGHEST (int64_t) -0x10000001
 
 /**
  * @ingroup API
  * @brief Most recently modified dataset id
  */
-#define HIO_DATASET_ID_NEWEST (int64_t) -2
+#define HIO_DATASET_ID_NEWEST (int64_t) -0x10000002
 
 /**
  * @ingroup errorhandling
@@ -608,7 +608,7 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  * names on all ranks when calling to hio_element_open(). This call is collective and must
  * be made by all ranks in the context. There is no restriction on the number
  * of elements opened by any rank. This number is only limited by the resources
- * available. If the special value HIO_DATASET_ID_LAST is specified in {set_id} libhio
+ * available. If the special value HIO_DATASET_ID_HIGHEST is specified in {set_id} libhio
  * will attempt to open an existing dataset with the maximum id. If the special value
  * HIO_DATASET_ID_NEWEST is specified in {set_id} libhio will attempt to open an
  * an existing dataset with the newest modification time.
@@ -655,7 +655,7 @@ int hio_dataset_close (hio_dataset_t *set);
  *
  * This function can be used to get the identifier for an open dataset. This is
  * useful for determining which dataset was opened by hio_dataset_open() when
- * using HIO_DATASET_ID_LAST or HIO_DATASET_ID_NEWEST as the set id.
+ * using HIO_DATASET_ID_HIGHEST or HIO_DATASET_ID_NEWEST as the set id.
  */
 int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
 
@@ -672,7 +672,7 @@ int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
  * @returns HIO_ERR_NOT_FOUND if the dataset id is not found
  *
  * This function removes all data associated with an hio dataset on all data
- * roots. It is invalid to specify HIO_DATASET_ID_LAST for {set_id}.
+ * roots. It is invalid to specify HIO_DATASET_ID_HIGHEST for {set_id}.
  */
 int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio_unlink_mode_t mode);
 

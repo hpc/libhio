@@ -1166,7 +1166,7 @@ ENUM_END(etab_hulm, 0, NULL)
 
 ENUM_START(etab_hdsi) // hio_dataset_id
 ENUM_NAMP(HIO_DATASET_, ID_NEWEST)
-ENUM_NAMP(HIO_DATASET_, ID_LAST)
+ENUM_NAMP(HIO_DATASET_, ID_HIGHEST)
 ENUM_END(etab_hdsi, 0, NULL)
 
 static hio_context_t context = NULL;
