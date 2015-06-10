@@ -783,7 +783,7 @@ ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long re
  * element specified in {element}. The call returns immediately even if the
  * write has not completed. If the request is not yet complete and a non-NULL
  * value is specified in {request} this function will return an hio request in
- * {request}. The application is required to call either hio_test() or hio_wait()
+ * {request}. The application is required to call either hio_request_test() or hio_request_wait()
  * on the returned request to ensure all resources are freed. If a NULL value
  * is specified in {request} any error occurring during the write will be reported
  * by either hio_element_flush() or hio_dataset_flush().
@@ -838,7 +838,7 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
  * element specified in {element}. The call returns immediately even if the
  * write has not completed. If the request is not yet complete and a non-NULL
  * value is specified in {request} this function will return an hio request in
- * {request}. The application is required to call either hio_test() or hio_wait()
+ * {request}. The application is required to call either hio_request_test() or hio_request_wait()
  * on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the write
  * will be reported by either hio_element_flush() or hio_dataset_flush().
@@ -934,7 +934,7 @@ ssize_t hio_element_read (hio_element_t element, off_t offset, unsigned long res
  * {ptr}. The call returns immediately even if the read has not completed. If
  * the request is not yet complete and a non-NULL value is specified in
  * {request} this function will return an hio request in {request}. The
- * application is requires to call one of hio_test(), or hio_wait() on the
+ * application is requires to call one of hio_request_test(), or hio_request_wait() on the
  * returned request to ensure all resources are freed. If a NULL value is
  * specified in {request} any error occurring during the read will be reported
  * by hio_complete().
@@ -988,7 +988,7 @@ ssize_t hio_element_read_strided (hio_element_t element, off_t offset, unsigned 
  * {size}, and {stride}. The call returns immediately even if the read has not completed. If
  * the request is not yet complete and a non-NULL value is specified in
  * {request} this function will return an hio request in {request}. The
- * application is requires to call one of hio_test() or hio_wait() on the
+ * application is requires to call one of hio_request_test() or hio_request_wait() on the
  * returned request to ensure all resources are freed. If a NULL value is
  * specified in {request} any error occurring during the read will be reported
  * by hio_complete().

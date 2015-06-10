@@ -32,7 +32,7 @@ ssize_t hio_element_read_strided (hio_element_t element, off_t offset, unsigned 
       return rc;
   }
 
-  hio_wait (&request, &bytes_transferred);
+  hio_request_wait (&request, &bytes_transferred);
 
   return bytes_transferred;
 }
