@@ -254,6 +254,12 @@ extern "C" {
 
 /**
  * @ingroup API
+ * @brief HIO API version
+ */
+#define HIO_API_VERSION 1
+
+/**
+ * @ingroup API
  * @brief HIO library context
  *
  * HIO contexts are used to identify specific instances of the hio library.
@@ -527,7 +533,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
  * @ingroup API
  * @brief Finalize an hio context
  *
- * @param[in,out] ctx  hio context to finalize
+ * @param[in,out] context  hio context to finalize
  *
  * @returns hio_return_t
  *
@@ -535,14 +541,14 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
  * It is erroneous to call this function while there are any outstanding open
  * datasets in the context.
  */
-int hio_fini (hio_context_t *ctx);
+int hio_fini (hio_context_t *context);
 
 /**
  * @ingroup error_handling
  * @brief Get a string representation of the last error
  *
- * @param[in]  ctx    hio context
- * @param[out] error  string representation of the last error
+ * @param[in]  context      hio context
+ * @param[out] error_string string representation of the last error
  *
  * This function stores a pointer to the string representation of the most recent
  * error that occurred on a given context in {error}. Multiple calls to this
@@ -553,13 +559,13 @@ int hio_fini (hio_context_t *ctx);
  * and rank. Note that the absolute ordering of errors is not specified if the
  * application is using libhio from multiple threads.
  */
-int hio_err_get_last (hio_context_t ctx, char **error);
+int hio_err_get_last (hio_context_t context, char **error_string);
 
 /**
  * @ingroup error_handling
  * @brief Print 
  *
- * @param[in]  ctx     hio context
+ * @param[in]  context hio context
  * @param[in]  output  output file handle
  * @param[in]  format  print format (see printf)
  * @param[in]  ...     format values
@@ -568,13 +574,13 @@ int hio_err_get_last (hio_context_t ctx, char **error);
  * string representation of the hio error last seen on this thread.
  * Like hio_err_get_last() this function dequeues the last error.
  */
-int hio_err_print_last (hio_context_t ctx, FILE *output, char *format, ...);
+int hio_err_print_last (hio_context_t context, FILE *output, char *format, ...);
 
 /**
  * @ingroup error_handling
  * @brief Print
  *
- * @param[in]  ctx     hio context
+ * @param[in]  context hio context
  * @param[in]  output  output file handle
  * @param[in]  format  print format (see printf)
  * @param[in]  ...     format values
@@ -583,13 +589,13 @@ int hio_err_print_last (hio_context_t ctx, FILE *output, char *format, ...);
  * the string specified by {format} and {...}. This call dequeues all errors
  * that are pending being reported.
  */
-int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
+int hio_err_print_all (hio_context_t context, FILE *output, char *format, ...);
 
 /**
  * @ingroup API
  * @brief Open/create an hio dataset
  *
- * @param[in]  ctx      hio context
+ * @param[in]  context  hio context
  * @param[out] set_out  hio dataset handle
  * @param[in]  name     name of hio dataset
  * @param[in]  set_id   identifier for this set. eg. step number
@@ -629,7 +635,7 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...);
  * libhio does not currently support opening an existing dataset, id pair with
  * a different mode than it was created with.
  */
-int hio_dataset_open (hio_context_t ctx, hio_dataset_t *set_out, const char *name,
+int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char *name,
                       int64_t set_id, int flags, hio_dataset_mode_t mode);
 
 /**
@@ -663,7 +669,7 @@ int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
  * @ingroup API
  * @brief Unlink an hio dataset
  *
- * @param[in] ctx     hio context
+ * @param[in] context hio context
  * @param[in] name    name of hio dataset
  * @param[in] set_id  identified for the dataset
  * @param[in] mode    unlink mode
@@ -674,7 +680,7 @@ int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
  * This function removes all data associated with an hio dataset on all data
  * roots. It is invalid to specify HIO_DATASET_ID_HIGHEST for {set_id}.
  */
-int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio_unlink_mode_t mode);
+int hio_dataset_unlink (hio_context_t context, const char *name, int64_t set_id, hio_unlink_mode_t mode);
 
 /**
  * @ingroup API
@@ -682,7 +688,7 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio
  *
  * @param[in]  dataset      hio dataset this element belongs to
  * @param[out] element_out  new hio element handle
- * @param[in]  element_name file to open
+ * @param[in]  name         name of element to open
  * @param[in]  flags        open flags
  *
  * @returns hio_return_t
@@ -695,7 +701,7 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio
  * from any rank. Calls to open the same element from multiple ranks is allowed unless
  * exclusive access (see @ref HIO_FLAG_EXCL) is requested.
  */
-int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
+int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *name,
                       int flags);
 
 /**
@@ -777,10 +783,10 @@ ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long re
  * element specified in {element}. The call returns immediately even if the
  * write has not completed. If the request is not yet complete and a non-NULL
  * value is specified in {request} this function will return an hio request in
- * {request}. The application is requires to call one of hio_test(), hio_wait(),
- * or hio_join() on the returned request to ensure all resources are freed. If a
- * NULL value is specified in {request} any error occurring during the write
- * will be reported by either hio_element_flush() or hio_dataset_flush().
+ * {request}. The application is required to call either hio_test() or hio_wait()
+ * on the returned request to ensure all resources are freed. If a NULL value
+ * is specified in {request} any error occurring during the write will be reported
+ * by either hio_element_flush() or hio_dataset_flush().
  * The hio implementation is free to return HIO_OBJECT_NULL if the write is complete.
  * In the context of writes a request is complete when the buffer specified by
  * {ptr} is free to be modified. Completion of a write request does not guarantee
@@ -832,8 +838,8 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
  * element specified in {element}. The call returns immediately even if the
  * write has not completed. If the request is not yet complete and a non-NULL
  * value is specified in {request} this function will return an hio request in
- * {request}. The application is requires to call one of hio_test(), hio_wait(),
- * or hio_join() on the returned request to ensure all resources are freed. If a
+ * {request}. The application is required to call either hio_test() or hio_wait()
+ * on the returned request to ensure all resources are freed. If a
  * NULL value is specified in {request} any error occurring during the write
  * will be reported by either hio_element_flush() or hio_dataset_flush().
  * The hio implementation is free to return HIO_OBJECT_NULL if the write is complete.
@@ -928,10 +934,10 @@ ssize_t hio_element_read (hio_element_t element, off_t offset, unsigned long res
  * {ptr}. The call returns immediately even if the read has not completed. If
  * the request is not yet complete and a non-NULL value is specified in
  * {request} this function will return an hio request in {request}. The
- * application is requires to call one of hio_test(), hio_wait(), or
- * hio_join() on the returned request to ensure all resources are freed. If a
- * NULL value is specified in {request} any error occurring during the read
- * will be reported by hio_complete().
+ * application is requires to call one of hio_test(), or hio_wait() on the
+ * returned request to ensure all resources are freed. If a NULL value is
+ * specified in {request} any error occurring during the read will be reported
+ * by hio_complete().
  * The hio implementation is free to return HIO_OBJECT_NULL in {request} if the
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
@@ -982,10 +988,10 @@ ssize_t hio_element_read_strided (hio_element_t element, off_t offset, unsigned 
  * {size}, and {stride}. The call returns immediately even if the read has not completed. If
  * the request is not yet complete and a non-NULL value is specified in
  * {request} this function will return an hio request in {request}. The
- * application is requires to call one of hio_test(), hio_wait(), or
- * hio_join() on the returned request to ensure all resources are freed. If a
- * NULL value is specified in {request} any error occurring during the read
- * will be reported by hio_complete().
+ * application is requires to call one of hio_test() or hio_wait() on the
+ * returned request to ensure all resources are freed. If a NULL value is
+ * specified in {request} any error occurring during the read will be reported
+ * by hio_complete().
  * The hio implementation is free to return HIO_OBJECT_NULL in {request} if the
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
@@ -1010,22 +1016,6 @@ int hio_complete (hio_element_t element);
 
 /**
  * @ingroup API
- * @brief Join multiple requests into a single request object
- * 
- * @param[in,out] requests hio requests
- * @param[in]     count    length of {requests}
- * @param[out]    request  combined request
- *
- * This function combines the hio requests specified by {requests} and {count} and
- * combines them into a single hio request. The new request is complete when all
- * the joined requests are complete. The special value HIO_OBJECT_NULL stored
- * at any entry in {requests} is ignored. If every entry in the {requests} array
- * is HIO_OBJECT_NULL then HIO_OBJECT_NULL is returned in {request}.
- */
-int hio_request_join (hio_request_t *requests, int count, hio_request_t *request);
-
-/**
- * @ingroup API
  * @brief Test for completion of an I/O request
  *
  * @param[in,out] request  hio I/O request
@@ -1039,8 +1029,8 @@ int hio_request_join (hio_request_t *requests, int count, hio_request_t *request
  * {request} pointing to the special value HIO_OBJECT_NULL sets
  * {bytes_transferred} to 0 and {complete} to true and returns immediately.
  */
-int hio_test (hio_request_t *request, ssize_t *bytes_transferred,
-              bool *complete);
+int hio_request_test (hio_request_t *request, ssize_t *bytes_transferred,
+                      bool *complete);
 
 /**
  * @ingroup API
@@ -1057,26 +1047,26 @@ int hio_test (hio_request_t *request, ssize_t *bytes_transferred,
  * {request} pointing to the special value HIO_OBJECT_NULL sets
  * {bytes_transferred} to 0 and returns immediately.
  */
-int hio_wait (hio_request_t *request, ssize_t *bytes_transferred);
+int hio_request_wait (hio_request_t *request, ssize_t *bytes_transferred);
 
 /**
  * @ingroup API
  * @brief Get recommendation on if a checkpoint should be written
  *
- * @param[in]  ctx  hio context
- * @param[in]  name Dataset name
- * @param[out] hint Recommendation on checkpoint
+ * @param[in]  context hio context
+ * @param[in]  name    dataset name
+ * @param[out] hint    recommendation on checkpoint
  *
- * This function determines if it is optimal to checkpoint at
- * this time. This function will take into account the current data root and
- * expected checkpoint size. It will also query the runtime, system
- * configuration, or past I/O activity on the context to come up with the
+ * This function attempts to determine if now is an optimal time to write an
+ * instance of a dataset. This function will take into account the currently
+ * active data root, prior dataset instance sizes, and the system status.
+ * It may query the runtime, system configuration, or more to calculate the
  * recommendation. If the recommendation is returned in {hint} is HIO_SCP_NOT_NOW
- * the caller should not attempt to write a checkpoint at this time. If {hint}
- * is HIO_SCP_MUST_CHECKPOINT it is strongly recommended that the application
- * checkpoint now.
+ * the caller should not attempt to write an instance of the dataset at this time.
+ * If {hint} is HIO_SCP_MUST_CHECKPOINT it is recommended that the application
+ * write an instance now.
  */
-void hio_dataset_should_checkpoint (hio_context_t ctx, const char *name, int *hint);
+void hio_dataset_should_checkpoint (hio_context_t context, const char *name, int *hint);
 
 /**
  * @ingroup configuration

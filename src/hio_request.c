@@ -34,7 +34,7 @@ void hioi_request_release (hio_request_t request) {
   }
 }
 
-int hio_test (hio_request_t *request, ssize_t *bytes_transferred, bool *complete) {
+int hio_request_test (hio_request_t *request, ssize_t *bytes_transferred, bool *complete) {
   if (*request == HIO_OBJECT_NULL) {
     *bytes_transferred = 0;
     *complete = true;
@@ -44,26 +44,30 @@ int hio_test (hio_request_t *request, ssize_t *bytes_transferred, bool *complete
   if ((*request)->request_complete) {
     *complete = true;
     *bytes_transferred = (*request)->request_transferred;
+    hioi_request_release (request);
     *request = HIO_OBJECT_NULL;
   }
 
   return HIO_SUCCESS;
 }
 
-int hio_wait (hio_request_t *request, ssize_t *bytes_transferred) {
-  if (*request == HIO_OBJECT_NULL) {
-    *bytes_transferred = 0;
-    return HIO_SUCCESS;
+int hio_request_wait (hio_request_t *request, ssize_t *bytes_transferred) {
+  bool complete = false;
+  int rc;
+
+  rc = hio_request_test (request, bytes_transferred, &complete);
+  if (HIO_SUCCESS != rc) {
+    return rc;
   }
 
-  while (!(*request)->request_complete) {
+  while (!complete) {
     struct timespec interval = {.tv_sec = 0, .tv_nsec = 1000};
     nanosleep (&interval, NULL);
+    rc = hio_request_test (request, bytes_transferred, &complete);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
   }
 
-  *bytes_transferred = (*request)->request_transferred;
-
-  hioi_request_release (*request);
-  *request = HIO_OBJECT_NULL;
   return HIO_SUCCESS;
 }
