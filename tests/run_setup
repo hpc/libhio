@@ -141,7 +141,7 @@ fi
 #----------------------------------------------------------------------------
 # Early DW Ph 1 - location of BB directory
 HIO_TEST_DW="/dwphase1/$LOGNAME$job_dir"
-export HIO_context_datawarp_root=$HIO_TEST_DW
+export HIO_datawarp_root=$HIO_TEST_DW
 
 # This string contains the logic to check, empty or create a test data root
 # directory.  It needs to be executed on a compute node via aprun for datawarp.

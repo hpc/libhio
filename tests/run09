@@ -28,6 +28,8 @@ cmdw="
   le 
   hec hdc
 
+  s 1
+
   hdo NTNDS 97 WRITE,CREAT UNIQUE
   hvp c. .
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
@@ -35,6 +37,8 @@ cmdw="
     hew -$blk $blk 
   le 
   hec hdc
+
+  s 1
 
   hdo NTNDS 96 WRITE,CREAT UNIQUE
   hvp c. .
@@ -63,7 +67,7 @@ cmdr="
   hec hdc
 
   hxdi 98
-  hdo NTNDS ID_LAST READ UNIQUE
+  hdo NTNDS ID_HIGHEST READ UNIQUE
   heo MY_EL READ 20Mi
   hvp c. .     
   hck on
@@ -89,4 +93,4 @@ clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec2.x $cmdw
 myrun .libs/xexec2.x $cmdr
 check_rc
-clean_roots $HIO_TEST_ROOTS
+#clean_roots $HIO_TEST_ROOTS

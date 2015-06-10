@@ -321,53 +321,6 @@ void get_id() {
   MY_MSG_CTX->id_string=id_string;
 }
 
-enum ptype { SINT, UINT, PINT, DOUB, STR, HFLG, HDSM, HERR, HULM, HDSI, ONFF, NONE };
-
-long long int get_mult(char * str) {
-  long long int n;
-  if (*str == '\0') n = 1;
-  else if (!strcmp("k",  str)) n = 1000;
-  else if (!strcmp("ki", str)) n = 1024;
-  else if (!strcmp("M",  str)) n = (1000 * 1000);
-  else if (!strcmp("Mi", str)) n = (1024 * 1024);
-  else if (!strcmp("G",  str)) n = (1000 * 1000 * 1000);
-  else if (!strcmp("Gi", str)) n = (1024 * 1024 * 1024);
-  else if (!strcmp("T",  str)) n = (1ll * 1000 * 1000 * 1000 * 1000);
-  else if (!strcmp("Ti", str)) n = (1ll * 1024 * 1024 * 1024 * 1024);
-  else if (!strcmp("P",  str)) n = (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
-  else if (!strcmp("Pi", str)) n = (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
-  else n = 0;
-  return n;
-}
-
-U64 getI64(char * num, enum ptype type, ACTION *actionp) {
-  long long int n;
-  char * endptr;
-  DBG3("getI64 num: %s", num);
-  errno = 0;
-  n = strtoll(num, &endptr, 0);
-  if (errno != 0) ERRX("%s ...; invalid integer \"%s\"", A.desc, num);
-  if (type == UINT && n < 0) ERRX("%s ...; negative integer \"%s\"", A.desc, num);
-  if (type == PINT && n <= 0) ERRX("%s ...; non-positive integer \"%s\"", A.desc, num);
-  
-  long long mult = get_mult(endptr);
-  if (0 == mult) ERRX("%s ...; invalid integer \"%s\"", A.desc, num);
-  return n * mult;
-}
-
-double getDoub(char * num, enum ptype type, ACTION *actionp) {
-  double n;
-  char * endptr;
-  DBG3("getDoub num: %s", num);
-  errno = 0;
-  n = strtod(num, &endptr);
-  if (errno != 0) ERRX("%s ...; invalid double \"%s\"", A.desc, num);
-
-  long long mult = get_mult(endptr);
-  if (0 == mult) ERRX("%s ...; invalid double \"%s\"", A.desc, num);
-  return n * mult;
-}
-
 //----------------------------------------------------------------------------
 // lfsr_22_byte - bytewise 22 bit linear feedback shift register.
 // Taps at bits 21 & 22 (origin 1) to provide 2^22-1 repeat cycle.
@@ -1363,7 +1316,7 @@ ACTION_RUN(her_run) {
 
   ofs_abs = hseg_start + hseg_size_per_rank * ((myrank + hseg_rank_shift) % mpi_size) + ofs_segrel; 
 
-  DBG2("hew ofs_param: %lld ofs_segrel: %lld ofs_abs: %lld len: %lld", ofs_param, ofs_segrel, ofs_abs, hreq);
+  DBG2("her ofs_param: %lld ofs_segrel: %lld ofs_abs: %lld len: %lld", ofs_param, ofs_segrel, ofs_abs, hreq);
   hcnt = hio_element_read (element, ofs_abs, 0, rbuf, 1, hreq);
   HCNT_TEST(hio_element_read)
   rw_count[0] += hcnt;
@@ -1379,9 +1332,9 @@ ACTION_RUN(her_run) {
       VERB0("Error: hio_element_read data check miscompare; read ofs:%lld read size:%lld miscompare ofs: %lld",
              ofs_abs, hreq, offset);
       
-      VERB0("Miscompare expected data at offset %lld", dump_start);
+      VERB0("Miscompare expected data at offset %lld follows", dump_start);
       hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 32);
-      VERB0("Miscompare actual data at offset %lld", dump_start);
+      VERB0("Miscompare actual data at offset %lld follows", dump_start);
       hex_dump( rbuf + dump_start, 32);
     } else {
       VERB3("hio_element_read data check successful");
@@ -1651,6 +1604,13 @@ ACTION_RUN(grep_run) {
 //----------------------------------------------------------------------------
 // Argument string parsing table
 //----------------------------------------------------------------------------
+enum ptype {
+  SINT = CVT_SINT,
+  UINT = CVT_NNINT,
+  PINT = CVT_PINT,
+  DOUB = CVT_DOUB,
+  STR, HFLG, HDSM, HERR, HULM, HDSI, ONFF, NONE };
+
 struct parse {
   char * cmd;
   enum ptype param[MAX_PARAM];
@@ -1736,21 +1696,27 @@ void decode(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL * val
 }
 
 void decode_int(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL * val, ACTION * actionp) {
-  int i;
-  int rc = str2enum(MY_MSG_CTX, etptr, tok, &i);
-  val->u = (U64)i;
+  int i, rc;
+  char buf[128]; char *bufp = buf; int buflen = sizeof(buf);
+
+  // Try enum
+  rc = str2enum(MY_MSG_CTX, etptr, tok, &i);
    
-  if (rc) {
-    // Need a way to defer this message until integer decode fails
-    MSG("\"%s\" not a recognized %s, trying integer. recognized values are %s",
-          tok, name, enum_list(MY_MSG_CTX, etptr));
-    (*val).u = getI64(tok, SINT, actionp);
+  if (rc == 0) {
+    val->u = (U64)i;
+  } else {
+    // Not valid enum, try integer
+    rc = cvt_num(CVT_SINT, tok, &(val->u), &bufp, buflen);
+    // Neither, issue error message
+    if (rc) ERRX("%s and not a valid %s, recognized values are %s",
+                 buf, name, enum_list(MY_MSG_CTX, etptr));
   } 
 }
 
 void parse_action() {
-  int t = -1, i, j;
+  int t = -1, i, j, rc;
   ACTION nact;
+  char buf[128]; char *bufp = buf; int buflen = sizeof(buf);
 
   msg_context_set_verbose(MY_MSG_CTX, 0); 
   msg_context_set_debug(MY_MSG_CTX, 0); 
@@ -1805,10 +1771,12 @@ void parse_action() {
               case SINT:
               case UINT:
               case PINT:
-                nact.v[j].u = getI64(tokv[t], parse[i].param[j], &nact);
+                rc = cvt_num((enum cvt_num_type)parse[i].param[j], tokv[t], &nact.v[j].u, &bufp, buflen);
+                if (rc) ERRX("%s ...; %s", nact.desc, buf);
                 break;
               case DOUB:
-                nact.v[j].d = getDoub(tokv[t], parse[i].param[j], &nact);
+                rc = cvt_num((enum cvt_num_type)parse[i].param[j], tokv[t], &nact.v[j].d, &bufp, buflen);
+                if (rc) ERRX("%s ...; %s", nact.desc, buf);
                 break;
               case STR:
                 nact.v[j].s = tokv[t];

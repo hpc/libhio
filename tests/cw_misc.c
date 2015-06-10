@@ -505,4 +505,86 @@ I64 GetCPUaffinity(void) {
 }
 #endif
 
+
+
+//-------------------------------------------------------------------------------
+// cvt_num - converts a string to 64 bit integer or float. Generates an error
+// message on failure.  The string can have a suffix such as k, ki, M, Mi,
+// G, Gi, etc.  Limited value checking based on enum cvt_num_type.
+//
+// On error:
+//   if msgp non-null then
+//     if msglen > 0 then
+//       dynamic error message copied into **msgp/msglen
+//     else
+//       *msgp set to point to static error message
+//-----------------------------------------------------------------------------
+
+// Error message macro for use in cvt_num()
+#define CVT_ERR(ERR)                                       \
+  { if (msgp) {                                            \
+      if (msglen > 0) {                                    \
+        snprintf(*msgp, msglen, "%s: \"%s\"", ERR, str);   \
+      } else {                                             \
+        *msgp = ERR;                                       \
+      }                                                    \
+    }                                                      \
+    return 12;                                             \
+  } 
+
+int cvt_num(enum cvt_num_type type, char * str, void * outp, char * * msgp, size_t msglen) {
+  I64 i = 0;
+  double d = 0.0;
+  U64 mult;
+  char * endptr;
+
+  errno = 0;
+  switch (type) {
+    case CVT_SINT:
+    case CVT_PINT:
+    case CVT_NNINT:
+      errno = 0;
+      i = strtoll(str, &endptr, 0);
+      if (errno != 0) CVT_ERR("invalid integer");
+      if (type == CVT_PINT && i <= 0) CVT_ERR("non-positive integer");
+      if (type == CVT_NNINT && i < 0) CVT_ERR("negative integer");
+      break;
+    case CVT_DOUB:
+    case CVT_PDOUB:
+    case CVT_NNDOUB:
+      errno = 0;
+      d = strtod(str, &endptr);
+      if (errno != 0) CVT_ERR("invalid double");
+      if (type == CVT_PDOUB && d <= 0) CVT_ERR("non-positive double");
+      if (type == CVT_NNDOUB && d < 0) CVT_ERR("negative double");
+      break;
+  } 
+
+  if (*endptr == '\0') mult = 1;
+  else if (!strcmp("k",  endptr)) mult = 1000;
+  else if (!strcmp("ki", endptr)) mult = 1024;
+  else if (!strcmp("M",  endptr)) mult = (1000 * 1000);
+  else if (!strcmp("Mi", endptr)) mult = (1024 * 1024);
+  else if (!strcmp("G",  endptr)) mult = (1000 * 1000 * 1000);
+  else if (!strcmp("Gi", endptr)) mult = (1024 * 1024 * 1024);
+  else if (!strcmp("T",  endptr)) mult = (1ll * 1000 * 1000 * 1000 * 1000);
+  else if (!strcmp("Ti", endptr)) mult = (1ll * 1024 * 1024 * 1024 * 1024);
+  else if (!strcmp("P",  endptr)) mult = (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
+  else if (!strcmp("Pi", endptr)) mult = (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
+  else CVT_ERR("invalid multiplier");
+
+  switch (type) {
+    case CVT_SINT:
+    case CVT_PINT:
+    case CVT_NNINT:
+      *(I64*)outp = i * mult; 
+      break;
+    case CVT_DOUB:
+    case CVT_PDOUB:
+    case CVT_NNDOUB:
+      *(double*)outp = d * mult; 
+      break;
+  } 
+  return 0;
+}
 // --- end of cw_misc.c ---
