@@ -44,7 +44,7 @@ int hio_request_test (hio_request_t *request, ssize_t *bytes_transferred, bool *
   if ((*request)->request_complete) {
     *complete = true;
     *bytes_transferred = (*request)->request_transferred;
-    hioi_request_release (request);
+    hioi_request_release (*request);
     *request = HIO_OBJECT_NULL;
   }
 
