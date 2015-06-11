@@ -71,17 +71,17 @@ cmdr="
 "
 
 clean_roots $HIO_TEST_ROOTS
-myrun .libs/xexec2.x $cmdw
+myrun .libs/xexec.x $cmdw
 
 # Wait for directory stage out to complete
 cmd aprun -n 1 -b find /dwphase1/cornell -ls
-cmd aprun -n 1 .libs/xexec2.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/97
-cmd aprun -n 1 .libs/xexec2.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/98
-cmd aprun -n 1 .libs/xexec2.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/99
+cmd aprun -n 1 .libs/xexec.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/97
+cmd aprun -n 1 .libs/xexec.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/98
+cmd aprun -n 1 .libs/xexec.x v 3 dwds $HIO_context_datawarp_root/MYCTX.hio/NTNDS/99
 
 # delete the datawarp directory
 clean_roots "DataWarp"
 
 # Now read the dataset from 2nd data root (PFS)
-myrun .libs/xexec2.x $cmdr
+myrun .libs/xexec.x $cmdr
 check_rc

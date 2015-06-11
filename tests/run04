@@ -52,7 +52,7 @@ fails="
 
 #set -x
 clean_roots $HIO_TEST_ROOTS
-myrun .libs/xexec2.x $fails
+myrun .libs/xexec.x $fails
 check_rc
 cmd rmdir $ro_dir
 clean_roots $HIO_TEST_ROOTS
