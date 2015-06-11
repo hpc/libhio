@@ -42,13 +42,16 @@
 #include "cw_misc.h"
 
 //----------------------------------------------------------------------------
-// To build:    cc -O3       xexec.c -o xexec
-//       or: mpicc -O3 -DMPI xexec.c -o xexec
-//  on Cray:    cc -O3 -DMPI xexec.c -o xexec -dynamic
+// To build:    cc -O3       xexec.c cw_misc.c -I. -o xexec.x
+//       or: mpicc -O3 -DMPI xexec.c cw_misc.c -I. -o xexec.x
+//  on Cray:    cc -O3 -DMPI xexec.c cw_misc.c -I. -o xexec.x -dynamic
 //
 // Optionally add: -DDBGLEV=3 (see discussion below)
 //                 -DMPI      to enable MPI functions
 //                 -DDLFCN    to enable dlopen and related calls
+//                 -DHIO      to enable hio functions
+//
+// Also builds under hio autoconf / automake system.
 //----------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------
@@ -59,7 +62,7 @@
 char * help =
   "xexec - multi-pupose HPC exercise and testing tool.  Processes command\n"
   "        line arguments and file input in sequence to control actions.\n"
-  "        Version 0.9.4 " __DATE__ " " __TIME__ "\n"
+  "        Version 1.0.0 " __DATE__ " " __TIME__ "\n"
   "\n"
   "  Syntax:  xexec -h | [ action [param ...] ] ...\n"
   "\n"
@@ -164,7 +167,7 @@ char * help =
   "  x <status>    exit with <status>\n"
   "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines\n"
   "\n"
-  "  Numbers can be specified with suffixes k, ki, M, Mi, G, Gi, etc.\n"
+  "  Numbers can be specified with suffixes %s\n"
   "\n"
   "  Comments are delimited with /@, /@@ and @/, however those must stand alone in the \n"
   "  actions as separate tokens.  Also, /@ is only recognized if it is the first\n"
@@ -207,6 +210,8 @@ char * test_name = "<unnamed>";
 #ifdef MPI
 int myrank, mpi_size = 0;
 static MPI_Comm mpi_comm;
+#else
+const int myrank = 0;
 #endif
 int tokc = 0;
 char * * tokv = NULL;
@@ -1053,6 +1058,32 @@ ACTION_RUN(dlc_run) {
 #endif
 
 //----------------------------------------------------------------------------
+// Compile regex, handle errors
+//----------------------------------------------------------------------------
+void rx_comp(int n, struct action * actionp) {
+  A.v[n].rxp = MALLOCX(sizeof(regex_t));
+
+  int rc = regcomp(A.v[n].rxp, A.v[n].s, REG_EXTENDED | REG_NOSUB);
+  if (rc) {
+    char buf[512];
+    regerror(rc, NULL, buf, sizeof(buf));
+    ERRX("%s; regex: %s", A.desc, buf);
+  } 
+}
+//----------------------------------------------------------------------------
+// Compare regex, handle errors. Returns 0 on match or REG_NOMATCH
+//----------------------------------------------------------------------------
+int rx_run(int n, struct action * actionp, char * line) {
+  int rc = regexec(A.v[n].rxp, line, 0, NULL, 0);
+  if (rc != 0 && rc != REG_NOMATCH) {
+    char buf[512];
+    regerror(rc, A.v[n].rxp, buf, sizeof(buf));
+    ERRX("%s; regex: %s", A.desc, buf);
+  }
+  return rc;
+}
+
+//----------------------------------------------------------------------------
 // hi, hdo, heo, hew, her, hec, hdc, hf (HIO) action handlers
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
@@ -1332,9 +1363,9 @@ ACTION_RUN(her_run) {
       VERB0("Error: hio_element_read data check miscompare; read ofs:%lld read size:%lld miscompare ofs: %lld",
              ofs_abs, hreq, offset);
       
-      VERB0("Miscompare expected data at offset %lld follows", dump_start);
+      VERB0("Miscompare expected data at offset %lld follows:", dump_start);
       hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 32);
-      VERB0("Miscompare actual data at offset %lld follows", dump_start);
+      VERB0("Miscompare actual data at offset %lld follows:", dump_start);
       hex_dump( rbuf + dump_start, 32);
     } else {
       VERB3("hio_element_read data check successful");
@@ -1403,32 +1434,6 @@ ACTION_RUN(hxdi_run) {
   hio_dsid_exp = V0.u;
   hio_dsid_exp_set = 1;
   VERB1("%s; HIO expected dataset id now %lld", A.desc, hio_dsid_exp);
-}
-
-//----------------------------------------------------------------------------
-// Compile regex, handle errors
-//----------------------------------------------------------------------------
-void rx_comp(int n, struct action * actionp) {
-  A.v[n].rxp = MALLOCX(sizeof(regex_t));
-
-  int rc = regcomp(A.v[n].rxp, A.v[n].s, REG_EXTENDED | REG_NOSUB);
-  if (rc) {
-    char buf[512];
-    regerror(rc, NULL, buf, sizeof(buf));
-    ERRX("%s; regex: %s", A.desc, buf);
-  } 
-}
-//----------------------------------------------------------------------------
-// Compare regex, handle errors. Returns 0 on match or REG_NOMATCH
-//----------------------------------------------------------------------------
-int rx_run(int n, struct action * actionp, char * line) {
-  int rc = regexec(A.v[n].rxp, line, 0, NULL, 0);
-  if (rc != 0 && rc != REG_NOMATCH) {
-    char buf[512];
-    regerror(rc, A.v[n].rxp, buf, sizeof(buf));
-    ERRX("%s; regex: %s", A.desc, buf);
-  }
-  return rc;
 }
 
 //----------------------------------------------------------------------------
@@ -1697,7 +1702,7 @@ void decode(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL * val
 
 void decode_int(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL * val, ACTION * actionp) {
   int i, rc;
-  char buf[128]; char *bufp = buf; int buflen = sizeof(buf);
+  char buf[128];
 
   // Try enum
   rc = str2enum(MY_MSG_CTX, etptr, tok, &i);
@@ -1706,7 +1711,7 @@ void decode_int(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL *
     val->u = (U64)i;
   } else {
     // Not valid enum, try integer
-    rc = cvt_num(CVT_SINT, tok, &(val->u), &bufp, buflen);
+    rc = cvt_num(CVT_SINT, tok, &(val->u), buf, sizeof(buf));
     // Neither, issue error message
     if (rc) ERRX("%s and not a valid %s, recognized values are %s",
                  buf, name, enum_list(MY_MSG_CTX, etptr));
@@ -1716,7 +1721,7 @@ void decode_int(ENUM_TABLE * etptr, char * tok, char * name, char * desc, PVAL *
 void parse_action() {
   int t = -1, i, j, rc;
   ACTION nact;
-  char buf[128]; char *bufp = buf; int buflen = sizeof(buf);
+  char buf[128];
 
   msg_context_set_verbose(MY_MSG_CTX, 0); 
   msg_context_set_debug(MY_MSG_CTX, 0); 
@@ -1771,11 +1776,11 @@ void parse_action() {
               case SINT:
               case UINT:
               case PINT:
-                rc = cvt_num((enum cvt_num_type)parse[i].param[j], tokv[t], &nact.v[j].u, &bufp, buflen);
+                rc = cvt_num((enum cvt_num_type)parse[i].param[j], tokv[t], &nact.v[j].u, buf, sizeof(buf));
                 if (rc) ERRX("%s ...; %s", nact.desc, buf);
                 break;
               case DOUB:
-                rc = cvt_num((enum cvt_num_type)parse[i].param[j], tokv[t], &nact.v[j].d, &bufp, buflen);
+                rc = cvt_num((enum cvt_num_type)parse[i].param[j], tokv[t], &nact.v[j].d, buf, sizeof(buf));
                 if (rc) ERRX("%s ...; %s", nact.desc, buf);
                 break;
               case STR:
@@ -1855,7 +1860,7 @@ void run_action() {
 int main(int argc, char * * argv) {
 
   if (argc <= 1 || 0 == strncmp("-h", argv[1], 2)) {
-    fputs(help, stdout);
+    fprintf(stdout, help, cvt_num_suffix());
     return 1;
   }
 

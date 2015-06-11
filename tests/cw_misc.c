@@ -509,30 +509,19 @@ I64 GetCPUaffinity(void) {
 
 //-------------------------------------------------------------------------------
 // cvt_num - converts a string to 64 bit integer or float. Generates an error
-// message on failure.  The string can have a suffix such as k, ki, M, Mi,
-// G, Gi, etc.  Limited value checking based on enum cvt_num_type.
-//
-// On error:
-//   if msgp non-null then
-//     if msglen > 0 then
-//       dynamic error message copied into **msgp/msglen
-//     else
-//       *msgp set to point to static error message
+// message on failure if msgp not null.  The string can have a suffix such as
+// k, ki, M, Mi, G, Gi, etc.  Limited value checking based on enum cvt_num_type.
 //-----------------------------------------------------------------------------
 
 // Error message macro for use in cvt_num()
-#define CVT_ERR(ERR)                                       \
-  { if (msgp) {                                            \
-      if (msglen > 0) {                                    \
-        snprintf(*msgp, msglen, "%s: \"%s\"", ERR, str);   \
-      } else {                                             \
-        *msgp = ERR;                                       \
-      }                                                    \
-    }                                                      \
-    return 12;                                             \
+#define CVT_ERR(ERR)                                   \
+  { if (msgp) {                                        \
+      snprintf(msgp, msglen, "%s: \"%s\"", ERR, str); \
+    }                                                  \
+    return 12;                                         \
   } 
 
-int cvt_num(enum cvt_num_type type, char * str, void * outp, char * * msgp, size_t msglen) {
+int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t msglen) {
   I64 i = 0;
   double d = 0.0;
   U64 mult;
@@ -571,7 +560,7 @@ int cvt_num(enum cvt_num_type type, char * str, void * outp, char * * msgp, size
   else if (!strcmp("Ti", endptr)) mult = (1ll * 1024 * 1024 * 1024 * 1024);
   else if (!strcmp("P",  endptr)) mult = (1ll * 1000 * 1000 * 1000 * 1000 * 1000);
   else if (!strcmp("Pi", endptr)) mult = (1ll * 1024 * 1024 * 1024 * 1024 * 1024);
-  else CVT_ERR("invalid multiplier");
+  else CVT_ERR("invalid number suffix");
 
   switch (type) {
     case CVT_SINT:
@@ -586,5 +575,10 @@ int cvt_num(enum cvt_num_type type, char * str, void * outp, char * * msgp, size
       break;
   } 
   return 0;
+}
+
+// Return a pointer to a string containing a comment delimeted list of valid suffixes
+const char * cvt_num_suffix(void) {
+  return "k, ki, M, Mi, G, Gi, T, Ti, P, Pi";
 }
 // --- end of cw_misc.c ---

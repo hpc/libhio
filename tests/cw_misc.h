@@ -228,15 +228,8 @@ I64 GetCPUaffinity(void);
 
 //-------------------------------------------------------------------------------
 // cvt_num - converts a string to 64 bit integer or float. Generates an error
-// message on failure.  The string can have a suffix such as k, ki, M, Mi,
-// G, Gi, etc.  Limited value checking based on enum cvt_num_type.
-//
-// On error:
-//   if msgp non-null then
-//     if msglen > 0 then
-//       dynamic error message copied into **msgp/msglen
-//     else
-//       *msgp set to point to static error message
+// message on failure if msgp not null.  The string can have a suffix such as
+// k, ki, M, Mi, G, Gi, etc.  Limited value checking based on enum cvt_num_type.
 //-----------------------------------------------------------------------------
 enum cvt_num_type {
   CVT_SINT,                  // Signed integer 
@@ -246,5 +239,7 @@ enum cvt_num_type {
   CVT_PDOUB,                 // Positive double      ( d >  0.0 )
   CVT_NNDOUB                 // Non-negative double  ( d >= 0.0 )  
 };
-int cvt_num(enum cvt_num_type type, char * str, void * outp, char * * msgp, size_t msglen);
+int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t msglen);
+// Return a pointer to a string containing a comment delimeted list of valid suffixes
+const char * cvt_num_suffix(void);
 // --- end of cw_misc.h ---
