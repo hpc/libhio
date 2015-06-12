@@ -23,8 +23,9 @@
 \newcommand{\+}{}
 
 % Generation time
-\newcommand{\hioversion}{libhio v1.0 Documentation}
-\newcommand{\generated}{Generated Wed May 06 2015}
+\newcommand{\hioversion}{@PACKAGE@ Version @VERSION@}
+\newcommand{\hiodoctype}{API Document}
+\newcommand{\generated}{Generated @HIO_BUILD_TIMESTAMP@}
 
 % Page & text layout
 \usepackage{geometry}
@@ -63,12 +64,14 @@
 \fancyhead[LO]{\fancyplain{}{\bfseries\rightmark}}
 \fancyhead[CO]{\fancyplain{}{}}
 \fancyhead[RO]{\fancyplain{}{\bfseries\thepage}}
-\fancyfoot[LE]{\fancyplain{}{}}
+
+\fancyfoot[LE]{\fancyplain{}{\bfseries\scriptsize \generated{}}}
 \fancyfoot[CE]{\fancyplain{}{}}
-\fancyfoot[RE]{\fancyplain{}{\bfseries\scriptsize \hioversion{} \generated{}}}
-\fancyfoot[LO]{\fancyplain{}{\bfseries\scriptsize \hioversion{} \generated{}}}
+\fancyfoot[RE]{\fancyplain{}{\bfseries\scriptsize \hioversion{}}}
+
+\fancyfoot[LO]{\fancyplain{}{\bfseries\scriptsize \hioversion{}}}
 \fancyfoot[CO]{\fancyplain{}{}}
-\fancyfoot[RO]{\fancyplain{}{}}
+\fancyfoot[RO]{\fancyplain{}{\bfseries\scriptsize \generated{}}}
 \renewcommand{\footrulewidth}{0.4pt}
 \renewcommand{\chaptermark}[1]{%
   \markboth{#1}{}%
@@ -91,6 +94,15 @@
 \else
   \usepackage[ps2pdf,pagebackref=true]{hyperref}
 \fi
+
+\usepackage{xcolor} % Required for specifying custom colors
+\usepackage{fix-cm} % Allows increasing the font size of specific fonts beyond LaTeX default specifications
+
+\setlength{\oddsidemargin}{0mm} % Adjust margins to center the colored title box
+\setlength{\evensidemargin}{0mm} % Margins on even pages - only necessary if adding more content to this template
+
+\definecolor{grey}{rgb}{0.9,0.9,0.9} % Color of the box surrounding the title - these values can be changed to give the box a different color
+
 \hypersetup{%
   colorlinks=true,%
   linkcolor=blue,%
@@ -103,6 +115,7 @@
   \newpage{\pagestyle{empty}\cleardoublepage}%
 }
 
+\newcommand{\HRule}[1]{\hfill \rule{0.2\linewidth}{#1}} % Horizontal rule at the bottom of the page, adjust width here
 
 %===== C O N T E N T S =====
 
@@ -116,16 +129,53 @@
             }
 \pagenumbering{roman}
 \begin{titlepage}
-\vspace*{7cm}
-\begin{center}%
-{\Large libhio}\\
-\vspace*{1cm}
-{\large \hioversion{}}\\
-\vspace*{0.5cm}
-{\small \generated{}}\\
-\vspace*{1cm}
-{\small LA-UR-15-21979}\\
-\end{center}
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+\colorbox{grey}{
+	\parbox[t]{1.0\linewidth}{
+         	% The first argument for fontsize is the font size of the text and the second is the line spacing
+         	% - you may need to play with these for your particular title
+		\centering \fontsize{50pt}{50pt}\selectfont 
+
+		\vspace*{0.7cm} % Space between the start of the title and the top of the grey box
+		
+		\hfill @PACKAGE@ \\
+		\centering \fontsize{20pt}{50pt}\selectfont 
+		\hfill \hioversion{} \\
+		\hfill \hiodoctype{} \par
+		
+		\vspace*{0.7cm} % Space between the end of the title and the bottom of the grey box
+	}
+}
+
+%----------------------------------------------------------------------------------------
+
+\vfill % Space between the title box and author information
+
+%----------------------------------------------------------------------------------------
+%	AUTHOR NAME AND INFORMATION SECTION
+%----------------------------------------------------------------------------------------
+
+{\centering \large 
+\hfill Nathan Hjelm\\
+\hfill hjelmn@lanl.gov\\
+\vspace*{0.7cm}
+\hfill Cornell Wright\\
+\hfill cornell@lanl.gov\\
+\vspace*{0.7cm}
+\hfill High Performance System Integration\\
+\hfill Los Alamos National Laboratory\\
+\vspace*{0.7cm}
+\hfill \generated{}\\
+\hfill LA-UR-15-21979\\
+
+\HRule{1pt}} % Horizontal line, thickness changed here
+
+%----------------------------------------------------------------------------------------
+
+\clearpage % Whitespace to the end of the page
 \end{titlepage}
 \clearemptydoublepage
 \tableofcontents
