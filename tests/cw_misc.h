@@ -240,6 +240,7 @@ enum cvt_num_type {
   CVT_NNDOUB                 // Non-negative double  ( d >= 0.0 )  
 };
 int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t msglen);
-// Return a pointer to a string containing a comment delimeted list of valid suffixes
+
+// Return a pointer to a string containing a comma delimited list of valid suffixes
 const char * cvt_num_suffix(void);
 // --- end of cw_misc.h ---

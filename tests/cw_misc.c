@@ -194,7 +194,7 @@ char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
   char * retval = "<Invalid_Enum>";
   if (etptr->multiple) ERRX("enum_name called for enum type multiple");
 
-  // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
+  // nv_count < 0 is a flag that the table is unsorted.  Count and sort the table.
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
 
   ENUM_NAME_VAL_PAIR nv = {NULL, val};
@@ -577,7 +577,7 @@ int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t
   return 0;
 }
 
-// Return a pointer to a string containing a comment delimeted list of valid suffixes
+// Return a pointer to a string containing a comma delimited list of valid suffixes
 const char * cvt_num_suffix(void) {
   return "k, ki, M, Mi, G, Gi, T, Ti, P, Pi";
 }

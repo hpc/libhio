@@ -125,7 +125,7 @@ char * help =
   "  ff            Free allocated blocks\n"
   "  hx <min> <max> <blocks> <limit> <count>\n"
   "                Perform <count> malloc/touch/free cycles on memory blocks ranging\n"
-  "                in size from <min> to <max>.  Alocate no more than <limit> bytes\n"
+  "                in size from <min> to <max>.  Allocate no more than <limit> bytes\n"
   "                in <blocks> separate allocations.  Sequence and sizes of\n"
   "                allocations are randomized.\n"
   #ifdef DLFCN
@@ -343,7 +343,7 @@ void lfsr_22_byte(unsigned char * p, U64 len) {
 }
 
 void lfsr_22_byte_init(void) {
-  // Use a very simp PRNG to initialize lfsr_state
+  // Use a very simple PRNG to initialize lfsr_state
   int prime = 15485863; // The 1 millionth prime
   lfsr_state[0] = 0xA5;
   for (int i = 1; i<sizeof(lfsr_state); ++i) {
@@ -645,11 +645,11 @@ ACTION_CHECK(va_check) {
 }
 
 ACTION_CHECK(vt_check) {
-  if (memcount <= 0) ERRX("%s: touch without cooresponding allocate", A.desc);
+  if (memcount <= 0) ERRX("%s: touch without corresponding allocate", A.desc);
 }
 
 ACTION_CHECK(vf_check) {
-  if (memcount-- <= 0) ERRX("%s: free without cooresponding allocate", A.desc);
+  if (memcount-- <= 0) ERRX("%s: free without corresponding allocate", A.desc);
 }
 
 
@@ -890,7 +890,7 @@ ACTION_RUN(ff_run) {
 
 
 //----------------------------------------------------------------------------
-// hx (heap exercisor) action handler
+// hx (heap exerciser) action handler
 //----------------------------------------------------------------------------
 ACTION_CHECK(hx_check) {
   U64 min = V0.u;
