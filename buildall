@@ -23,15 +23,19 @@ synexit() {
   echo "                      (default $tarname)"
   echo "    -r rmt_dir        Remote directory name.  Default is env var"
   echo "                      HIOBUILD_RMT_DIR or ~/pgm/hio"     
-  echo "    version           One or more version names.  If no versions"
-  echo "                      specified, all versions are built."
+  echo "    version           One or more version names.  Special values:"
+  echo "                      \"good\" - all known good versions."
+  echo "                      \"other\" - all other versions."
+  echo "                      \"all\" - all versions."
   echo "    -h                Display this help"
   echo ""
-  echo "  Results logged to $logfn. Valid versions are:"
-  echo "  $allver"
+  echo "  Results logged to $logfn. Good versions are:"
+  echo "  $goodver"
+  echo "  Other versions are:"
+  echo "  $otherver"
   echo ""
-  echo "  Example - full build locally and all remote versions:"
-  echo "    buildall"
+  echo "  Example - full build locally and all good remote versions:"
+  echo "    buildall good"
   echo ""
   echo "  Example - incremental remote build of a single version:"
   echo "    buildall -i mu-intel"
@@ -57,13 +61,14 @@ msg() {
 # build_l - local build of hio
 #----------------------------------------------------------------------------
 build_l() {
+  options=$*
   if [[ $autogen -gt 0 ]]; then
-    cmd ./hiobuild -ax
+    cmd ./hiobuild -ax $options
     gotdist=1
   elif [[ $incremental -gt 0 ]]; then
-    cmd ./hiobuild 
+    cmd ./hiobuild $options
   else
-    cmd ./hiobuild -fx
+    cmd ./hiobuild -fx $options
     gotdist=1
   fi 
 }
@@ -126,8 +131,6 @@ tarname="libhio-1.0"
 if [[ -z $HIOBUILD_RMT_DIR ]]; then rmt_dir="~/pgm/hio"
 else rmt_dir=$HIOBUILD_RMT_DIR; fi
 
-allver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ct-pgi"
-
 while getopts "hait:n:r:" optname; do
   case $optname in
     h ) synexit;;
@@ -141,7 +144,14 @@ while getopts "hait:n:r:" optname; do
 done
 shift $((OPTIND - 1 ))
 vers=$*
-if [[ -z $vers ]]; then vers=$allver; fi
+
+goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ga-gnu"
+otherver="ct-cray ct-pgi ga-cray ga-intel ga-pgi"
+
+if   [[ $vers == "good"  ]]; then vers=$goodver
+elif [[ $vers == "other" ]]; then vers=$otherver
+elif [[ $vers == "all"   ]]; then vers="$goodver $otherver"
+fi
 
 # Move log file to build directory
 if [[ ! -d $tree ]]; then synexit "Error: directory $tree does not exist"; fi 
@@ -156,14 +166,18 @@ rm -fR $tdir
 #----------------------------------------------------------------------------
 for v in $vers; do
   case $v in
-    local    ) build_l;;
-    mu-gnu   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l gcc   -l openmpi;;
-    mu-intel ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l intel -l openmpi;;
+    local    ) build_l -n $v;;
+    mu-gnu   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l gcc   -l openmpi -n $v;;
+    mu-intel ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l intel -l openmpi -n $v;;
     mu-pgi   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l pgi   -l openmpi;;
-    ct-gnu   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu;;
-    ct-intel ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel;;
-    ct-pgi   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  ;;
-    ga-gnu   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu -l craype-haswell -l cray-mpich;;
+    ct-gnu   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu -n $v;;
+    ct-intel ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel -n $v;;
+    ct-cray  ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-cray -n $v;;
+    ct-pgi   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -n $v;;
+    ga-gnu   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -l craype-haswell -l cray-mpich -n $v;;
+    ga-cray  ) build_r ga-fe1t "$rmt_dir/$v" $tarname                              -l craype-haswell -l cray-mpich -n $v;;
+    ga-intel ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l craype-haswell -l cray-mpich -n $v;;
+    ga-pgi   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l craype-haswell -l cray-mpich -n $v;;
     *        ) msg "Error: version \"$v\" not recognized"     
   esac
 done

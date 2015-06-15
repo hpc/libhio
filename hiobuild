@@ -11,7 +11,7 @@ synexit() {
   echo "buildhio - build libhio and check results"
   echo ""
   echo "  Syntax:"
-  echo "    buildhio [-acfx] [-d dir]"
+  echo "    buildhio [-acfx] [-d dir] [-n name]"
   echo "             [-l module]...  [-s oldmod newmod]..."
   echo "             [-h]"
   echo ""
@@ -21,6 +21,7 @@ synexit() {
   echo "    -f                  Full build (make clean)"  
   echo "    -x                  Build extras (docs and dist)"
   echo "    -d dir              Build directory (default \$PWD)"
+  echo "    -n name             Build name for results messages"
   echo "    -l module           Issue module load"
   echo "    -s oldmod newmod    Issue module swap"
   echo "    -h                  Display this help"
@@ -68,7 +69,7 @@ full=0
 extra=0
 dir=$PWD
 name=""
-while getopts "hacfxd:l:s:" optname; do
+while getopts "hacfxd:l:s:n:" optname; do
   case $optname in
     h ) synexit;;
     a ) autogen=1;;
@@ -86,6 +87,7 @@ while getopts "hacfxd:l:s:" optname; do
         module swap ${modswap[*]}
         if [[ -n $mod_script ]]; then echo "module swap ${modswap[*]}" >> $mod_script; fi
         ;;
+    n ) name=$OPTARG;;
    \? ) synexit "Error: invalid option";;
   esac
 done
@@ -141,8 +143,8 @@ fi
 # Check log for errors, check for output files
 #----------------------------------------------------------------------------
 
-msg "====[HIOBUILD_RESULT_START]=============================================="
-msg "buildhio $args: Checking $log for build problems"
+msg "====[HIOBUILD_RESULT_START]===($name)==========================================="
+msg "buildhio $name: Checking $log for build problems"
 sed1="s/error_test/err0r_test/g"
 sed2="s/-Werror/-Werr0r/g"
 sed3="s/Warning: Linking the shared library libhio.la against the/W@rning: Linking the shared library libhio.la against the/g"
@@ -152,7 +154,7 @@ rc=$?
 cat $tmpfile 2>&1 | tee -a $log
 rm $tmpfile
 
-msg "buildhio $args: Checking for build target files"
+msg "buildhio $name: Checking for build target files"
 for f in $files; do
   if [[ ! -e $f ]]; then
     msg "Error: $f does not exist"
@@ -160,12 +162,12 @@ for f in $files; do
   fi
 done
 
-if [[ $rc -eq 1 ]]; then msg "buildhio $args: build OK." 
-else msg "buildhio $args: Build errors found, see above."
+if [[ $rc -eq 1 ]]; then msg "buildhio $name: Build OK." 
+else msg "buildhio $name: Build errors found, see above."
 fi
-msg "====[HIOBUILD_RESULT_END]================================================"
+msg "====[HIOBUILD_RESULT_END]===($name)============================================="
 msg $bar 
 
-msg "buildhio $args: Done at `date`"
+msg "buildhio $name: Done at `date`"
 
 # --- end of buildhio ---
