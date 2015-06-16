@@ -712,6 +712,7 @@ ACTION_RUN(vf_run) {
 ACTION_RUN(dca_run) {
   I64 aff = GetCPUaffinity();
   long np = sysconf(_SC_NPROCESSORS_CONF);
+  RANK_SERIALIZE_START
   if (aff >= 0) {
     VERB0("_SC_NPROCESSORS_CONF: %d  CPU Affinity: %ld", np, aff);
   } else if ( aff < -1 ) {
@@ -719,6 +720,7 @@ ACTION_RUN(dca_run) {
   } else {
     VERB0("_SC_NPROCESSORS_CONF: %d  CPU Affinity: None", np);
   }
+  RANK_SERIALIZE_END
 }
 
 #endif
