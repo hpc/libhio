@@ -145,8 +145,8 @@ done
 shift $((OPTIND - 1 ))
 vers=$*
 
-goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ga-gnu"
-otherver="ct-cray ct-pgi ga-cray ga-intel ga-pgi"
+goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ga-gnu tt-gnu"
+otherver="ct-cray ct-pgi ga-cray ga-intel ga-pgi tt-intel tt-pgi tt-cray"
 
 if   [[ $vers == "good"  ]]; then vers=$goodver
 elif [[ $vers == "other" ]]; then vers=$otherver
@@ -167,17 +167,26 @@ rm -fR $tdir
 for v in $vers; do
   case $v in
     local    ) build_l -n $v;;
+
     mu-gnu   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l gcc   -l openmpi -n $v;;
     mu-intel ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l intel -l openmpi -n $v;;
     mu-pgi   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l pgi   -l openmpi;;
+
     ct-gnu   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu -n $v;;
     ct-intel ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel -n $v;;
     ct-cray  ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-cray -n $v;;
     ct-pgi   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -n $v;;
+
     ga-gnu   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -l craype-haswell -l cray-mpich -n $v;;
     ga-cray  ) build_r ga-fe1t "$rmt_dir/$v" $tarname                              -l craype-haswell -l cray-mpich -n $v;;
     ga-intel ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l craype-haswell -l cray-mpich -n $v;;
     ga-pgi   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l craype-haswell -l cray-mpich -n $v;;
+
+    tt-gnu   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -l cray-mpich -n $v;;
+    tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname                              -l cray-mpich -n $v;;
+    tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l cray-mpich -n $v;;
+    tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l cray-mpich -n $v;;
+
     *        ) msg "Error: version \"$v\" not recognized"     
   esac
 done
