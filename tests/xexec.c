@@ -1182,15 +1182,15 @@ static I64 hseg_rank_shift = 0;
 static U64 rw_count[2];
 static ETIMER hio_tmr;
 
-#define HRC_TEST(API_NAME)  {                                                      \
-  local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0); \
-  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                \
-    MSG("%s: " #API_NAME " %s; rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK",   \
-         enum_name(MY_MSG_CTX, &etab_herr, hrc),                                   \
-         enum_name(MY_MSG_CTX, &etab_herr, hio_rc_exp));                           \
-    if (hio_fail) hio_err_print_all(context, stderr, #API_NAME " error: ");        \
-  }                                                                                \
-  hio_rc_exp = HIO_SUCCESS;                                                        \
+#define HRC_TEST(API_NAME)  {                                                                \
+  local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);           \
+  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                          \
+    MSG("%s: " #API_NAME " %s; rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK",             \
+         enum_name(MY_MSG_CTX, &etab_herr, hrc),                                             \
+         enum_name(MY_MSG_CTX, &etab_herr, hio_rc_exp));                                     \
+  }                                                                                          \
+  if (hrc != HIO_SUCCESS) hio_err_print_all(context, stderr, "[" #API_NAME " error]");       \
+  hio_rc_exp = HIO_SUCCESS;                                                                  \
 }
 
 #define HCNT_TEST(API_NAME)  {                                                               \
@@ -1199,8 +1199,8 @@ static ETIMER hio_tmr;
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                          \
     MSG("%s: " #API_NAME " %s; cnt: %d exp: %d", A.desc, hio_fail ? "FAIL": "OK",            \
          hcnt, hio_cnt_exp);                                                                 \
-    if (hio_fail) hio_err_print_all(context, stderr, #API_NAME " error: ");                  \
   }                                                                                          \
+  hio_err_print_all(context, stderr, "[" #API_NAME " error]");                               \
   hio_cnt_exp = HIO_CNT_REQ;                                                                 \
 }
 
@@ -1242,16 +1242,18 @@ ACTION_RUN(hdo_run) {
   DBG2("hdo hio_ds_id_req: %ld", hio_ds_id_req);
   hrc = hio_dataset_open (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
   HRC_TEST(hio_dataset_open);
-  hrc = hio_dataset_get_id(dataset, &hio_ds_id_act);
-  HRC_TEST(hio_dataset_get_id);
-  local_fails += hio_fail = (hio_dsid_exp_set && hio_dsid_exp != hio_ds_id_act);
-  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
-    if (hio_dsid_exp_set) {                                
-      MSG("%s: hio_dataset_get_id %s actual %ld exp: %ld", A.desc, hio_fail ? "FAIL": "OK",
-          hio_ds_id_act, hio_dsid_exp); 
-    } else {
-      MSG("%s: hio_dataset_get_id actual %ld", A.desc, hio_ds_id_act); 
-    } 
+  if (HIO_SUCCESS == hrc) {
+    hrc = hio_dataset_get_id(dataset, &hio_ds_id_act);
+    HRC_TEST(hio_dataset_get_id);
+    local_fails += hio_fail = (hio_dsid_exp_set && hio_dsid_exp != hio_ds_id_act);
+    if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
+      if (hio_dsid_exp_set) {                                
+        MSG("%s: hio_dataset_get_id %s actual %ld exp: %ld", A.desc, hio_fail ? "FAIL": "OK",
+            hio_ds_id_act, hio_dsid_exp); 
+      } else {
+        MSG("%s: hio_dataset_get_id actual %ld", A.desc, hio_ds_id_act); 
+      } 
+    }
   }
   hio_dsid_exp = -999;
   hio_dsid_exp_set = 0;

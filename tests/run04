@@ -11,6 +11,13 @@ cmd chmod 555 $ro_dir
 
 fails="
   name run04w v $verbose_lev d $debug_lev mi 0
+  /@@ Basic successful function @/
+    hi MY_CTX $HIO_TEST_ROOTS
+    hdo NTN_DS 97 WRITE,CREAT UNIQUE
+    heo MY_EL WRITE,CREAT,TRUNC 20Mi
+    hvp c. .
+    hec hdc hf
+
   /@@ HDO without prior init @/
     hxrc ERR_BAD_PARAM 
     hdo NT1_DS 98 WRITE,CREAT SHARED
@@ -44,7 +51,7 @@ fails="
     hi MY_CTX $HIO_TEST_ROOTS
     hvp c. .
     hxrc ERR_NOT_FOUND 
-    hdo NTN_DS 97 READ UNIQUE
+    hdo NTN_DS 29 READ UNIQUE
     hf
 
   mgf mf
