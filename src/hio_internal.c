@@ -49,17 +49,16 @@ void hioi_log (hio_context_t context, int level, char *format, ...) {
 
   if (verbose_level >= level) {
     time_t current_time;
-    char time_buf[26];
+    char time_buf[20];
     va_list vargs;
 
     current_time = time (NULL);
-    ctime_r (&current_time, time_buf);
-    time_buf[strlen(time_buf) - 1] = '\0';
+    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", localtime(&current_time));
 
     va_start (vargs, format);
-    fprintf (stderr, "[hio:%d] (context: %s) %s: ", level, context ? context->context_object.identifier : "none", time_buf);
+    fprintf (stderr, "%s [hio:%d] (context: %s): ", time_buf, level, context ? context->context_object.identifier : "none");
     vfprintf (stderr, format, vargs);
-    fprintf (stderr, "\n");
+    fputs ("\n", stderr);
     va_end (vargs);
   }
 }
