@@ -5,6 +5,7 @@
 #define _GNU_SOURCE 1
 #include <stdlib.h>
 #include <stdio.h>
+#include <fcntl.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <signal.h>
@@ -132,7 +133,7 @@ char * help =
   "  dlo <name>    Issue dlopen for specified file name\n"
   "  dls <symbol>  Issue dlsym for specified symbol in most recently opened library\n"
   "  dlc           Issue dlclose for most recently opened library\n"
-  #endif
+  #endif // DLFCN
   #ifdef HIO
   "  hi  <name> <data_root>  Init hio context\n"
   "  hdo <name> <id> <flags> <mode> Dataset open\n"
@@ -161,8 +162,9 @@ char * help =
   "  hvse <name> <value>  Set hio elementq variable\n"
   #if HIO_USE_DATAWARP
   "  dwds <directory> Issue dw_wait_directory_stage\n"
-  #endif
-  #endif
+  "  dwws <file>   Issue dw_wait_sync_complete\n"
+  #endif // HIO_USE_DATAWARP
+  #endif // HIO
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
   "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines\n"
@@ -183,18 +185,18 @@ char * help =
   "    va 1M vt 4K vf\n"
   #ifdef MPI
   "    mi mb mf\n"
-  #endif
+  #endif // MPI
   "    fi 32 1M fr 8 1 ff\n"
   "    x 99\n"
   "\n"
   #ifndef MPI
   " MPI actions can be enabled by building with -DMPI.  See comments in source.\n"
   "\n"
-  #endif
+  #endif // MPI
   #ifndef DLFCN
   " dlopen and related actions can be enabled by building with -DDLFCN.  See comments in source.\n"
   "\n"
-  #endif
+  #endif // DLFCN
 ;
 
 //----------------------------------------------------------------------------
@@ -305,7 +307,7 @@ void get_id() {
   p = strchr(tmp_id, '.');
   if (p) *p = '\0';
 
-  # ifdef MPI
+  #ifdef MPI
   mpi_size = 0;
   { int mpi_init_flag, mpi_final_flag;
     MPI_Initialized(&mpi_init_flag);
@@ -319,7 +321,7 @@ void get_id() {
       }
     }
   }
-  #endif
+  #endif // MPI
   strcat(tmp_id, " ");
   strcpy(id_string, tmp_id);
   id_string_len = strlen(id_string);
@@ -551,7 +553,7 @@ ACTION_RUN(ls_run) {
     ETIMER_START(&lcur->tmr);
   }
 }
-#endif
+#endif // MPI
 
 ACTION_RUN(le_run) {
   int time2stop = 0;
@@ -593,7 +595,7 @@ ACTION_RUN(le_run) {
         DBG4("loop sync end, not done; depth: %d top actn: %d", lcur-lctl, lcur->top);
       }
       break;
-    #endif
+    #endif // MPI
     default:
       ERRX("%s: internal error le_run invalid looptype %d", A.desc, lcur->type);
   }
@@ -723,7 +725,7 @@ ACTION_RUN(dca_run) {
   RANK_SERIALIZE_END
 }
 
-#endif
+#endif // __linux__
 
 //----------------------------------------------------------------------------
 // mi, mb, mf (MPI init, barrier, finalize) mgf action handlers
@@ -791,7 +793,7 @@ ACTION_RUN(mf_run) {
   mpi_rbuf = FREEX(mpi_rbuf);
   mpi_buf_len = 0;
 }
-#endif
+#endif // MPI
 
 
 //----------------------------------------------------------------------------
@@ -1057,7 +1059,7 @@ ACTION_RUN(dlc_run) {
   VERB3("%s; dlclose returns %d", A.desc, rc);
   if (rc) VERB0("%s; dlclose error: %s", A.desc, dlerror());
 }
-#endif
+#endif // DLFCN
 
 //----------------------------------------------------------------------------
 // Compile regex, handle errors
@@ -1566,9 +1568,32 @@ ACTION_RUN(dwds_run) {
   if (rc) local_fails++;
   VERB1("dw_wait_directory_stage(%s) rc: %d  time: %f Sec", V0.s, rc, ETIMER_ELAPSED(&tmr));
 }
+
+ACTION_RUN(dwws_run) {
+  char * filename = V0.s;
+  ETIMER tmr;
+  int fd = open(filename, O_RDONLY);
+  if (fd < 0) {
+    MSG("dwws: open(%s) fails with errno:%d (%s)", filename, errno, strerror(errno));
+    local_fails++;
+  } else {
+    ETIMER_START(&tmr);
+    int rc = dw_wait_sync_complete(fd);
+    if (rc != 0) {
+      MSG("dwws dw_wait_sync_complete(%s) fails with rc: %d", filename, rc);
+      local_fails++;
+    }
+    VERB1("dw_wait_sync_complete(%s) rc: %d  time: %f Sec", filename, rc, ETIMER_ELAPSED(&tmr));
+    rc = close(fd); 
+    if (rc != 0) {
+      MSG("dwws: close(%s) fails with errno:%d (%s)", filename, errno, strerror(errno));
+      local_fails++;
+    }
+  }
+}
 #endif // HIO_USE_DATAWARP
 
-#endif //HIO
+#endif // HIO
 
 // Special action runner for printing out /@@ comments
 ACTION_RUN(cmsg_run) {
@@ -1686,6 +1711,7 @@ struct parse {
   {"hvse",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvse_run    },
   #if HIO_USE_DATAWARP
   {"dwds",  {STR,  NONE,  NONE, NONE, NONE}, NULL,         dwds_run    },
+  {"dwws",  {STR,  NONE,  NONE, NONE, NONE}, NULL,         dwws_run    },
   #endif
   #endif
   {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
