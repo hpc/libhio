@@ -30,9 +30,9 @@ synexit() {
   echo "    -h                Display this help"
   echo ""
   echo "  Results logged to $logfn. Good versions are:"
-  echo "  $goodver"
+  echo "    $goodver"
   echo "  Other versions are:"
-  echo "  $otherver"
+  echo "    $otherver"
   echo ""
   echo "  Example - full build locally and all good remote versions:"
   echo "    buildall good"
@@ -128,6 +128,10 @@ autogen=0
 incremental=0
 tree=$PWD
 tarname="libhio-1.0"
+
+goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ga-gnu tt-gnu"
+otherver="ct-cray ct-pgi ga-cray ga-intel ga-pgi tt-intel tt-pgi tt-cray"
+
 if [[ -z $HIOBUILD_RMT_DIR ]]; then rmt_dir="~/pgm/hio"
 else rmt_dir=$HIOBUILD_RMT_DIR; fi
 
@@ -144,9 +148,6 @@ while getopts "hait:n:r:" optname; do
 done
 shift $((OPTIND - 1 ))
 vers=$*
-
-goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ga-gnu tt-gnu"
-otherver="ct-cray ct-pgi ga-cray ga-intel ga-pgi tt-intel tt-pgi tt-cray"
 
 if   [[ $vers == "good"  ]]; then vers=$goodver
 elif [[ $vers == "other" ]]; then vers=$otherver
@@ -186,6 +187,8 @@ for v in $vers; do
     tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname                              -l cray-mpich -n $v;;
     tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l cray-mpich -n $v;;
     tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l cray-mpich -n $v;;
+
+    bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -l cray-mpich -n $v;;
 
     *        ) msg "Error: version \"$v\" not recognized"     
   esac
