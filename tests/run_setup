@@ -126,6 +126,8 @@ if [[ -z $HIO_TEST_ROOTS ]]; then
     HIO_TEST_ROOTS="posix:$PWD/.test_root1"
   elif [[ ${HOSTNAME:0:3} == "ga-" ]]; then
     HIO_TEST_ROOTS="DataWarp"
+  elif [[ ${HOSTNAME:0:3} == "bu-" ]]; then
+    HIO_TEST_ROOTS="DataWarp"
   fi;
   addifd "/lscratch1/$LOGNAME"
   addifd "/lscratch2/$LOGNAME"
@@ -133,6 +135,7 @@ if [[ -z $HIO_TEST_ROOTS ]]; then
   addifd "/lscratch4/$LOGNAME"
   addifd "/scratch1/users/$LOGNAME"
   addifd "/lustre/scratch1/yellow/$LOGNAME"
+  addifd "$HOME/scratch-tmp"
   if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
 fi
 
@@ -226,8 +229,8 @@ msg "run_setup:           size: \"$size\""
 msg "run_setup:          ranks: $ranks"
 msg "run_setup:    verbose_lev: $verbose_lev"
 msg "run_setup:      debug_lev: $debug_lev"
-if [[ -n HIO_context_datawarp_root ]]; then
-  msg "run_setup: HIO_context_datawarp_root: \"$HIO_context_datawarp_root\""
+if [[ -n HIO_datawarp_root ]]; then
+  msg "run_setup: HIO_datawarp_root: \"$HIO_datawarp_root\""
 fi
 
 # --- end of run_setup ---

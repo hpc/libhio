@@ -188,7 +188,8 @@ for v in $vers; do
     tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l cray-mpich -n $v;;
     tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l cray-mpich -n $v;;
 
-    bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -l cray-mpich -n $v;;
+    bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname  -l craype-sandybridge -s PrgEnv-cray,PrgEnv-gnu   -l cray-mpich -n $v;;
+    bu-cray  ) build_r bu-fet  "$rmt_dir/$v" $tarname  -l craype-sandybridge                             -l cray-mpich -n $v;;
 
     *        ) msg "Error: version \"$v\" not recognized"     
   esac
