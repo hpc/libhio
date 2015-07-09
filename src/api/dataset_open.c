@@ -15,7 +15,8 @@
 
 struct hio_dataset_item_t {
   hio_dataset_header_t header;
-  hio_module_t *module;
+  hio_module_t        *module;
+  int                  ordering;
 };
 typedef struct hio_dataset_item_t hio_dataset_item_t;
 
@@ -47,11 +48,23 @@ static void hio_dataset_item_swap (hio_dataset_item_t *itema, hio_dataset_item_t
 }
 
 static int hioi_dataset_header_highest_setid (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
-  return ha->dataset_id > hb->dataset_id;
+  if (ha->dataset_id > hb->dataset_id) {
+    return 1;
+  }
+  if (ha->dataset_id == hb->dataset_id) {
+    return 0;
+  }
+  return -1;
 }
 
 static int hioi_dataset_header_newest (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
-  return ha->dataset_mtime > hb->dataset_mtime;
+  if (ha->dataset_mtime > hb->dataset_mtime) {
+    return 1;
+  }
+  if (ha->dataset_mtime == hb->dataset_mtime) {
+    return 0;
+  }
+  return -1;
 }
 
 /**
@@ -62,19 +75,22 @@ static int hioi_dataset_header_newest (hio_dataset_header_t *ha, hio_dataset_hea
  * @param[in]     set_id     identifier of dataset to insert
  * @param[in]     module     module associated with this dataset idenfier
  */
-static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header, hio_module_t *module,
-                                     hioi_dataset_header_compare_t compare) {
+static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header,
+                                     hio_module_t *module, int ordering, hioi_dataset_header_compare_t compare) {
   int item_index = *item_count;
+  int ret;
 
   items[item_index].header = *header;
   items[item_index].module = module;
+  items[item_index].ordering = ordering;
 
   ++*item_count;
 
   while (item_index) {
     int parent = (item_index - 1) >> 1;
 
-    if (compare (&items[parent].header, &items[item_index].header)) {
+    ret = compare (&items[parent].header, &items[item_index].header);
+    if (1 == ret || (0 == ret && items[parent].ordering <= items[item_index].ordering)) {
       break;
     }
 
@@ -95,9 +111,10 @@ static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count,
  * @returns HIO_SUCCESS on success
  * @returns HIO_ERR_NOT_FOUND on failure (empty queue)
  */
-static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header, hio_module_t **module,
-                                 hioi_dataset_header_compare_t compare) {
+static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header,
+                                 hio_module_t **module, hioi_dataset_header_compare_t compare) {
   int item_index = 0;
+  int ret;
 
   if (0 == *item_count) {
     return HIO_ERR_NOT_FOUND;
@@ -116,7 +133,8 @@ static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio
       child = right;
     }
 
-    if (compare (&items[item_index].header, &items[child].header)) {
+    ret = compare (&items[item_index].header, &items[child].header);
+    if (1 == ret || (0 == ret && items[item_index].ordering <= items[child].ordering)) {
       break;
     }
 
@@ -155,7 +173,7 @@ static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out,
 
     for (int j = 0 ; j < count ; ++j) {
       /* insert this set_id/module combination into the priority queue */
-      hio_dataset_item_insert (items, &item_count, headers + j, module, compare);
+      hio_dataset_item_insert (items, &item_count, headers + j, module, i, compare);
     }
 
     free (headers);
