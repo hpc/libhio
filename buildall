@@ -183,13 +183,13 @@ for v in $vers; do
     ga-intel ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l craype-haswell -l cray-mpich -n $v;;
     ga-pgi   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l craype-haswell -l cray-mpich -n $v;;
 
-    tt-gnu   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -l cray-mpich -n $v;;
-    tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname                              -l cray-mpich -n $v;;
-    tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l cray-mpich -n $v;;
-    tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l cray-mpich -n $v;;
+    tt-gnu   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -n $v;;
+    tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname                              -n $v;;
+    tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -n $v;;
+    tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -n $v;;
 
-    bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname  -l craype-sandybridge -s PrgEnv-cray,PrgEnv-gnu   -l cray-mpich -n $v;;
-    bu-cray  ) build_r bu-fet  "$rmt_dir/$v" $tarname  -l craype-sandybridge                             -l cray-mpich -n $v;;
+    bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -n $v;;
+    bu-cray  ) build_r bu-fet  "$rmt_dir/$v" $tarname                              -n $v;;
 
     *        ) msg "Error: version \"$v\" not recognized"     
   esac
