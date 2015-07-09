@@ -7,7 +7,7 @@
 
 if [[ ${HIO_TEST_ROOTS/DataWarp//} == $HIO_TEST_ROOTS ]]; then 
   echo "Test $0 only valid valid with DataWarp.  Exiting."  
-  exit 12
+  exit 77
 fi
 
 case $size in
