@@ -471,6 +471,10 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
       return hrc;
     }
 
+    fseek (element->element_fh, 0, SEEK_END);
+    element->element_size = ftell (element->element_fh);
+    fseek (element->element_fh, 0, SEEK_SET);
+
     free (path);
   }
 
@@ -541,6 +545,11 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
 
   if (HIO_FILE_MODE_BASIC != posix_dataset->base.dataset_file_mode) {
     hioi_element_add_segment (element, file_offset, offset, 0, size * count);
+  }
+
+  file_offset = ftell (fh);
+  if (element->element_size < file_offset) {
+    element->element_size = file_offset;
   }
 
   pthread_mutex_unlock (&posix_dataset->lock);

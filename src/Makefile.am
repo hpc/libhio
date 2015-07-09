@@ -21,7 +21,7 @@ libhio_la_SOURCES = hio_context.c hio_component.c hio_var.c \
 	hio_manifest.c api/dataset_open.c api/dataset_close.c \
 	api/element_open.c api/element_close.c api/element_write.c \
 	api/element_read.c api/dataset_unlink.c api/dataset_get_id.c \
-	libconfig_parser_a-config_parser.c
+	api/element_size.c libconfig_parser_a-config_parser.c
 
 if DATAWARP_AVAILABLE
 

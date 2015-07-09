@@ -26,6 +26,7 @@
 #define HIO_MANIFEST_PROP_COMPAT      (const xmlChar *) "hio_compat"
 #define HIO_MANIFEST_PROP_IDENTIFIER  (const xmlChar *) "identifier"
 #define HIO_MANIFEST_PROP_DATASET_ID  (const xmlChar *) "dataset_id"
+#define HIO_MANIFEST_PROP_SIZE        (const xmlChar *) "size"
 
 #define HIO_MANIFEST_KEY_BACKING_FILE (const xmlChar *) "hio_backing_file"
 #define HIO_MANIFEST_KEY_DATASET_MODE (const xmlChar *) "hio_dataset_mode"
@@ -208,6 +209,8 @@ static xmlDocPtr hio_manifest_generate_xml_1_0 (hio_dataset_t dataset) {
       xmlNewProp (element_node, HIO_MANIFEST_KEY_BACKING_FILE, (const xmlChar *) element->element_backing_file);
     }
 
+    hioi_manifest_prop_set_number (element_node, HIO_MANIFEST_PROP_SIZE, (unsigned long) element->element_size);
+
     if (!hioi_list_empty (&element->element_segment_list)) {
       segments_node = xmlNewChild (element_node, NULL, (const xmlChar *) "segments", NULL);
 
@@ -336,6 +339,7 @@ static int hioi_manifest_parse_element_1_0 (hio_dataset_t dataset, xmlDocPtr xml
   hio_element_t element;
   xmlNodePtr segments_node;
   xmlChar *tmp_string;
+  unsigned long value;
   int rc;
 
   tmp_string = xmlGetProp (element_node, HIO_MANIFEST_PROP_IDENTIFIER);
@@ -354,10 +358,20 @@ static int hioi_manifest_parse_element_1_0 (hio_dataset_t dataset, xmlDocPtr xml
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
+  rc = hioi_manifest_prop_get_number (element_node, HIO_MANIFEST_PROP_SIZE, &value);
+
+  if (HIO_SUCCESS != rc) {
+    hioi_element_release (element);
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  element->element_size = value;
+
   tmp_string = xmlGetProp (element_node, HIO_MANIFEST_KEY_BACKING_FILE);
   if (NULL != tmp_string) {
     element->element_backing_file = strdup ((char *) tmp_string);
     if (NULL == element->element_backing_file) {
+      hioi_element_release (element);
       return  HIO_ERR_OUT_OF_RESOURCE;
     }
   }

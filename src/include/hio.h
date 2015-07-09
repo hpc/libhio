@@ -706,6 +706,21 @@ int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const c
 
 /**
  * @ingroup API
+ * @brief Get the size of an element
+ *
+ * @param[in]  element      element to query
+ * @param[out] element_size size of the element
+ * @param[in]  flags        open flags
+ *
+ * @returns hio_return_t
+ *
+ * This function returns the offset of the first invalid offset after the last valid
+ * data block in the element. The value returned is synonymous to a file size.
+ */
+int hio_element_size (hio_element_t element, int64_t *element_size);
+
+/**
+ * @ingroup API
  * @brief Construct a traditional file out of an hio dataset
  *
  * @param[in] dataset      hio dataset handle

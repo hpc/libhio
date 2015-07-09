@@ -257,6 +257,9 @@ struct hio_element {
   /** (basic mode only) backing file for this element */
   char               *element_backing_file;
 
+  /** first invalid offset after the last valid block */
+  int64_t             element_size;
+
   /** element file handle (not used by all backends) */
   FILE               *element_fh;
 };
