@@ -246,24 +246,43 @@ typedef int
 (*hio_module_fini_fn_t) (struct hio_module_t *module);
 
 typedef struct hio_module_t {
+  /** open a dataset/id from this data root */
   hio_module_dataset_open_fn_t      dataset_open;
+
+  /** close an open dataset */
   hio_module_dataset_close_fn_t     dataset_close;
+
+  /** delete a dataset/id from this data root */
   hio_module_dataset_unlink_fn_t    dataset_unlink;
 
+  /** open a dataset element */
   hio_module_element_open_fn_t      element_open;
+
+  /** close an open dataset element */
   hio_module_element_close_fn_t     element_close;
 
+  /** read data from an open dataset element */
   hio_module_element_write_strided_nb_fn_t  element_write_strided_nb;
+
+  /** write data to an open dataset element */
   hio_module_element_read_strided_nb_fn_t   element_read_strided_nb;
 
+  /** complete all outstanding writes */
   hio_module_element_flush_fn_t     element_flush;
+
+  /** complete all outstanding reads */
   hio_module_element_complete_fn_t  element_complete;
 
+  /** list all available datasets in this module's data root */
   hio_module_dataset_list_fn_t      dataset_list;
 
+  /** function to finalize this module */
   hio_module_fini_fn_t              fini;
 
+  /** associated hio context */
   hio_context_t                     context;
+
+  /** backing store for this data root */
   char                             *data_root;
 } hio_module_t;
 
