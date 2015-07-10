@@ -15,10 +15,13 @@
 #include <string.h>
 #include <assert.h>
 
+static hio_var_enum_value_t hioi_dataset_file_mode_values[] = {
+  {.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
+  {.string_value = "optimized", .value = HIO_FILE_MODE_OPTIMIZED}};
+
 static hio_var_enum_t hioi_dataset_file_modes = {
-  .count = 2,
-  .values = {{.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
-             {.string_value = "optimized", .value = HIO_FILE_MODE_OPTIMIZED}},
+  .count  = 2,
+  .values = hioi_dataset_file_mode_values,
 };
 
 hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name) {

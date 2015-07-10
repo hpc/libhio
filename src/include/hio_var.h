@@ -49,16 +49,19 @@ typedef struct hio_config_kv_t {
   char *value;
 } hio_config_kv_t;
 
-typedef struct hio_var_enum_t {
-  /** number of values */
-  int count;
-  struct {
+typedef struct hio_var_enum_value_t {
     /** string to match */
     char *string_value;
 
     /** corresponding value */
     int value;
-  } values[];
+} hio_var_enum_value_t;
+
+typedef struct hio_var_enum_t {
+  /** number of values */
+  int count;
+  /** value array */
+  hio_var_enum_value_t *values;
 } hio_var_enum_t;
 
 typedef struct hio_var_t {
