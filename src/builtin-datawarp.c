@@ -43,10 +43,14 @@ typedef struct builtin_datawarp_dataset_backend_data_t {
   int64_t last_scheduled_stage_id;
 } builtin_datawarp_dataset_backend_data_t;
 
+static hio_var_enum_value_t builtin_datawarp_stage_mode_values[] = {
+  {.string_value = "immediate", .value = DW_STAGE_IMMEDIATE},
+  {.string_value = "end_of_job", .value = DW_STAGE_AT_JOB_END},
+};
+
 static hio_var_enum_t builtin_datawarp_stage_modes = {
   .count = 2,
-  .values = {{.string_value = "immediate", .value = DW_STAGE_IMMEDIATE},
-             {.string_value = "end_of_job", .value = DW_STAGE_AT_JOB_END}},
+  .values = builtin_datawarp_stage_mode_values,
 };
 
 static int builtin_datawarp_module_dataset_list (struct hio_module_t *module, const char *name,
