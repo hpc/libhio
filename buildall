@@ -129,8 +129,8 @@ incremental=0
 tree=$PWD
 tarname="libhio-1.0"
 
-goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel ga-gnu tt-gnu"
-otherver="ct-cray ct-pgi ga-cray ga-intel ga-pgi tt-intel tt-pgi tt-cray"
+goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel tt-gnu bu-gnu bu-cray"
+otherver="ct-cray ct-pgi ga-gnu ga-cray ga-intel ga-pgi tt-intel tt-pgi tt-cray"
 
 if [[ -z $HIOBUILD_RMT_DIR ]]; then rmt_dir="~/pgm/hio"
 else rmt_dir=$HIOBUILD_RMT_DIR; fi
@@ -169,27 +169,27 @@ for v in $vers; do
   case $v in
     local    ) build_l -n $v;;
 
-    mu-gnu   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l gcc   -l openmpi -n $v;;
-    mu-intel ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l intel -l openmpi -n $v;;
-    mu-pgi   ) build_r mu-fey  "$rmt_dir/$v" $tarname  -l pgi   -l openmpi;;
+    mu-gnu   ) build_r mu-fey  "$rmt_dir/$v" $tarname -n $v  -l gcc   -l openmpi ;;
+    mu-intel ) build_r mu-fey  "$rmt_dir/$v" $tarname -n $v  -l intel -l openmpi ;;
+    mu-pgi   ) build_r mu-fey  "$rmt_dir/$v" $tarname -n $v  -l pgi   -l openmpi ;;
 
-    ct-gnu   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-gnu -n $v;;
-    ct-intel ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-intel -n $v;;
-    ct-cray  ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -s PrgEnv-pgi,PrgEnv-cray -n $v;;
-    ct-pgi   ) build_r ct-fe1  "$rmt_dir/$v" $tarname  -n $v;;
+    ct-gnu   ) build_r ct-fe1  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-pgi,PrgEnv-gnu   ;;
+    ct-intel ) build_r ct-fe1  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-pgi,PrgEnv-intel ;;
+    ct-cray  ) build_r ct-fe1  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-pgi,PrgEnv-cray  ;;
+    ct-pgi   ) build_r ct-fe1  "$rmt_dir/$v" $tarname -n $v                             ;;
 
-    ga-gnu   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -l craype-haswell -l cray-mpich -n $v;;
-    ga-cray  ) build_r ga-fe1t "$rmt_dir/$v" $tarname                              -l craype-haswell -l cray-mpich -n $v;;
-    ga-intel ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -l craype-haswell -l cray-mpich -n $v;;
-    ga-pgi   ) build_r ga-fe1t "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -l craype-haswell -l cray-mpich -n $v;;
+    ga-gnu   ) build_r ga-fe1t "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu   -l craype-haswell -l cray-mpich ;;
+    ga-cray  ) build_r ga-fe1t "$rmt_dir/$v" $tarname -n $v                              -l craype-haswell -l cray-mpich ;;
+    ga-intel ) build_r ga-fe1t "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-intel -l craype-haswell -l cray-mpich ;;
+    ga-pgi   ) build_r ga-fe1t "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-pgi   -l craype-haswell -l cray-mpich ;;
 
-    tt-gnu   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -n $v;;
-    tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname                              -n $v;;
-    tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-intel -n $v;;
-    tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-pgi   -n $v;;
+    tt-gnu   ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu   ;;
+    tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v                              ;;
+    tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-intel ;;
+    tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-pgi   ;;
 
-    bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname  -s PrgEnv-cray,PrgEnv-gnu   -n $v;;
-    bu-cray  ) build_r bu-fet  "$rmt_dir/$v" $tarname                              -n $v;;
+    bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu  ;;
+    bu-cray  ) build_r bu-fet  "$rmt_dir/$v" $tarname -n $v                             ;;
 
     *        ) msg "Error: version \"$v\" not recognized"     
   esac

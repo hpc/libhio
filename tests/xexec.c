@@ -1566,7 +1566,7 @@ ACTION_RUN(dwds_run) {
   ETIMER_START(&tmr);
   int rc = dw_wait_directory_stage(V0.s);
   if (rc) local_fails++;
-  VERB1("dw_wait_directory_stage(%s) rc: %d  time: %f Sec", V0.s, rc, ETIMER_ELAPSED(&tmr));
+  VERB1("dw_wait_directory_stage(%s) rc: %d (%s)  time: %f Sec", V0.s, rc, strerror(abs(rc)), ETIMER_ELAPSED(&tmr));
 }
 
 ACTION_RUN(dwws_run) {
@@ -1580,10 +1580,10 @@ ACTION_RUN(dwws_run) {
     ETIMER_START(&tmr);
     int rc = dw_wait_sync_complete(fd);
     if (rc != 0) {
-      MSG("dwws dw_wait_sync_complete(%s) fails with rc: %d", filename, rc);
+      MSG("dwws dw_wait_sync_complete(%s) fails with rc: %d (%s)", filename, rc, strerror(abs(rc)));
       local_fails++;
     }
-    VERB1("dw_wait_sync_complete(%s) rc: %d  time: %f Sec", filename, rc, ETIMER_ELAPSED(&tmr));
+    VERB1("dw_wait_sync_complete(%s) rc: %d (%s)  time: %f Sec", filename, rc, strerror(abs(rc)), ETIMER_ELAPSED(&tmr));
     rc = close(fd); 
     if (rc != 0) {
       MSG("dwws: close(%s) fails with errno:%d (%s)", filename, errno, strerror(errno));
