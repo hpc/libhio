@@ -459,9 +459,19 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
 
     /* it is not possible to get open with create without truncation using fopen so use a
      * combination of open and fdopen to get the desired effect */
+    //hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "posix: calling open; path: %s open_flags: %i", path, open_flags);
     fd = open (path, open_flags, posix_module->access_mode);
-    element->element_fh = fdopen (fd, file_mode);
+    if (fd < 0) {
+      int hrc = hioi_err_errno (errno);
+      hio_err_push (hrc, dataset->dataset_context, &dataset->dataset_object, "posix: error opening element path %s. "
+                    "errno: %d", path, errno);
+      free (path);
+      hioi_element_release (element);
+      return hrc;
+    }
 
+    //hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "posix: calling fdopen; fd: %d file_mode: %c", fd, file_mode);
+    element->element_fh = fdopen (fd, file_mode);
     if (NULL == element->element_fh) {
       int hrc = hioi_err_errno (errno);
       hio_err_push (hrc, dataset->dataset_context, &dataset->dataset_object, "posix: error opening element file %s. "
