@@ -43,7 +43,11 @@ if test "$with_datawarp" = "auto" ; then
         hio_pkgconfig_requires="$hio_pkgconfig_requires, cray-datawarp >= 1.0"
     fi
 elif test "$with_datawarp" != "no" ; then
-    LDFLAGS="$LDFLAGS -L$with_datawarp/lib64 -Wl,-rpath -Wl,$with_datawarp/lib64 -ldatawarp"
+    if test -d "$with_datawarp/lib64" ; then
+        LDFLAGS="$LDFLAGS -L$with_datawarp/lib64 -Wl,-rpath -Wl,$with_datawarp/lib64 -ldatawarp"
+    else
+        LDFLAGS="$LDFLAGS -L$with_datawarp/lib -Wl,-rpath -Wl,$with_datawarp/lib -ldatawarp"
+    fi
     CPPFLAGS="$CPPFLAGS -I$with_datawarp/include"
     use_datawarp=1
 fi
