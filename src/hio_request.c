@@ -34,40 +34,70 @@ void hioi_request_release (hio_request_t request) {
   }
 }
 
-int hio_request_test (hio_request_t *request, ssize_t *bytes_transferred, bool *complete) {
-  if (*request == HIO_OBJECT_NULL) {
-    *bytes_transferred = 0;
-    *complete = true;
-    return HIO_SUCCESS;
-  }
+int hio_request_test_internal (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred, bool *complete,
+                               bool noset_null) {
+  int ncomplete = 0;
 
-  if ((*request)->request_complete) {
-    *complete = true;
-    *bytes_transferred = (*request)->request_transferred;
-    hioi_request_release (*request);
-    *request = HIO_OBJECT_NULL;
-  }
+  for (int i = 0 ; i < nrequests ; ++i) {
+    if (requests[i] == HIO_OBJECT_NULL) {
+      if (!noset_null) {
+        if (bytes_transferred) {
+          bytes_transferred[i] = 0;
+        }
 
-  return HIO_SUCCESS;
-}
+        if (complete) {
+          complete[i] = true;
+        }
+      }
 
-int hio_request_wait (hio_request_t *request, ssize_t *bytes_transferred) {
-  bool complete = false;
-  int rc;
+      ++ncomplete;
+    }
 
-  rc = hio_request_test (request, bytes_transferred, &complete);
-  if (HIO_SUCCESS != rc) {
-    return rc;
-  }
+    if (requests[i]->request_complete) {
+      if (complete) {
+        complete[i] = true;
+      }
 
-  while (!complete) {
-    struct timespec interval = {.tv_sec = 0, .tv_nsec = 1000};
-    nanosleep (&interval, NULL);
-    rc = hio_request_test (request, bytes_transferred, &complete);
-    if (HIO_SUCCESS != rc) {
-      return rc;
+      if (bytes_transferred) {
+        bytes_transferred[i] = requests[i]->request_transferred;
+      }
+
+      hioi_request_release (requests[i]);
+      requests[i] = HIO_OBJECT_NULL;
+      ++ncomplete;
     }
   }
+
+  return ncomplete;
+}
+
+int hio_request_test (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred, bool *complete) {
+  if (NULL == requests) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  return hio_request_test_internal (requests, nrequests, bytes_transferred, complete, false);
+}
+
+int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred) {
+  bool first = true;
+  int rc;
+
+  do {
+    rc = hio_request_test_internal (requests, nrequests, bytes_transferred, NULL, !first);
+    if (nrequests == rc) {
+      return HIO_SUCCESS;
+    }
+
+    if (0 > rc) {
+      return rc;
+    }
+
+    first = false;
+
+    struct timespec interval = {.tv_sec = 0, .tv_nsec = 1000};
+    nanosleep (&interval, NULL);
+  } while (1);
 
   return HIO_SUCCESS;
 }

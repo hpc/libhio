@@ -41,15 +41,17 @@ typedef struct builtin_datawarp_dataset_backend_data_t {
   hio_dataset_backend_data_t base;
 
   int64_t last_scheduled_stage_id;
+  uint64_t last_immediate_stage;
 } builtin_datawarp_dataset_backend_data_t;
 
 static hio_var_enum_value_t builtin_datawarp_stage_mode_values[] = {
+  {.string_value = "auto", .value = -1},
   {.string_value = "immediate", .value = DW_STAGE_IMMEDIATE},
   {.string_value = "end_of_job", .value = DW_STAGE_AT_JOB_END},
 };
 
 static hio_var_enum_t builtin_datawarp_stage_modes = {
-  .count = 2,
+  .count = 3,
   .values = builtin_datawarp_stage_mode_values,
 };
 
@@ -113,7 +115,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
   mode_t pfs_mode = posix_module->access_mode;
   hio_context_t context = module->context;
   char *dataset_path = NULL;
-  int rc;
+  int rc, stage_mode;
 
   if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRITE)) {
     /* keep a copy of the base path used by the posix module */
@@ -146,6 +148,10 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
               "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->dataset_object.identifier,
               dataset->dataset_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
+    if (-1 == datawarp_dataset->stage_mode) {
+      stage_mode = DW_STAGE_AT_JOB_END;
+    }
+
     rc = hio_mkpath (pfs_path, pfs_mode);
     if (HIO_SUCCESS != rc) {
       free (dataset_path);
@@ -153,7 +159,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    rc = dw_stage_directory_out (dataset_path, pfs_path, datawarp_dataset->stage_mode);
+    rc = dw_stage_directory_out (dataset_path, pfs_path, stage_mode);
     free (pfs_path);
     free (dataset_path);
     if (0 != rc) {
@@ -162,7 +168,8 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       return HIO_ERROR;
     }
 
-    if (DW_STAGE_AT_JOB_END == datawarp_dataset->stage_mode) {
+
+    if (DW_STAGE_AT_JOB_END == stage_mode) {
       builtin_datawarp_dataset_backend_data_t *ds_data;
 
       ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (dataset->dataset_data, "datawarp");
@@ -341,9 +348,9 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
   /* get a builtin-posix module for interfacing with the burst buffer file system */
   if (0 == strcmp (context->context_datawarp_root, "auto")) {
     /* NTH: This will have to be updated or changed to a system parameter in the future */
-    rc = asprintf (&posix_data_root, "posix:/dwphase1/%s", getenv ("USER"));
+    rc = asprintf (&posix_data_root, "/dwphase1/%s", getenv ("USER"));
   } else {
-    rc = asprintf (&posix_data_root, "posix:%s", context->context_datawarp_root);
+    rc = asprintf (&posix_data_root, "%s", context->context_datawarp_root);
   }
 
   if (0 > rc) {

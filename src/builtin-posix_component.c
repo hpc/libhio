@@ -746,14 +746,16 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
 					  const char *next_data_root, hio_module_t **module) {
   builtin_posix_module_t *new_module;
 
-  if (strncasecmp("posix:", data_root, 6)) {
-    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: module does not match data root %s",
+  if (0 == strncasecmp("datawarp", data_root, 8)) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: will not use module for datawarp root",
 	      data_root);
     return HIO_ERR_NOT_AVAILABLE;
   }
 
-  /* skip posix: */
-  data_root += 6;
+  if (0 == strncasecmp("posix:", data_root, 6)) {
+    /* skip posix: */
+    data_root += 6;
+  }
 
   if (access (data_root, F_OK)) {
     hio_err_push (hioi_err_errno (errno), context, NULL, "posix: data root %s does not exist or can not be accessed",

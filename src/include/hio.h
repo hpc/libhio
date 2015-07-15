@@ -14,7 +14,7 @@
  * @brief API for libhio
  *
  * This file describes the design and API of libhio. This library is intended to
- * provide an extensible API for writing to hierarchal data storage systems.
+ * provide an extensible API for writing to hierarchical data storage systems.
  */
 
 /**
@@ -22,7 +22,7 @@
  *
  * @section about About libhio
  *
- * libhio is an open-source library intended for writing data to hierarchal data
+ * libhio is an open-source library intended for writing data to hierarchical data
  * store systems. These systems may be comprised of one or more logical layers
  * including parallel file systems (PFS), burst buffers (BB), and local memory.
  * libhio provides support for automated fall-back on alternate destinations if
@@ -83,7 +83,9 @@
  * The initial beta release of libhio will be available on or around December 1, 2014.
  * This release will support the full API with PFS data roots. A version
  * supporting Trinity's burst buffer architecture will be available no later
- * than April 3, 2015.
+ * than April 3, 2015. A 1.0 release will be available by the end of June, 2015. This
+ * release will include support basic (n-1 and n-n) io on datawarp and POSIX
+ * filesystems.
  *
  * @section iointerception IO Interception
  *
@@ -126,12 +128,39 @@
  * data roots will be added as needed. libhio supports automatic migration of any complete
  * dataset from a burst buffer data root to a parallel file system.
  *
- * The applications can specify multiple data roots for a context. In the event of a failure
- * libhio will notify the application and allow the operation to fall back to an alternate
- * data root. The objective is to allow the application to make progress when possible in
- * the face of filesystem failures with minimal logic embedded in the application itself. The
- * currently active data root will influence the checkpoint interval recommended by
- * hio_should_checkpoint().
+ * The applications can specify multiple data roots for each context. In the event of a
+ * data root failure libhio functions will notify the application and allow the user
+ * to decide how to proceed. This includes delaying writing a dataset or retrying
+ * dataset operations with an alternative data root. The objective is to allow the application
+ * to make progress when possible in the face of filesystem failures with minimal logic
+ * embedded in the application itself. The data root underlying a dataset will influence
+ * the checkpoint interval recommended by the hio_dataset_should_checkpoint() function.
+ *
+ * Data roots can be set by setting either the HIO_data_roots environment variable or by
+ * setting the data_roots configuration variable on a context using hio_config_set_value().
+ * Data roots can only be set before the first call to hio_dataset_open() on a context.
+ * The data_roots configuration variable is a commma-delimited list of the requested data
+ * roots.
+ *
+ * When specifying a data root the user can alternately specify a module prepending the
+ * data root path with the module name followed by a ":". As of libhio version 1.0 the
+ * available modules are <b>datawarp</b> and <b>posix</b>. If no module is specified then a module
+ * appropriate for the data root will be chosen automatically. To use the default datawarp
+ * root on a supported system the user only needs to specify on of the special strings:
+ * datawarp, or dw. Module name specification is case-insensitive so DataWarp is treated
+ * the same as datawarp.
+ *
+ * @subsection datawarp Datawarp
+ *
+ * Datawarp™ is the the Cray API used to stage files from the burst buffer to the parallel
+ * file system on Trinity. Any complete dataset written using the datawarp module will
+ * be marked as eligible for stage out at the end of the job. Additionally, to protect
+ * against burst buffer failure the datawarp module will periodically mark a completed
+ * member of a dataset to stage out to the parallel file system immediately. This
+ * behavior can be modified by setting the \ref datawarp_stage_mode on the dataset. The
+ * target for any stage operation is taken from the next available data root. Ex.
+ * data_roots=datawarp,/lscratch2/<moniker>/data will stage datasets to the
+ * /lscratch2/<moniker>/data directory.
  *
  * @section sec_configuration Configuration Interface
  *
@@ -228,13 +257,14 @@
  * @subsubsection subsubsec_configuration_dataset Dataset Specific Variables
  *
  * - @b datawarp_stage_mode - Mode to use for staging files to more permanent data stores (ex: BB \-\> PFS).
- *   Available modes: end_of_job (stage at end of job), immediate (stage when the dataset is closed).
+ *   Available modes: auto (stage most recent id at end of job), end_of_job (stage at end of job),
+ *   immediate (stage when the dataset is closed).
  *
  * - @b stripe_width - Filesystem striping width. This value will be passed along to the underlying
  *   file system if it is supported.
  *
- * - @b expected_size - Expected total size of a checkpoint. This value will be used when calculating
- *   the appropriate output interval for a dataset.
+ * - @b expected_size - Expected global size of a dataset. This value will be used when calculating
+ *   the appropriate output interval for the dataset.
  *
  * @page page_example Examples
  * @section sec_example_c C Example
@@ -441,7 +471,7 @@ typedef enum hio_dataset_mode_t {
 
 /**
  * @ingroup API
- * @brief Checkpoint recommendations
+ * @brief Checkpoint recommendations returned by hio_dataset_should_checkpoint().
  */
 typedef enum hio_recommendation_t {
   /** Do not attempt to checkpoint at this time */
@@ -697,7 +727,7 @@ int hio_dataset_unlink (hio_context_t context, const char *name, int64_t set_id,
  * by a single or many files depending on the job size, number of writers, and
  * configuration. On return the element handle can be used even though the element
  * may not be open. If an error occurred during open it may be returned by another
- * call (hio_element_read, hio_element_write, etc). This call is not collective and can be called
+ * call (hio_elemen_read, hio_element_write, etc). This call is not collective and can be called
  * from any rank. Calls to open the same element from multiple ranks is allowed unless
  * exclusive access (see @ref HIO_FLAG_EXCL) is requested.
  */
@@ -1033,18 +1063,23 @@ int hio_complete (hio_element_t element);
  * @ingroup API
  * @brief Test for completion of an I/O request
  *
- * @param[in,out] request  hio I/O request
- * @param[out]   complete flag indicating whether the request is complete.
+ * @param[in,out] request           array of hio I/O requests
+ * @param[in]     nrequests         number of requests in requests array
+ * @param[out]    bytes_transferred array of bytes transferred. entries for incomplete
+ *                                  requests are undefined
+ * @param[out]    complete          array of flags indicating which requests are complete
  *
- * This function checks for the completion of an IO request. If the hio
- * request is complete the number of bytes transferred is stored in
- * {bytes_transferred} and the special value HIO_OBJECT_NULL is stored in
- * {request}. Additionally, if the request is complete this function releases
- * the resources associated with the hio request. Calling this function with
- * {request} pointing to the special value HIO_OBJECT_NULL sets
- * {bytes_transferred} to 0 and {complete} to true and returns immediately.
+ * @returns the number of completed requests on success
+ * @returns and hio error code on failure
+ *
+ * This function checks for the completion of IO request(s). If the hio request at an
+ * index i is complete then complete[i] is set to true, the request and all associated
+ * internal data is released, requests[i] is set to HIO_OBJECT_NULL, and the number of
+ * bytes read/written is stored in bytes_transferred[i]. If any index in the requests
+ * array is set to HIO_OBJECT_NULL the corresponding location in the complete array
+ * is set to true and bytes_transferred is set to 0.
  */
-int hio_request_test (hio_request_t *request, ssize_t *bytes_transferred,
+int hio_request_test (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred,
                       bool *complete);
 
 /**
@@ -1054,15 +1089,15 @@ int hio_request_test (hio_request_t *request, ssize_t *bytes_transferred,
  * @param[in,out] request            hio IO request
  * @param[out]    bytes_transferred  number of bytes read/written
  *
- * This function waits for the completion of an IO request. On completion
- * of the hio request this function stores the number of bytes transferred
- * to {bytes_transferred} and sets the value pointed to by {request} to
- * HIO_OBJECT_NULL. Before returning this function also releases the
- * resources associated with the hio request. Calling this function with
- * {request} pointing to the special value HIO_OBJECT_NULL sets
- * {bytes_transferred} to 0 and returns immediately.
+ * This function waits for the completion of IO requests. On completion
+ * of all hio requests this function stores the number of bytes transferred
+ * for each request in the corresponding location in the {bytes_transferred}
+ * array and sets all indices in the requests array to HIO_OBJECT_NULL. This
+ * function releases each request and all associated internal data. If any
+ * index in the {requests} array is HIO_OBJECT_NULL the corresponding location
+ * in the {bytes_transferred} array is set to 0.
  */
-int hio_request_wait (hio_request_t *request, ssize_t *bytes_transferred);
+int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred);
 
 /**
  * @ingroup API
@@ -1070,18 +1105,16 @@ int hio_request_wait (hio_request_t *request, ssize_t *bytes_transferred);
  *
  * @param[in]  context hio context
  * @param[in]  name    dataset name
- * @param[out] hint    recommendation on checkpoint
+ *
+ * @returns checkpoint recommendation
  *
  * This function attempts to determine if now is an optimal time to write an
  * instance of a dataset. This function will take into account the currently
  * active data root, prior dataset instance sizes, and the system status.
  * It may query the runtime, system configuration, or more to calculate the
- * recommendation. If the recommendation is returned in {hint} is HIO_SCP_NOT_NOW
- * the caller should not attempt to write an instance of the dataset at this time.
- * If {hint} is HIO_SCP_MUST_CHECKPOINT it is recommended that the application
- * write an instance now.
+ * recommendation. See @ref hio_recommendation_t for valid return codes.
  */
-void hio_dataset_should_checkpoint (hio_context_t context, const char *name, int *hint);
+int hio_dataset_should_checkpoint (hio_context_t context, const char *name);
 
 /**
  * @ingroup configuration
