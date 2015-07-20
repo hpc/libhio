@@ -20,7 +20,7 @@ cache="/dwphase2/cornell"
 pfs="/ufs/home/dwphase2/cornell"
 
 cmdwc="
-  /@@ Read and write N-N test case with read data value checking @/
+  /@@ Write cache @/
   name run10wc v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$cache 
   hdo NTN_DS 97 WRITE,CREAT UNIQUE
@@ -33,7 +33,7 @@ cmdwc="
 "
 
 cmdrc="
-  /@@ Read and write N-N test case with read data value checking @/
+  /@@ Read cache @/
   name run102rc v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$cache 
   hdo NTN_DS 97 READ UNIQUE
@@ -47,7 +47,7 @@ cmdrc="
 "
 
 cmdwp="
-  /@@ Read and write N-N test case with read data value checking @/
+  /@@ Write backing FS @/
   name run10wp v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$pfs 
   hdo NTN_DS 97 WRITE,CREAT UNIQUE
@@ -60,7 +60,7 @@ cmdwp="
 "
 
 cmdrp="
-  /@@ Read and write N-N test case with read data value checking @/
+  /@@ Read backing FS @/
   name run102rp v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$pfs 
   hdo NTN_DS 97 READ UNIQUE
@@ -74,33 +74,46 @@ cmdrp="
 "
 
 #clean_roots $HIO_TEST_ROOTS
+nfs_sleep=61
+
+#set -x
 
 # Clean up - erase cache, flush cache, list cache, pfs
-aprun -n 1 -b bash -c "rm -fR $cache/*"
-aprun -n 1 -b bash -c "mkdir -p $cache"
-aprun -n 1 -b bash -c "mkdir -p $pfs"
-aprun -n 1 ./users/heneseler/testioctl $cache wsync
-aprun -n 1 -b bash -c "find $cache -ls"
-aprun -n 1 -b bash -c "find $pfs -ls"
+aprun -n 1 -b bash -xc "strace -f -o strace.out.1 rm -fR $cache/*"
+aprun -n 1 -b bash -xc "mkdir -p $cache"
+aprun -n 1 -b bash -xc "mkdir -p $pfs"
+aprun -n 1 -b bash -xc "find $cache -type f | xargs -n 1 -I {} /users/henseler/testioctl {} wsync"
+#aprun -n 1 -b bash -xc "find $cache -type f | xargs -n1 -t ./xexec.x dwws"
+aprun -n 1 -b bash -xc "find $cache -ls"
+sleep $nfs_sleep
+aprun -n 1 -b bash -xc "find $pfs -ls"
 
 # Write PFS, read PFS, read cache 2X
 myrun .libs/xexec.x $cmdwp
 myrun .libs/xexec.x $cmdrp
+sleep $nfs_sleep
 myrun .libs/xexec.x $cmdrc
 myrun .libs/xexec.x $cmdrc
 check_rc
 
 # Clean up - erase cache, flush cache, list cache, pfs
-aprun -n 1 -b bash -c "rm -fR $cache/*"
-aprun -n 1 ./users/heneseler/testioctl $cache wsync
-aprun -n 1 -b bash -c "find $cache -ls"
-aprun -n 1 -b bash -c "find $pfs -ls"
+aprun -n 1 -b bash -xc "strace -f -o strace.out.1 rm -fR $cache/*"
+aprun -n 1 -b bash -xc "find $cache -type f | xargs -n 1 -I {} /users/henseler/testioctl {} wsync"
+#aprun -n 1 -b bash -xc "find $cache -type f | xargs -n1 -t ./xexec.x dwws"
+aprun -n 1 -b bash -xc "find $cache -ls"
+sleep $nfs_sleep
+aprun -n 1 -b bash -xc "find $pfs -ls"
 
 
 # Write cache, flush cache, read PFS, read cache 2X
 myrun .libs/xexec.x $cmdwc
-aprun -n 1 ./users/heneseler/testioctl $cache wsync
+aprun -n 1 -b bash -xc "find $cache -type f | xargs -n 1 -I {} /users/henseler/testioctl {} wsync"
+#aprun -n 1 -b bash -xc "find $cache -type f | xargs -n1 -t ./xexec.x dwws"
+sleep $nfs_sleep
 myrun .libs/xexec.x $cmdrp
+sleep $nfs_sleep
 myrun .libs/xexec.x $cmdrc
 myrun .libs/xexec.x $cmdrc
 check_rc
+#for q in; do
+#done
