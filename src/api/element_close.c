@@ -12,7 +12,7 @@
 #include "hio_types.h"
 
 int hio_element_close (hio_element_t *element) {
-  hio_dataset_t dataset = (*element)->element_dataset;
+  hio_dataset_t dataset = hioi_element_dataset (*element);
   hio_module_t *module = dataset->dataset_module;
   int rc;
 

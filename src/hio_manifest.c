@@ -156,7 +156,7 @@ static int hioi_manifest_prop_get_number (xmlNodePtr node, const xmlChar *name,
 
 static xmlDocPtr hio_manifest_generate_xml_1_0 (hio_dataset_t dataset) {
   xmlNodePtr elements_node, element_node, segment_node, segments_node, top;
-  hio_context_t context = dataset->dataset_context;
+  hio_context_t context = hioi_object_context (&dataset->dataset_object);
   hio_manifest_segment_t *segment;
   hio_element_t element;
   xmlDocPtr xml_doc;
@@ -168,7 +168,7 @@ static xmlDocPtr hio_manifest_generate_xml_1_0 (hio_dataset_t dataset) {
 
   top = xmlNewNode(NULL, (const xmlChar *) "manifest");
   if (NULL == top) {
-    hio_err_push (HIO_ERROR, dataset->dataset_context, &dataset->dataset_object,
+    hio_err_push (HIO_ERROR, context, &dataset->dataset_object,
 		  "Could not get document root element");
     return NULL;
   }
@@ -253,19 +253,21 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
 }
 
 int hioi_manifest_save (hio_dataset_t dataset, const char *path) {
+  hio_context_t context = hioi_object_context (&dataset->dataset_object);
   xmlSaveCtxtPtr save_context;
   xmlDocPtr xml_doc;
   long rc;
 
   xml_doc = hio_manifest_generate_xml_1_0 (dataset);
   if (NULL == xml_doc) {
-    hio_err_push (HIO_ERROR, dataset->dataset_context, &dataset->dataset_object, "Could not generate manifest xml");
+    hio_err_push (HIO_ERROR, context, &dataset->dataset_object, "Could not generate manifest xml");
     return HIO_ERROR;
   }
 
   save_context = xmlSaveToFilename (path, NULL, XML_SAVE_FORMAT);
   if (NULL == save_context) {
-    hio_err_push (HIO_ERROR, dataset->dataset_context, &dataset->dataset_object, "Could not create xml save context for file %s", path);
+    hio_err_push (HIO_ERROR, context, &dataset->dataset_object, "Could not create xml save context for file %s",
+                  path);
     xmlFreeDoc (xml_doc);
     return HIO_ERROR;
   }
@@ -336,6 +338,7 @@ static int hioi_manifest_parse_segments_1_0 (hio_element_t element, xmlDocPtr xm
 
 static int hioi_manifest_parse_element_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc,
 					    xmlNodePtr element_node) {
+  hio_context_t context = hioi_object_context (&dataset->dataset_object);
   hio_element_t element;
   xmlNodePtr segments_node;
   xmlChar *tmp_string;
@@ -344,12 +347,12 @@ static int hioi_manifest_parse_element_1_0 (hio_dataset_t dataset, xmlDocPtr xml
 
   tmp_string = xmlGetProp (element_node, HIO_MANIFEST_PROP_IDENTIFIER);
   if (NULL == tmp_string) {
-    hio_err_push (HIO_ERROR, dataset->dataset_context, &dataset->dataset_object,
+    hio_err_push (HIO_ERROR, context, &dataset->dataset_object,
                   "Manifest element missing identifier property. name: %s", element_node->name);
     return HIO_ERROR;
   }
 
-  hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Manifest element: %s",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Manifest element: %s",
             tmp_string);
 
   element = hioi_element_alloc (dataset, (const char *) tmp_string);
@@ -388,7 +391,7 @@ static int hioi_manifest_parse_element_1_0 (hio_dataset_t dataset, xmlDocPtr xml
 
   hioi_dataset_add_element (dataset, element);
 
-  hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Found element with identifier %s in manifest",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Found element with identifier %s in manifest",
 	    element->element_object.identifier);
 
   return HIO_SUCCESS;
@@ -416,6 +419,7 @@ static int hioi_manifest_parse_elements_1_0 (hio_dataset_t dataset, xmlDocPtr xm
 }
 
 static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
+  hio_context_t context = hioi_object_context (&dataset->dataset_object);
   xmlNodePtr top, elements_node;
   xmlChar *tmp_string;
   unsigned long mode = 0;
@@ -424,7 +428,7 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
 
   top = xmlDocGetRootElement (xml_doc);
   if (NULL == top) {
-    hio_err_push (HIO_ERROR, dataset->dataset_context, &dataset->dataset_object,
+    hio_err_push (HIO_ERROR, context, &dataset->dataset_object,
 		  "Could not retrieve xml root element");
     return HIO_ERROR;
   }
@@ -435,7 +439,7 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
     return rc;
   }
 
-  hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Compatibilty version of manifest: %s",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Compatibilty version of manifest: %s",
 	    (char *) tmp_string);
 
   if (strcmp ((char *) tmp_string, "1.0")) {
@@ -448,7 +452,7 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
 
   hioi_manifest_get_number (xml_doc, top, HIO_MANIFEST_KEY_DATASET_MODE, &mode);
   if (mode != dataset->dataset_mode) {
-    hio_err_push (HIO_ERR_BAD_PARAM, dataset->dataset_context, &dataset->dataset_object,
+    hio_err_push (HIO_ERR_BAD_PARAM, context, &dataset->dataset_object,
 		  "Mismatch in dataset mode. Requested mode: %d, File mode: %d", mode,
 		  dataset->dataset_mode);
     return HIO_ERR_BAD_PARAM;
@@ -579,10 +583,11 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, unsigned char *data, size_
 }
 
 int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
+  hio_context_t context = hioi_object_context (&dataset->dataset_object);
   xmlDocPtr xml_doc;
   int rc;
 
-  hioi_log (dataset->dataset_context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%lu from %s",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%lu from %s",
 	    dataset->dataset_object.identifier, dataset->dataset_id, path);
 
   if (access (path, F_OK)) {
@@ -595,7 +600,7 @@ int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
 
   xml_doc = xmlParseFile (path);
   if (NULL == xml_doc) {
-    hio_err_push (HIO_ERROR, dataset->dataset_context, &dataset->dataset_object,
+    hio_err_push (HIO_ERROR, context, &dataset->dataset_object,
 		  "Could not parse manifest %s", path);
     return HIO_ERROR;
   }

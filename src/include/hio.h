@@ -152,14 +152,16 @@
  *
  * @subsection datawarp Datawarp
  *
- * Datawarp™ is the the Cray API used to stage files from the burst buffer to the parallel
- * file system on Trinity. Any complete dataset written using the datawarp module will
- * be marked as eligible for stage out at the end of the job. Additionally, to protect
- * against burst buffer failure the datawarp module will periodically mark a completed
- * member of a dataset to stage out to the parallel file system immediately. This
- * behavior can be modified by setting the \ref datawarp_stage_mode on the dataset. The
- * target for any stage operation is taken from the next available data root. Ex.
- * data_roots=datawarp,/lscratch2/<moniker>/data will stage datasets to the
+ * Datawarp™ is the the Cray burst buffer product in use on Trinity. This product includes
+ * an API for staging files in and out of the burst buffer. The datawarp module in libhio
+ * provides a portable way to use the datawarp file system. When in use the datawarp
+ * module will, by default, mark any complete dataset as eligible for stage out at the
+ * end of the job. Additionally, to increase robustness in face of potential datawarp
+ * filesystem failure the datawarp module will periodically mark a completed dataset
+ * to immediately stage out to the parallel file system. This behavior can be modified
+ * by setting the \ref datawarp_stage_mode on the dataset. The target for any stage
+ * operation is taken from the next available data root. Ex.
+ * data_roots=datawarp,/lscratch2/<moniker>/data will stage complete datasets to the
  * /lscratch2/<moniker>/data directory.
  *
  * @section sec_configuration Configuration Interface

@@ -23,9 +23,9 @@ int hio_dataset_close (hio_dataset_t *set) {
 
   dataset = *set;
   module = dataset->dataset_module;
-  context = dataset->dataset_context;
+  context = hioi_object_context (&dataset->dataset_object);
 
-  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%llu",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%llu",
             (*set)->dataset_object.identifier, (*set)->dataset_id);
 
   if (context->context_print_statistics) {
