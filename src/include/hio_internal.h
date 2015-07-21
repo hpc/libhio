@@ -139,6 +139,7 @@ uint64_t hioi_gettime (void);
 /**
  * Make the component directories of the specified path
  *
+ * @param[in] context     context - used for logging
  * @param[in] path        path to make
  * @param[in] access_mode permissions
  *
@@ -149,6 +150,6 @@ uint64_t hioi_gettime (void);
  * errno global variable. See the man page for mkdir(2) for
  * more information.
  */
-int hio_mkpath (const char *path, mode_t access_mode);
+int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode);
 
 #endif /* !defined(HIO_INTERNAL_H) */

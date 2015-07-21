@@ -315,7 +315,7 @@ uint64_t hioi_gettime (void) {
   return 1000000 * tv.tv_sec + tv.tv_usec;
 }
 
-int hio_mkpath (const char *path, mode_t access_mode) {
+int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode) {
   char *tmp = strdup (path);
   int rc;
 
@@ -332,11 +332,11 @@ int hio_mkpath (const char *path, mode_t access_mode) {
     errno = 0;
 
     if (access (tmp, F_OK)) {
-      hioi_log (NULL, HIO_VERBOSE_DEBUG_MED, "creating directory %s", tmp);
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "creating directory %s", tmp);
 
       rc = mkdir (tmp, access_mode);
       if (0 != rc && (EEXIST != errno)) {
-        hioi_log (NULL, HIO_VERBOSE_WARN, "could not create directory %s. errno: %d", tmp, errno);
+        hioi_log (context, HIO_VERBOSE_WARN, "could not create directory %s. errno: %d", tmp, errno);
         free (tmp);
         return HIO_ERROR;
       }

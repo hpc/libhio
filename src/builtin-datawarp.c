@@ -152,7 +152,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       stage_mode = DW_STAGE_AT_JOB_END;
     }
 
-    rc = hio_mkpath (pfs_path, pfs_mode);
+    rc = hio_mkpath (context, pfs_path, pfs_mode);
     if (HIO_SUCCESS != rc) {
       free (dataset_path);
       free (pfs_path);

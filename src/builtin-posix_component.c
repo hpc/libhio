@@ -55,7 +55,7 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
 
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix: creating dataset directory @ %s", posix_dataset->base_path);
 
-  rc = hio_mkpath (posix_dataset->base_path, access_mode);
+  rc = hio_mkpath (context, posix_dataset->base_path, access_mode);
   if (0 > rc || EEXIST == errno) {
     if (EEXIST != errno) {
       hio_err_push (hioi_err_errno (errno), context, NULL, "posix: error creating context directory: %s",
