@@ -101,7 +101,7 @@ struct hio_context {
 
   /** my rank in the context */
   int                 context_rank;
-  /** numner of ranks using this context */
+  /** number of ranks using this context */
   int                 context_size;
 
   /** unreported errors on this context */
