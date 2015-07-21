@@ -15,6 +15,8 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include <assert.h>
+
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -351,4 +353,14 @@ int hio_mkpath (const char *path, mode_t access_mode) {
   rc = mkdir (tmp, access_mode);
   free (tmp);
   return (rc && errno != EEXIST) ? HIO_ERROR : HIO_SUCCESS;
+}
+
+hio_context_t hioi_object_context (hio_object_t object) {
+  if (NULL == object->parent) {
+    /* all objects have a context at the root */
+    assert (HIO_OBJECT_TYPE_CONTEXT == object->type);
+    return (hio_context_t) object;
+  }
+
+  return hioi_object_context (object->parent);
 }

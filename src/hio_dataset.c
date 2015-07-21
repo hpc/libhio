@@ -39,8 +39,7 @@ hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name) {
   }
 
   element->element_object.type = HIO_OBJECT_TYPE_ELEMENT;
-
-  element->element_dataset = dataset;
+  element->element_object.parent = &dataset->dataset_object;
 
   hioi_list_init (element->element_segment_list);
 
@@ -128,10 +127,10 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   }
 
   new_dataset->dataset_object.type = HIO_OBJECT_TYPE_DATASET;
+  new_dataset->dataset_object.parent = &context->context_object;
   new_dataset->dataset_id = id;
   new_dataset->dataset_flags = flags;
   new_dataset->dataset_mode = mode;
-  new_dataset->dataset_context = context;
 
   new_dataset->dataset_file_mode = HIO_FILE_MODE_BASIC;
   hioi_config_add (context, &new_dataset->dataset_object, &new_dataset->dataset_file_mode,
@@ -161,7 +160,7 @@ void hioi_dataset_release (hio_dataset_t *set) {
   }
 
   module = (*set)->dataset_module;
-  context = (*set)->dataset_context;
+  context = hioi_object_context (&(*set)->dataset_object);
 
   hioi_list_foreach_safe(element, next, (*set)->dataset_element_list, struct hio_element, element_list) {
     if (element->element_is_open) {

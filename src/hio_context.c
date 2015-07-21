@@ -45,6 +45,8 @@ static hio_context_t hio_context_alloc (const char *identifier) {
     return NULL;
   }
 
+  new_context->context_object.type = HIO_OBJECT_TYPE_CONTEXT;
+
   /* default context configuration */
   new_context->context_verbose          = HIO_VERBOSE_ERROR;
   new_context->context_print_statistics = false;

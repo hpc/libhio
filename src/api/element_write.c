@@ -40,7 +40,7 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
 int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
                                   unsigned long reserved0, const void *ptr, size_t count, size_t size,
                                   size_t stride) {
-  hio_dataset_t dataset = element->element_dataset;
+  hio_dataset_t dataset = hioi_element_dataset (element);
   hio_module_t *module = dataset->dataset_module;
   int rc;
 
@@ -58,7 +58,7 @@ int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request,
 }
 
 int hio_element_flush (hio_element_t element, hio_flush_mode_t mode) {
-  hio_dataset_t dataset = element->element_dataset;
+  hio_dataset_t dataset = hioi_element_dataset (element);
   hio_module_t *module = dataset->dataset_module;
 
   return module->element_flush (module, element, mode);

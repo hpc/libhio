@@ -88,6 +88,9 @@ struct hio_object {
    * this part of the object stores all the registered peformance
    * variables */
   hio_var_array_t   performance;
+
+  /** parent object */
+  hio_object_t      parent;
 };
 
 struct hio_context {
@@ -187,9 +190,6 @@ struct hio_dataset {
   /** open mode */
   hio_dataset_mode_t  dataset_mode;
 
-  /** context used to create this dataset */
-  hio_context_t       dataset_context;
-
   /** module in use */
   hio_module_t       *dataset_module;
 
@@ -248,9 +248,6 @@ struct hio_element {
   /** segment list */
   hio_list_t          element_segment_list;
 
-  /** associated dataset */
-  hio_dataset_t       element_dataset;
-
   /** element is curently open */
   bool                element_is_open;
 
@@ -280,6 +277,23 @@ typedef struct hio_dataset_header_t hio_dataset_header_t;
  * second, and 0 otherwise.
  */
 typedef int (*hioi_dataset_header_compare_t) (hio_dataset_header_t *, hio_dataset_header_t *);
+
+/**
+ * Get the associated context for an hio object
+ *
+ * @param[in] object       hio object
+ *
+ * @returns hio context on success
+ *
+ * This function can be used to follow the parent pointers on any hio
+ * object to get the hio_context_t the object was created under.
+ */
+hio_context_t hioi_object_context (hio_object_t object);
+
+/**
+ * Macro to get the dataset for an hio element
+ */
+#define hioi_element_dataset(e) (hio_dataset_t) (e)->element_object.parent
 
 /**
  * Allocate a new dataset object and populate it with common data (internal)
