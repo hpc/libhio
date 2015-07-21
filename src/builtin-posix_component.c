@@ -732,7 +732,7 @@ hio_module_t builtin_posix_module_template = {
   .fini             = builtin_posix_module_fini,
 };
 
-static int builtin_posix_component_init (void) {
+static int builtin_posix_component_init (hio_context_t context) {
   /* nothing to do */
   return HIO_SUCCESS;
 }

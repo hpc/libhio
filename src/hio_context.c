@@ -60,6 +60,27 @@ static hio_context_t hio_context_alloc (const char *identifier) {
 
   pthread_mutex_init (&new_context->context_lock, NULL);
 
+  // If env set, pick up verbose value from context or global env name
+  char buf[256];
+  snprintf (buf, sizeof(buf), "HIO_context_%s_verbose", new_context->context_object.identifier);  
+  char *env_name = buf;
+  char *verbose_env = getenv (env_name);
+  if (!verbose_env) {
+    env_name = "HIO_verbose";
+    verbose_env = getenv (env_name);
+  }
+
+  if (verbose_env) {
+    char * endptr; 
+    int verbose_val = strtol (verbose_env, &endptr, 0);
+    if (*endptr) {
+      hioi_log (new_context, HIO_VERBOSE_ERROR, "Environment variable %s value \"%s\" not valid",
+                env_name, verbose_env);
+    } else {
+      new_context->context_verbose = verbose_val;
+    }
+  }
+
   hioi_list_init (new_context->context_dataset_data);
 
   return new_context;
@@ -193,7 +214,7 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
 
   pthread_mutex_init (&context->context_lock, NULL);
 
-  rc = hioi_component_init ();
+  rc = hioi_component_init (context);
   if (HIO_SUCCESS != rc) {
     hio_err_push (rc, NULL, NULL, "Could not initialize the hio component interface");
     return rc;

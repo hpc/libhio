@@ -295,7 +295,7 @@ typedef struct hio_module_t {
  *  - Verifying the component can be used.
  *  ...
  */
-typedef int (*hio_component_init_fn_t) (void);
+typedef int (*hio_component_init_fn_t) (hio_context_t);
 
 /**
  * Finalize the hio component.
@@ -348,7 +348,7 @@ typedef struct hio_component_t {
  * components can be used to create backend modules for writing to various
  * types of data stores.
  */
-int hioi_component_init (void);
+int hioi_component_init (hio_context_t);
 
 /**
  * Finalize and cleanup the hio component system

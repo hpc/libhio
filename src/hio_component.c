@@ -45,7 +45,7 @@ typedef struct hio_dynamic_component_t {
 static hio_dynamic_component_t hio_external_components[MAX_COMPONENTS];
 static int hio_external_component_count;
 
-static int hioi_dynamic_component_init (void) {
+static int hioi_dynamic_component_init (hio_context_t context) {
   const char *module_dir = HIO_PREFIX "/lib/hio_" PACKAGE_VERSION "/modules";
   char component_name[128], component_symbol[512];
   hio_component_t *component_ptr;
@@ -55,7 +55,7 @@ static int hioi_dynamic_component_init (void) {
   char *path;
   DIR *dir;
 
-  hioi_log(NULL, HIO_VERBOSE_DEBUG_LOW, "Looking for plugins in %s...", module_dir);
+  hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Looking for plugins in %s...", module_dir);
 
   dir = opendir (module_dir);
   if (NULL != dir) {
@@ -66,9 +66,9 @@ static int hioi_dynamic_component_init (void) {
         continue;
       }
 
-      hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "Checking file %s", entry->d_name);
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Checking file %s", entry->d_name);
       if (strncmp (entry->d_name, "hio_plugin_", 11)) {
-        hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "File does not match expected name pattern. Skipping...");
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "File does not match expected name pattern. Skipping...");
         continue;
       }
       sscanf (entry->d_name, "hio_plugin_%128s", component_name);
@@ -83,7 +83,7 @@ static int hioi_dynamic_component_init (void) {
       free (path);
       if (NULL == dl_ctx) {
         rc = hioi_err_errno (errno);
-        hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "Failed to dlopen() plugin. Reason: %s", strerror (errno));
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Failed to dlopen() plugin. Reason: %s", strerror (errno));
         continue;
       }
 
@@ -91,21 +91,21 @@ static int hioi_dynamic_component_init (void) {
 
       component_ptr = (hio_component_t *) dlsym (dl_ctx, component_symbol);
       if (NULL == component_ptr) {
-        hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "Could not find component symbol: %s", component_symbol);
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Could not find component symbol: %s", component_symbol);
         rc = hioi_err_errno (errno);
         dlclose (dl_ctx);
         continue;
       }
 
       if (NULL == component_ptr->init) {
-        hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "Component does not define the required init() function");
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Component does not define the required init() function");
         dlclose (dl_ctx);
         continue;
       }
 
-      rc = component_ptr->init ();
+      rc = component_ptr->init (context);
       if (HIO_SUCCESS != rc) {
-        hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "Component initialize function failed");
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Component initialize function failed");
         dlclose (dl_ctx);
         continue;
       }
@@ -130,7 +130,7 @@ static int hioi_dynamic_component_init (void) {
 }
 #endif
 
-int hioi_component_init (void) {
+int hioi_component_init (hio_context_t context) {
   int rc = HIO_SUCCESS;
 
   if (hio_component_init_count++ > 0) {
@@ -140,7 +140,7 @@ int hioi_component_init (void) {
   for (int i = 0 ; hio_builtin_components[i] ; ++i) {
     hio_component_t *component = hio_builtin_components[i];
 
-    rc = component->init ();
+    rc = component->init (context);
     if (HIO_SUCCESS != rc) {
       return rc;
     }
@@ -151,7 +151,7 @@ int hioi_component_init (void) {
   }
 
 #if defined(USE_DYNAMIC_COMPONENTS)
-  return hioi_dynamic_component_init ();
+  return hioi_dynamic_component_init (context);
 #endif
 
   return HIO_SUCCESS;

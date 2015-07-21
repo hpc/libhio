@@ -310,7 +310,7 @@ hio_module_t builtin_datawarp_module_template = {
   .fini             = builtin_datawarp_module_fini,
 };
 
-static int builtin_datawarp_component_init (void) {
+static int builtin_datawarp_component_init (hio_context_t context) {
   /* nothing to do */
   return HIO_SUCCESS;
 }

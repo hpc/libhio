@@ -121,7 +121,7 @@ static uint64_t hioi_string_to_int (const char *strval) {
   return value;
 }
 
-static int hioi_config_set_value_internal (hio_var_t *var, const char *strval) {
+static int hioi_config_set_value_internal (hio_context_t context, hio_var_t *var, const char *strval) {
   uint64_t intval = hioi_string_to_int(strval);
 
   if (NULL == strval) {
@@ -150,9 +150,9 @@ static int hioi_config_set_value_internal (hio_var_t *var, const char *strval) {
     }
 
     if (found) {
-      hioi_log (NULL, HIO_VERBOSE_DEBUG_LOW, "Setting enumeration value to %llu", intval);
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting enumeration value to %llu", intval);
     } else {
-      hioi_log (NULL, HIO_VERBOSE_WARN, "Invalid enumeration value provided for variable %s. Got %s",
+      hioi_log (context, HIO_VERBOSE_WARN, "Invalid enumeration value provided for variable %s. Got %s",
                 var->var_name, strval);
       return HIO_ERR_BAD_PARAM;
     }
@@ -222,7 +222,7 @@ static int hioi_config_set_from_file (hio_context_t context, hio_object_t object
         !strcmp (var->var_name, kv->key)) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from file",
                 var->var_name, kv->value);
-      return hioi_config_set_value_internal (var, kv->value);
+      return hioi_config_set_value_internal (context, var, kv->value);
     }
   }
 
@@ -245,7 +245,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     if (NULL != string_value) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
                 var->var_name, string_value, env_name);
-      return hioi_config_set_value_internal (var, string_value);
+      return hioi_config_set_value_internal (context, var, string_value);
     }
 
     snprintf (env_name, 256, "%sdataset_%s_%s", hio_config_env_prefix, object->identifier, var->var_name);
@@ -256,7 +256,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     if (NULL != string_value) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
                 var->var_name, string_value, env_name);
-      return hioi_config_set_value_internal (var, string_value);
+      return hioi_config_set_value_internal (context, var, string_value);
     }
   }
 
@@ -269,7 +269,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
   if (NULL != string_value) {
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
               var->var_name, string_value, env_name);
-    return hioi_config_set_value_internal (var, string_value);
+    return hioi_config_set_value_internal (context, var, string_value);
   }
 
   snprintf (env_name, 256, "%s%s", hio_config_env_prefix, var->var_name);
@@ -280,7 +280,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
   if (NULL != string_value) {
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
               var->var_name, string_value, env_name);
-    return hioi_config_set_value_internal (var, string_value);
+    return hioi_config_set_value_internal (context, var, string_value);
   }
 
   return HIO_SUCCESS;
@@ -523,7 +523,7 @@ int hio_config_set_value (hio_object_t object, char *variable, char *value) {
     return HIO_ERR_PERM;
   }
 
-  return hioi_config_set_value_internal (var, value);
+  return hioi_config_set_value_internal (hioi_object_context(object), var, value);
 }
 
 int hio_config_get_value (hio_object_t object, char *variable, char **value) {

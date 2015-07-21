@@ -40,16 +40,7 @@ static pthread_mutex_t hio_error_stack_mutex = PTHREAD_MUTEX_INITIALIZER;
 void hioi_log (hio_context_t context, int level, char *format, ...) {
   int verbose_level = 0;
 
-  if (NULL == context) {
-    const char *verbose = getenv ("HIO_DEBUG");
-    if (verbose) {
-      verbose_level = strtol (verbose, NULL, 0);
-    }
-  } else {
-    verbose_level = context->context_verbose;
-  }
-
-  if (verbose_level >= level) {
+  if (context->context_verbose >= level) {
     time_t current_time;
     char time_buf[20];
     va_list vargs;
@@ -58,7 +49,8 @@ void hioi_log (hio_context_t context, int level, char *format, ...) {
     strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", localtime(&current_time));
 
     va_start (vargs, format);
-    fprintf (stderr, "%s [hio:%d] (context: %s): ", time_buf, level, context ? context->context_object.identifier : "none");
+    fprintf (stderr, "%s [hio:%d] (context: %s): ", time_buf, level, 
+             context->context_object.identifier);
     vfprintf (stderr, format, vargs);
     fputs ("\n", stderr);
     va_end (vargs);
