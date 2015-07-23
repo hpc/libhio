@@ -9,7 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_component.h"
+#include "hio_types.h"
 
 #if HAVE_DLFCN_H
 #define USE_DYNAMIC_COMPONENTS

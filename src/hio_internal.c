@@ -37,24 +37,20 @@ static pthread_mutex_t hio_error_stack_mutex = PTHREAD_MUTEX_INITIALIZER;
  * @file Internal hio functions
  */
 
-void hioi_log (hio_context_t context, int level, char *format, ...) {
-  int verbose_level = 0;
+void hioi_log_unconditional (hio_context_t context, int level, char *format, ...) {
+  time_t current_time;
+  char time_buf[20];
+  va_list vargs;
 
-  if (context->context_verbose >= level) {
-    time_t current_time;
-    char time_buf[20];
-    va_list vargs;
+  current_time = time (NULL);
+  strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", localtime(&current_time));
 
-    current_time = time (NULL);
-    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", localtime(&current_time));
-
-    va_start (vargs, format);
-    fprintf (stderr, "%s [hio:%d] (context: %s): ", time_buf, level, 
-             context->context_object.identifier);
-    vfprintf (stderr, format, vargs);
-    fputs ("\n", stderr);
-    va_end (vargs);
-  }
+  va_start (vargs, format);
+  fprintf (stderr, "%s [hio:%d] (context: %s): ", time_buf, level, 
+           context->context_object.identifier);
+  vfprintf (stderr, format, vargs);
+  fputs ("\n", stderr);
+  va_end (vargs);
 }
 
 int hioi_err_errno (int err) {
@@ -151,7 +147,7 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
 
   new_item->hrc = hio_err_mpi(mpirc);
 
-  /* TODO -- Should probably do somthing smarter here */
+  /* TODO -- Should probably do something smarter here */
   new_item->error_string = malloc (strlen (temp) + 3 + resultlen);
   if (NULL == temp) {
     free (new_item);

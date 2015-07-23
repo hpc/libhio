@@ -101,14 +101,19 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
 int hio_err_mpi (int mpirc);
 
 /**
- * Log a message to stderr
+ * Log a message to stderr.  Don't invoke directly, use hioi_log macro.
  *
  * @param[in] context  current context
  * @param[in] level    message log level
  * @param[in] format   output format
  * @param[in] ...      format arguments
  */
-void hioi_log (hio_context_t context, int level, char *format, ...);
+void hioi_log_unconditional (hio_context_t context, int level, char *format, ...);
+ 
+#define hioi_log(context, level,  ...)                            \
+  if ((context)->context_verbose >= level) {                      \
+    hioi_log_unconditional ( (context), (level), __VA_ARGS__);    \
+  }
 
 /**
  * Return an hio error code for the given errno
