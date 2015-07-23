@@ -112,7 +112,7 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   }
 
   /* lookup/allocate persistent dataset data. this data will keep track of per-dataset
-   * statistics (average write time, last successfull checkpoint, etc) */
+   * statistics (average write time, last successful checkpoint, etc) */
   rc = hioi_dataset_data_lookup (context, name, &new_dataset->dataset_data);
   if (HIO_SUCCESS != rc) {
     free (new_dataset);
@@ -239,7 +239,7 @@ hio_dataset_backend_data_t *hioi_dbd_alloc (hio_dataset_data_t *data, const char
 }
 
 /**
- * Reteive stored backend data
+ * Retrieve stored backend data
  *
  * @param[in] data         dataset persistent data structure
  * @param[in] backend_name name of the requesting backend

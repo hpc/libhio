@@ -29,7 +29,7 @@ static const char *hio_config_env_prefix = "HIO_";
 /* variable array helper functions */
 
 /**
- * Check if the variable exists in the a variable array
+ * Check if the variable exists in a variable array
  *
  * @param[in] var_array variable array to search
  * @param[in] name      variable name to lookup
@@ -40,7 +40,7 @@ static const char *hio_config_env_prefix = "HIO_";
  * should be updated to keep a hash table for O(1) lookup.
  *
  * @returns an index >= 0 if the variable is found
- * @retyrns -1 if not found
+ * @returns -1 if not found
  */
 int hioi_var_lookup (hio_var_array_t *var_array, const char *name) {
   for (int i = 0 ; i < var_array->var_count ; ++i) {

@@ -139,7 +139,7 @@
  * Data roots can be set by setting either the HIO_data_roots environment variable or by
  * setting the data_roots configuration variable on a context using hio_config_set_value().
  * Data roots can only be set before the first call to hio_dataset_open() on a context.
- * The data_roots configuration variable is a commma-delimited list of the requested data
+ * The data_roots configuration variable is a comma-delimited list of the requested data
  * roots.
  *
  * When specifying a data root the user can alternately specify a module prepending the

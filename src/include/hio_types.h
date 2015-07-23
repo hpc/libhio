@@ -248,7 +248,7 @@ struct hio_element {
   /** segment list */
   hio_list_t          element_segment_list;
 
-  /** element is curently open */
+  /** element is currently open */
   bool                element_is_open;
 
   /** (basic mode only) backing file for this element */

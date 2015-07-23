@@ -439,7 +439,7 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc) {
     return rc;
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Compatibilty version of manifest: %s",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Compatibility version of manifest: %s",
 	    (char *) tmp_string);
 
   if (strcmp ((char *) tmp_string, "1.0")) {
@@ -513,7 +513,7 @@ static int hioi_manifest_parse_header_1_0 (hio_context_t context, hio_dataset_he
     return rc;
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Compatibilty version of manifest: %s", (char *) tmp_string);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Compatibility version of manifest: %s", (char *) tmp_string);
 
   if (strcmp ((char *) tmp_string, "1.0")) {
     xmlFree (tmp_string);

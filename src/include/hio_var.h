@@ -89,7 +89,7 @@ typedef struct hio_var_array_t {
 } hio_var_array_t;
 
 /**
- * Find the index of the given variable in the configuation
+ * Find the index of the given variable in the configuration
  *
  * @param[in] config  configuration
  * @param[in] name    variable name to look up
