@@ -259,8 +259,8 @@
  * @subsubsection subsubsec_configuration_dataset Dataset Specific Variables
  *
  * - @b datawarp_stage_mode - Mode to use for staging files to more permanent data stores (ex: BB \-\> PFS).
- *   Available modes: auto (stage most recent id at end of job), end_of_job (stage at end of job),
- *   immediate (stage when the dataset is closed).
+ *   Available modes: disable (do not stage), auto (stage most recent id at end of job), end_of_job
+ *   (stage at end of job), immediate (stage when the dataset is closed).
  *
  * - @b stripe_width - Filesystem striping width. This value will be passed along to the underlying
  *   file system if it is supported.

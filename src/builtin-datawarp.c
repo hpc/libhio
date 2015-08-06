@@ -45,6 +45,7 @@ typedef struct builtin_datawarp_dataset_backend_data_t {
 } builtin_datawarp_dataset_backend_data_t;
 
 static hio_var_enum_value_t builtin_datawarp_stage_mode_values[] = {
+  {.string_value = "disable", .value = -2},
   {.string_value = "auto", .value = -1},
   {.string_value = "immediate", .value = DW_STAGE_IMMEDIATE},
   {.string_value = "end_of_job", .value = DW_STAGE_AT_JOB_END},
@@ -134,7 +135,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
   hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
 
-  if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRITE)) {
+  if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRITE) && -2 != datawarp_dataset->stage_mode) {
     char *pfs_path;
 
     rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->context_object.identifier,
