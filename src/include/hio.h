@@ -263,11 +263,11 @@
  *   (stage at end of job), immediate (stage when the dataset is closed). Note: @b datawarp_stage_mode 
  *   is only valid for datasets opened for writing.
  *
- * - @b stripe_width - Filesystem striping width. This value will be passed along to the underlying
- *   file system if it is supported.
+ * - @b stripe_width - Filesystem striping width in bytes. This value will be passed along to the underlying
+ *   file system if it is supported. Note: @b stripe_width is not yet supported.
  *
- * - @b expected_size - Expected global size of a dataset. This value will be used when calculating
- *   the appropriate output interval for the dataset.
+ * - @b expected_size - Expected global size of a dataset in bytes. This value will be used when calculating
+ *   the appropriate output interval for the dataset. Note: @b expected_size is not yet supported.
  *
  * @page page_example Examples
  * @section sec_example_c C Example
