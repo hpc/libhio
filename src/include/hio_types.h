@@ -120,7 +120,7 @@ struct hio_context {
   /** number of bytes read from this context (local) */
   uint64_t            context_bytes_read;
   /** context verbosity */
-  uint32_t            context_verbose;
+  int32_t             context_verbose; // Signed to prevent Cray compiler error when comparing with 0 
   /** time of last dataset completion */
   struct timeval      context_last_checkpoint;
   /** file configuration for the context */
