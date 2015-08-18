@@ -183,10 +183,10 @@ for v in $vers; do
     ga-intel ) build_r ga-fe1t "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-intel -l craype-haswell -l cray-mpich ;;
     ga-pgi   ) build_r ga-fe1t "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-pgi   -l craype-haswell -l cray-mpich ;;
 
-    tt-gnu   ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu   ;;
-    tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v                              ;;
-    tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-intel ;;
-    tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-pgi   ;;
+    tt-gnu   ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tt-cray  ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-cray ;;
+    tt-intel ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v                              ;;
+    tt-pgi   ) build_r tt-fey  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
     bu-gnu   ) build_r bu-fet  "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu  ;;
     bu-cray  ) build_r bu-fet  "$rmt_dir/$v" $tarname -n $v                             ;;
