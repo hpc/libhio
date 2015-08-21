@@ -142,8 +142,8 @@ fi
 #----------------------------------------------------------------------------
 # Clean data roots, i.e., create or empty them out 
 #----------------------------------------------------------------------------
-# Early DW Ph 1 - location of BB directory
-HIO_TEST_DW="/dwphase1/$LOGNAME$job_dir"
+# Late DW Ph 1 - location of BB directory
+HIO_TEST_DW="/tmp/dw_scr/$LOGNAME$job_dir"
 export HIO_datawarp_root=$HIO_TEST_DW
 
 # This string contains the logic to check, empty or create a test data root
