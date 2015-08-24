@@ -22,7 +22,7 @@
  *
  * @section about About libhio
  *
- * libhio is an open-source library intended for writing data to hierarchical data
+ * libhio is a library intended for writing data to hierarchical data
  * store systems. These systems may be comprised of one or more logical layers
  * including parallel file systems (PFS), burst buffers (BB), and local memory.
  * libhio provides support for automated fall-back on alternate destinations if
