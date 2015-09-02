@@ -173,11 +173,46 @@ struct hio_dataset_backend_data_t {
 };
 typedef struct hio_dataset_backend_data_t hio_dataset_backend_data_t;
 
-
 typedef enum hio_dataset_file_mode {
+  /** use basic mode. unique address space results in a single file per element per rank.
+   * shared address space results in a single file per element */
   HIO_FILE_MODE_BASIC,
+  /** use optimized mode. there is no guarantee about file structure in this mode */
   HIO_FILE_MODE_OPTIMIZED,
 } hio_dataset_file_mode_t;
+
+struct hio_fs_attr_t;
+
+typedef int (*hio_fs_open_fn_t) (const char *path, struct hio_fs_attr_t *fs_attr, int flags, int mode);
+
+#define HIO_FS_SUPPORTS_STRIPING 1
+
+enum {
+  HIO_FS_TYPE_DEFAULT,
+  HIO_FS_TYPE_LUSTRE,
+  HIO_FS_TYPE_GPFS,
+  HIO_FS_TYPE_MAX,
+};
+
+struct hio_fs_attr_t {
+  int      fs_type;
+  /** available blocks on the filesystem */
+  uint64_t fs_bavail;
+  /** total blocks on the filesystem */
+  uint64_t fs_btotal;
+  /** size of a filesystem block */
+  uint64_t fs_bsize;
+  /** number of stripes (0 if unsupported) */
+  uint64_t fs_scount;
+  /** size of a stripe (0 if unsupported) */
+  size_t fs_ssize;
+  /** flags indicating filesystem features */
+  int    fs_flags;
+  /** filesystem open function (for data) */
+  hio_fs_open_fn_t fs_open;
+};
+typedef struct hio_fs_attr_t hio_fs_attr_t;
+
 
 struct hio_dataset {
   /** allows for type detection */
@@ -220,6 +255,9 @@ struct hio_dataset {
 
   /** dataset status */
   int                 dataset_status;
+
+  /** dataset open function (data) */
+  hio_fs_attr_t       dataset_fs_attr;
 };
 
 struct hio_request {
@@ -319,6 +357,14 @@ hio_context_t hioi_object_context (hio_object_t object);
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
                                   int flags, hio_dataset_mode_t mode,
                                   size_t dataset_size);
+
+/**
+ * @brief scatter dataset configuration to all processes
+ *
+ * @param[in] dataset     dataset to scatter
+ * @param[in] rc          current return code
+ */
+int hioi_dataset_scatter (hio_dataset_t dataset, int rc);
 
 /**
  * Release a dataset object (internal)
@@ -436,5 +482,22 @@ static inline bool hioi_context_using_mpi (hio_context_t context) {
 
 hio_module_t *hioi_context_select_module (hio_context_t context);
 
+/**
+ * @brief Query filesystem attributes
+ *
+ * @param[in]  context    hio context
+ * @param[in]  path       path on the filesystem to query (directory/file ok)
+ * @param[out] attributes filesystem path attributes
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns hio error code on error
+ *
+ * This function queries a filesystem path and returns the attributes of that
+ * path (block count, stripe count, etc). The query function also returns an
+ * open function that should be used to open/create data files. The open function
+ * takes an attributes structure as an extra argument. Any striping information
+ * will be retreived from this function.
+ */
+int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *attributes);
 
 #endif /* !defined(HIO_TYPES_H) */

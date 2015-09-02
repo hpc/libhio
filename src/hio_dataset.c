@@ -255,3 +255,61 @@ hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *da
 
   return NULL;
 }
+
+int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {
+#if HIO_USE_MPI
+  hio_context_t context = (hio_context_t) dataset->dataset_object.parent;
+  unsigned char *data;
+  size_t data_size;
+  long ar_data[5];
+
+  if (1 == context->context_size) {
+    /* nothing to do */
+    return rc;
+  }
+
+  if (HIO_SUCCESS == rc && 0 == context->context_rank) {
+    rc = hioi_manifest_serialize (dataset, &data, &data_size);
+  }
+
+  ar_data[0] = rc;
+  ar_data[1] = (long) data_size;
+  ar_data[2] = dataset->dataset_flags;
+  ar_data[3] = dataset->dataset_fs_attr.fs_scount;
+  ar_data[4] = dataset->dataset_fs_attr.fs_ssize;
+
+  rc = MPI_Bcast (ar_data, 5, MPI_LONG, 0, context->context_comm);
+  if (MPI_SUCCESS != rc) {
+    return hio_err_mpi (rc);
+  }
+
+  if (HIO_SUCCESS != ar_data[0]) {
+    return ar_data[0];
+  }
+
+  data_size = (size_t) ar_data[1];
+
+  if (0 != context->context_rank) {
+    data = malloc (data_size);
+    assert (NULL != data);
+  }
+
+  rc = MPI_Bcast (data, data_size, MPI_BYTE, 0, context->context_comm);
+  if (MPI_SUCCESS != rc) {
+    return hio_err_mpi (rc);
+  }
+
+  if (0 != context->context_rank) {
+    rc = hioi_manifest_deserialize (dataset, data, data_size);
+  }
+
+  /* copy flags determined by rank 0 */
+  dataset->dataset_flags = ar_data[2];
+  dataset->dataset_fs_attr.fs_scount = ar_data[3];
+  dataset->dataset_fs_attr.fs_ssize = ar_data[4];
+
+  free (data);
+#endif
+
+  return rc;
+}
