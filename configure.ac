@@ -3,13 +3,14 @@
 #                     reserved.
 
 AC_PREREQ([2.69])
-AC_INIT([libhio], [1.0], [hjelmn@lanl.gov])
+AC_INIT([libhio], [1.1], [hjelmn@lanl.gov])
 AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE([disable])
+AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
 
-if test -n "$XTOS_VERSION" ; then
+if test -n "$XTOS_VERSION" && test ! "$CC" ; then
     # Work around Cray idiosyncrasies
     # Don't let the Cray wrapper bring in extra crap
     PE_VERSION=`echo $XTOS_VERSION | sed 's/\..*//g'`
@@ -20,6 +21,11 @@ if test -n "$XTOS_VERSION" ; then
     fi
     # Force cray's linker to act like it should
     LDFLAGS="$LDFLAGS -dynamic"
+elif test ${MPICC} = "mpicc" ; then
+    CC=${MPICC}
+    hio_use_mpi=1
+else
+    hio_use_mpi=0
 fi
 
 AM_INIT_AUTOMAKE
@@ -57,14 +63,7 @@ if test $use_datawarp = 1 ; then
     AC_CHECK_LIB([datawarp], [dw_stage_file_out], [use_datawarp=1], [use_datawarp=0])
 fi
 
-AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
-
-if test ${MPICC} = "mpicc" ; then
-    CC=${MPICC}
-    hio_use_mpi=1
-else
-    hio_use_mpi=0
-fi
+HIO_CHECK_LUSTRE
 
 if test x$hio_use_mpi = x0 ; then
     AC_MSG_CHECKING([for craypich])
@@ -87,8 +86,9 @@ AC_PROG_LEX
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdlib.h strings.h sys/types.h sys/time.h pthread.h dlfcn.h])
-AC_CHECK_FUNCS([access gettimeofday dlopen dlclose dlsym])
+AC_CHECK_HEADERS([stdlib.h strings.h sys/types.h sys/time.h pthread.h dlfcn.h sys/stat.h sys/param.h \
+                  sys/mount.h sys/vfs.h])
+AC_CHECK_FUNCS([access gettimeofday dlopen dlclose dlsym stat statfs])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
