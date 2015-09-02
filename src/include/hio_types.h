@@ -205,9 +205,13 @@ struct hio_fs_attr_t {
   /** number of stripes (0 if unsupported) */
   uint64_t fs_scount;
   /** size of a stripe (0 if unsupported) */
-  size_t fs_ssize;
+  size_t   fs_ssize;
+  /** maximum stripe count */
+  int      fs_smax;
+  /** stripe unit (bytes) */
+  size_t   fs_sunit;
   /** flags indicating filesystem features */
-  int    fs_flags;
+  int      fs_flags;
   /** filesystem open function (for data) */
   hio_fs_open_fn_t fs_open;
 };

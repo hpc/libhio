@@ -12,9 +12,9 @@ AC_DEFUN([HIO_CHECK_LUSTRE],[
         if test "$with_lustre" != "yes" && test "$with_lustre" ; then
             CPPFLAGS="$CPPFLAGS -I$with_lustre/include"
             if test -d "$with_lustre/lib64" ; then
-                LDFLAGS="$CPPFLAGS -L$with_lustre/lib64"
+                LDFLAGS="$LDFLAGS -L$with_lustre/lib64"
             else
-                LDFLAGS="$CPPFLAGS -L$with_lustre/lib"
+                LDFLAGS="$LDFLAGS -L$with_lustre/lib"
             fi
         fi
 
@@ -23,7 +23,7 @@ AC_DEFUN([HIO_CHECK_LUSTRE],[
         AC_CHECK_HEADERS([lustre/lustreapi.h lustre/liblustreapi.h lustre/lustre_user.h], [lustre_happy=yes])
         if test "$lustre_happy" = "yes" ; then
             AC_CHECK_LIB([lustreapi], [llapi_file_get_stripe],[],[lustre_happy=no])
-            AC_CHECK_FUNCS([llapi_layout_alloc],[lustre_use_layout=yes],[lustre_use_layout=no])
+            AC_CHECK_FUNCS([llapi_layout_alloc llapi_get_obd_count])
         fi
 
         if test "$lustre_specified" = "yes" && test "$lustre_happy" = "no" ; then

@@ -54,35 +54,50 @@ static int hioi_fs_open_posix (const char *path, hio_fs_attr_t *fs_attr, int fla
 
 static int hioi_fs_open_posix (const char *path, hio_fs_attr_t *fs_attr, int flags, int mode) {
 #pragma unused(fs_attr)
-  return open (path, flags, mode);
+  int fd;
+
+  fd = open (path, flags, mode);
+  if (-1 == fd) {
+    return hioi_err_errno (errno);
+  }
+
+  return fd;
 }
 
 static int hioi_fs_open_lustre_old (const char *path, hio_fs_attr_t *fs_attr, int flags, int mode) {
 #if defined(LL_SUPER_MAGIC)
-  bool use_posix_open = false;
-  int ret;
+  struct lov_user_md lum;
+  int rc, fd;
 
-  if (0 == access (path, F_OK)) {
-    /* can't set the striping on an existing file */
-    use_posix_open = true;
+  /* use a combination of posix open and luster ioctls to avoid issues with llapi_file_open */
+  if (flags & O_CREAT) {
+    flags |= O_LOV_DELAY_CREATE;
   }
 
-  if (!use_posix_open) {
-    /* NTH: use the default layout/starting index for now */
-    ret = llapi_file_open (path, flags, mode, fs_attr->fs_ssize, -1,
-                           fs_attr->fs_scount, 0);
-
-    if (0 > ret && EALREADY == errno) {
-      use_posix_open = true;
+  fd = open (path, flags, mode);
+  if (-1 == fd && EEXIST == errno) {
+    flags &= ~(O_LOV_DELAY_CREATE | O_CREAT);
+    fd = open (path, flags);
+    if (fd < 0) {
+      return hioi_err_errno (errno);
     }
+
+    return fd;
   }
 
-  if (use_posix_open) {
-    ret = open (path, flags, mode);
-  }
+  if (fd >= 0) {
+    if (flags & O_CREAT) {
+      /* NTH: use the default layout/starting index for now */
+      lum.lmm_magic = LOV_USER_MAGIC;
+      lum.lmm_pattern = 0;
+      lum.lmm_stripe_size = fs_attr->fs_ssize;
+      lum.lmm_stripe_count = fs_attr->fs_scount;
+      lum.lmm_stripe_offset = -1;
 
-  if (0 < ret) {
-    return ret;
+      rc = ioctl (fd, LL_IOC_LOV_SETSTRIPE, &lum);
+    }
+
+    return fd;
   }
 
   return hioi_err_errno (errno);
@@ -130,38 +145,73 @@ static struct lov_user_md *hioi_alloc_lustre_data (void) {
 }
 
 static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {
-  struct lov_user_md *lum_file;
-  int rc;
+  struct lov_user_md *lum;
+  struct find_param param;
+  char mountdir[PATH_MAX];
+  int rc, fd, obd_count;
 
-  lum_file = hioi_alloc_lustre_data ();
-  assert (NULL != lum_file);
+  rc = llapi_search_mounts (path, 0, mountdir, NULL);
+  if (0 != rc) {
+    return hioi_err_errno (-rc);
+  }
+
+#if !HAVE_LLAPI_GET_OBD_COUNT
+  fd = open (mountdir, O_RDONLY);
+  if (-1 == fd) {
+    return hioi_err_errno (errno);
+  }
+
+  rc = llapi_lov_get_uuids (fd, NULL, &obd_count);
+  close (fd);
+#else
+  rc = llapi_get_obd_count (mountdir, &obd_count, 0);
+#endif
+
+  if (0 != rc) {
+    return hioi_err_errno (errno);
+  }
 
   fs_attr->fs_flags |= HIO_FS_SUPPORTS_STRIPING;
+  fs_attr->fs_type  = HIO_FS_TYPE_LUSTRE;
+  fs_attr->fs_sunit = 64 * 1024;
+  fs_attr->fs_smax  = obd_count;
 
-  rc = llapi_file_get_stripe (path, lum_file);
-  if (0 == rc) {
-    fs_attr->fs_scount = lum_file->lmm_stripe_count;
-    fs_attr->fs_ssize  = lum_file->lmm_stripe_size;
+  lum = hioi_alloc_lustre_data ();
+  assert (NULL != lum);
 
-    free (lum_file);
-    return HIO_SUCCESS;
+  rc = llapi_file_get_stripe (path, lum);
+  if (0 != rc) {
+    /* assuming this is a directory try reading the default for the directory. this
+     * should be updated to check the parent directory if path is a file. */
+    fd = open (path, O_RDONLY);
+    if (-1 == fd) {
+      free (lum);
+      return hioi_err_errno (errno);
+    }
+
+    rc = ioctl (fd, LL_IOC_LOV_GETSTRIPE, lum);
+    close (fd);
+    if (0 > rc) {
+      free (lum);
+      return hioi_err_errno (errno);
+    }
+
+    fs_attr->fs_scount = lum->lmm_stripe_count;
+    fs_attr->fs_ssize  = lum->lmm_stripe_size;
   }
 
-  if (ENODATA != rc) {
-    return HIO_SUCCESS;
-  }
+  free (lum);
 
-  return hioi_err_errno (errno);
+  return HIO_SUCCESS;
 }
 
 #endif
 
 
 int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr) {
-  struct stat statinfo;
   struct statfs fsinfo;
-  char *statfs_path = (char *) path;
-  int ret;
+  char tmp[4096];
+  int rc;
 
   if (NULL == path) {
     return HIO_ERR_BAD_PARAM;
@@ -172,30 +222,14 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
       break;
     }
 
-    ret = stat (path, &statinfo);
-    if (0 != ret) {
-      fs_attr->fs_type = hioi_err_errno (errno);
+    if (NULL == realpath (path, tmp)) {
+      rc = hioi_err_errno (errno);
       break;
     }
 
-
-    if (S_ISDIR(statinfo.st_mode)) {
-      /* checking directory fs_attr. create a test file instead */
-      ret = asprintf (&statfs_path, "%s/.hio_test", path);
-      assert (0 < ret);
-      ret = open (statfs_path, O_CREAT | O_RDONLY, 0600);
-      if (0 > ret) {
-        free (statfs_path);
-        fs_attr->fs_type = hioi_err_errno (errno);
-        break;
-      }
-
-      close (ret);
-    }
-
     /* get general filesystem data */
-    ret = statfs (statfs_path, &fsinfo);
-    if (0 > ret) {
+    rc = statfs (tmp, &fsinfo);
+    if (0 > rc) {
       fs_attr->fs_type = hioi_err_errno (errno);
       break;
     }
@@ -208,33 +242,34 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
     fs_attr->fs_scount  = 0;
     fs_attr->fs_ssize   = 0;
     fs_attr->fs_flags   = 0;
+    fs_attr->fs_type    = HIO_FS_TYPE_DEFAULT;
 
     /* get filesytem specific data */
     switch (fsinfo.f_type) {
 #if defined(LL_SUPER_MAGIC)
     case LL_SUPER_MAGIC:
-      hioi_fs_query_lustre (statfs_path, fs_attr);
-      fs_attr->fs_type = HIO_FS_TYPE_LUSTRE;
+      hioi_fs_query_lustre (tmp, fs_attr);
       break;
 #endif
 #if defined(GPFS_SUPER_MAGIC)
     case GPFS_SUPER_MAGIC:
       /* gpfs */
+      break;
 #endif
 
 #if defined(PAN_FS_CLIENT_MAGIC)
     case PAN_FS_CLIENT_MAGIC:
       /* panfs */
+      break;
 #endif
-    default:
-      fs_attr->fs_type = HIO_FS_TYPE_DEFAULT;
     }
 
-    if (path != statfs_path) {
-      /* remove temporary file */
-      unlink (statfs_path);
-      free (statfs_path);
-    }
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "filesystem query: path: %s, type: %d, flags: 0x%x, block size: %" PRIu64
+              " block count: %" PRIu64 " blocks free: %" PRIu64 " stripe count: %" PRIu64 " stripe max: %" PRIu64
+              " stripe unit: %" PRIu64 " stripe size: %" PRIu64, tmp, fs_attr->fs_type, fs_attr->fs_flags, fs_attr->fs_bsize,
+              fs_attr->fs_btotal, fs_attr->fs_bavail, fs_attr->fs_scount, fs_attr->fs_smax, fs_attr->fs_sunit,
+              fs_attr->fs_ssize);
+
   } while (0);
 
 #if HIO_USE_MPI

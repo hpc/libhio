@@ -417,12 +417,11 @@ static int builtin_posix_module_element_open (struct hio_module_t *module, hio_d
     //hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "posix: calling open; path: %s open_flags: %i", path, open_flags);
     fd = fs_attr->fs_open (path, fs_attr, open_flags, posix_module->access_mode);
     if (fd < 0) {
-      int hrc = hioi_err_errno (errno);
-      hio_err_push (hrc, context, &dataset->dataset_object, "posix: error opening element path %s. "
+      hio_err_push (fd, context, &dataset->dataset_object, "posix: error opening element path %s. "
                     "errno: %d", path, errno);
       free (path);
       hioi_element_release (element);
-      return hrc;
+      return fd;
     }
 
     //hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "posix: calling fdopen; fd: %d file_mode: %c", fd, file_mode);
