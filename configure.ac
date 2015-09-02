@@ -1,4 +1,4 @@
-# -*- Autoconf -*-
+# -*- mode: shell-script-mode -*-
 # Copyright 2014-2015 Los Alamos National Security, LLC. All rights
 #                     reserved.
 
@@ -9,6 +9,8 @@ AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE([disable])
 AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
+
+hio_use_mpi=0
 
 if test -n "$XTOS_VERSION" && test ! "$CC" ; then
     # Work around Cray idiosyncrasies
@@ -24,8 +26,6 @@ if test -n "$XTOS_VERSION" && test ! "$CC" ; then
 elif test ${MPICC} = "mpicc" ; then
     CC=${MPICC}
     hio_use_mpi=1
-else
-    hio_use_mpi=0
 fi
 
 AM_INIT_AUTOMAKE
