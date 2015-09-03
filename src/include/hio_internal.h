@@ -157,4 +157,19 @@ uint64_t hioi_gettime (void);
  */
 int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode);
 
+/**
+ * Share a string with all processes in a context
+ *
+ * @param[in]     context hio context
+ * @param[in,out] string  string pointer to share from/store in
+ *
+ * This function shares a string with all processes in a context. On processes
+ * with rank other than 0 the existing string is freed (if *string is non-NULL)
+ * and space is allocated for the new string.
+ *
+ * @note When using MPI this call will make two calls to MPI_Bcast so it is
+ *       required that all processes in the context call this function.
+ */
+int hioi_string_scatter (hio_context_t context, char **string);
+
 #endif /* !defined(HIO_INTERNAL_H) */

@@ -352,3 +352,27 @@ hio_context_t hioi_object_context (hio_object_t object) {
 
   return hioi_object_context (object->parent);
 }
+
+int hioi_string_scatter (hio_context_t context, char **string) {
+#if HIO_USE_MPI
+  if (hioi_context_using_mpi (context)) {
+    int string_len;
+
+    if (0 == context->context_rank) {
+      string_len = strlen (*string);
+    }
+
+    MPI_Bcast (&string_len, 1, MPI_INT, 0, context->context_comm);
+
+    if (0 != context->context_rank) {
+      free (*string);
+      *string = malloc (string_len + 1);
+      assert (NULL != *string);
+    }
+
+    MPI_Bcast (*string, string_len + 1, MPI_BYTE, 0, context->context_comm);
+  }
+#endif
+
+  return HIO_SUCCESS;
+}

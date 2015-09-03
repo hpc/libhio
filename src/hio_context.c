@@ -21,6 +21,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/param.h>
+#include <assert.h>
 
 static hio_context_t hio_context_alloc (const char *identifier) {
   hio_context_t new_context;
@@ -167,11 +168,34 @@ static void hio_context_release (hio_context_t *contextp) {
   *contextp = HIO_OBJECT_NULL;
 }
 
+static int hioi_context_scatter (hio_context_t context) {
+  int rc;
+
+  rc = hioi_string_scatter (context, &context->context_data_roots);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+#if HIO_USE_DATAWARP
+  rc = hioi_string_scatter (context, &context->context_datawarp_root);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+#endif
+
+  return HIO_SUCCESS;
+}
+
 int hioi_context_create_modules (hio_context_t context) {
   char *data_roots, *data_root, *next_data_root, *last;
   hio_module_t *module = NULL;
   int num_modules = 0;
-  int rc = HIO_SUCCESS;
+  int rc;
+
+  rc = hioi_context_scatter (context);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
 
   data_roots = strdup (context->context_data_roots);
   if (NULL == data_roots) {
