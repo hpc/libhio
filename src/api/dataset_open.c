@@ -154,6 +154,10 @@ static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out,
   hio_module_t *module;
   void *tmp;
 
+  if ((flags & (HIO_FLAG_CREAT | HIO_FLAG_TRUNC)) == HIO_FLAG_CREAT) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
   for (int i = 0 ; i < context->context_module_count ; ++i) {
     module = context->context_modules[i];
 

@@ -83,65 +83,87 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
   *headers = NULL;
   *count = 0;
 
-  rc = asprintf (&path, "%s/%s.hio/%s/", module->data_root, context->context_object.identifier, name);
-  if (0 > rc) {
-    return hioi_err_errno (errno);
-  }
-
-  dir = opendir (path);
-  if (NULL == dir) {
-    return HIO_SUCCESS;
-  }
-
-  while (NULL != (dp = readdir (dir))) {
-    if (dp->d_name[0] != '.') {
-      num_set_ids++;
+  do {
+    if (0 != context->context_rank) {
+      break;
     }
+
+    rc = asprintf (&path, "%s/%s.hio/%s/", module->data_root, context->context_object.identifier, name);
+    assert (0 <= rc);
+
+    dir = opendir (path);
+    if (NULL == dir) {
+      num_set_ids = 0;
+      break;
+    }
+
+    while (NULL != (dp = readdir (dir))) {
+      if (dp->d_name[0] != '.') {
+        num_set_ids++;
+      }
+    }
+
+    *headers = (hio_dataset_header_t *) calloc (num_set_ids, sizeof (**headers));
+    assert (NULL != *headers);
+
+    rewinddir (dir);
+
+    while (NULL != (dp = readdir (dir))) {
+      if ('.' == dp->d_name[0]) {
+        continue;
+      }
+
+      char *manifest_path;
+
+      rc = asprintf (&manifest_path, "%s/%s/manifest.xml", path, dp->d_name);
+      assert (0 <= rc);
+
+      rc = hioi_manifest_read_header (context, headers[0] + set_id_index, manifest_path);
+      if (HIO_SUCCESS == rc) {
+        ++set_id_index;
+      } else {
+        /* skip dataset */
+        hio_err_push (rc, context, NULL, "error reading manifest for %s", manifest_path);
+      }
+
+      free (manifest_path);
+    }
+
+    num_set_ids = set_id_index;
+  } while (0);
+
+#if HIO_USE_MPI
+  if (hioi_context_using_mpi (context)) {
+    MPI_Bcast (&num_set_ids, 1, MPI_INT, 0, context->context_comm);
+  }
+#endif
+
+  if (0 == context->context_rank) {
+    closedir (dir);
+    free (path);
   }
 
   if (0 == num_set_ids) {
-    closedir (dir);
-    free (path);
+    free (*headers);
+    *headers = NULL;
+
     return HIO_SUCCESS;
   }
 
-  rewinddir (dir);
-
-  *headers = (hio_dataset_header_t *) calloc (num_set_ids, sizeof (**headers));
-  if (NULL == *headers) {
-    closedir (dir);
-    free (path);
-    return HIO_ERR_OUT_OF_RESOURCE;
+  if (0 != context->context_rank) {
+    *headers = (hio_dataset_header_t *) calloc (num_set_ids, sizeof (**headers));
+    assert (NULL != *headers);
   }
 
-  while (NULL != (dp = readdir (dir))) {
-    if ('.' == dp->d_name[0]) {
-      continue;
-    }
-
-    char *manifest_path;
-
-    rc = asprintf (&manifest_path, "%s/%s/manifest.xml", path, dp->d_name);
-    if (0 > rc) {
-      free (*headers);
-      *headers = NULL;
-      rc = HIO_ERR_OUT_OF_RESOURCE;
-      break;
-    }
-
-    rc = hioi_manifest_read_header (context, headers[0] + set_id_index++, manifest_path);
-    free (manifest_path);
-    if (HIO_SUCCESS != rc) {
-      break;
-    }
+#if HIO_USE_MPI
+  if (hioi_context_using_mpi (context)) {
+    MPI_Bcast (*headers, sizeof (**headers) * num_set_ids, MPI_BYTE, 0, context->context_comm);
   }
-
-  closedir (dir);
-  free (path);
+#endif
 
   *count = num_set_ids;
 
-  return rc;
+  return HIO_SUCCESS;
 }
 
 static int builtin_posix_module_dataset_alloc (struct hio_module_t *module,
