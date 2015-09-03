@@ -241,6 +241,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
     }
 
     if (!(flags & HIO_FLAG_CREAT)) {
+      /* load manifest. the manifest data will be shared with other processes in hioi_dataset_scatter */
       rc = asprintf (&path, "%s/manifest.xml", posix_dataset->base_path);
       assert (0 < rc);
 
@@ -259,6 +260,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
     posix_dataset->base.dataset_flags = flags;
   } while (0);
 
+  /* share dataset information will all processes in the communication domain */
   rc = hioi_dataset_scatter (&posix_dataset->base, rc);
   if (HIO_SUCCESS != rc) {
     free (posix_dataset->base_path);
