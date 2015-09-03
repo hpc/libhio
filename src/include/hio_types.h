@@ -195,23 +195,29 @@ enum {
 };
 
 struct hio_fs_attr_t {
+  /** filesystem type index */
   int      fs_type;
+  /** flags indicating filesystem features */
+  int      fs_flags;
   /** available blocks on the filesystem */
   uint64_t fs_bavail;
   /** total blocks on the filesystem */
   uint64_t fs_btotal;
   /** size of a filesystem block */
   uint64_t fs_bsize;
-  /** number of stripes (0 if unsupported) */
-  uint64_t fs_scount;
+
   /** size of a stripe (0 if unsupported) */
-  size_t   fs_ssize;
-  /** maximum stripe count */
-  int      fs_smax;
+  uint64_t fs_ssize;
   /** stripe unit (bytes) */
-  size_t   fs_sunit;
-  /** flags indicating filesystem features */
-  int      fs_flags;
+  uint64_t fs_sunit;
+  /** stripe maximum size */
+  uint64_t fs_smax_size;
+
+  /** number of stripes (0 if unsupported) */
+  uint32_t fs_scount;
+  /** maximum stripe count */
+  uint32_t fs_smax_count;
+
   /** filesystem open function (for data) */
   hio_fs_open_fn_t fs_open;
 };

@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <unistd.h>
+#include <string.h>
 
 #if HAVE_LUSTRE_LUSTREAPI_H
 #include <lustre/lustreapi.h>
@@ -64,7 +65,7 @@ static int hioi_fs_open_posix (const char *path, hio_fs_attr_t *fs_attr, int fla
   return fd;
 }
 
-static int hioi_fs_open_lustre_old (const char *path, hio_fs_attr_t *fs_attr, int flags, int mode) {
+static int hioi_fs_open_lustre (const char *path, hio_fs_attr_t *fs_attr, int flags, int mode) {
 #if defined(LL_SUPER_MAGIC)
   struct lov_user_md lum;
   int rc, fd;
@@ -108,7 +109,7 @@ static int hioi_fs_open_lustre_old (const char *path, hio_fs_attr_t *fs_attr, in
 
 hio_fs_open_fn_t hio_fs_open_fns[HIO_FS_TYPE_MAX] = {
   hioi_fs_open_posix,
-  hioi_fs_open_lustre_old,
+  hioi_fs_open_lustre,
   hioi_fs_open_posix,
 };
 
@@ -172,9 +173,10 @@ static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {
   }
 
   fs_attr->fs_flags |= HIO_FS_SUPPORTS_STRIPING;
-  fs_attr->fs_type  = HIO_FS_TYPE_LUSTRE;
-  fs_attr->fs_sunit = 64 * 1024;
-  fs_attr->fs_smax  = obd_count;
+  fs_attr->fs_type        = HIO_FS_TYPE_LUSTRE;
+  fs_attr->fs_sunit       = 64 * 1024;
+  fs_attr->fs_smax_size   = 0x100000000ul;
+  fs_attr->fs_smax_count  = obd_count;
 
   lum = hioi_alloc_lustre_data ();
   assert (NULL != lum);
@@ -234,15 +236,11 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
       break;
     }
 
+    memset (fs_attr, 0, sizeof (*fs_attr));
+
     fs_attr->fs_bavail  = fsinfo.f_bavail;
     fs_attr->fs_btotal  = fsinfo.f_blocks;
     fs_attr->fs_bsize   = fsinfo.f_bsize;
-
-    /* set default striping information (unsupported) */
-    fs_attr->fs_scount  = 0;
-    fs_attr->fs_ssize   = 0;
-    fs_attr->fs_flags   = 0;
-    fs_attr->fs_type    = HIO_FS_TYPE_DEFAULT;
 
     /* get filesytem specific data */
     switch (fsinfo.f_type) {
@@ -251,6 +249,7 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
       hioi_fs_query_lustre (tmp, fs_attr);
       break;
 #endif
+
 #if defined(GPFS_SUPER_MAGIC)
     case GPFS_SUPER_MAGIC:
       /* gpfs */
@@ -265,10 +264,10 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "filesystem query: path: %s, type: %d, flags: 0x%x, block size: %" PRIu64
-              " block count: %" PRIu64 " blocks free: %" PRIu64 " stripe count: %" PRIu64 " stripe max: %" PRIu64
-              " stripe unit: %" PRIu64 " stripe size: %" PRIu64, tmp, fs_attr->fs_type, fs_attr->fs_flags, fs_attr->fs_bsize,
-              fs_attr->fs_btotal, fs_attr->fs_bavail, fs_attr->fs_scount, fs_attr->fs_smax, fs_attr->fs_sunit,
-              fs_attr->fs_ssize);
+              " block count: %" PRIu64 " blocks free: %" PRIu64 " stripe count: %" PRIu64 " stripe max count: %" PRIu64
+              " stripe unit: %" PRIu64 " stripe size: %" PRIu64 " stripe max size: %" PRIu64, tmp, fs_attr->fs_type,
+              fs_attr->fs_flags, fs_attr->fs_bsize, fs_attr->fs_btotal, fs_attr->fs_bavail, fs_attr->fs_scount,
+              fs_attr->fs_smax_count, fs_attr->fs_sunit, fs_attr->fs_ssize, fs_attr->fs_smax_size);
 
   } while (0);
 

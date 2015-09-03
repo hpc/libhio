@@ -219,12 +219,26 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_STRIPING) {
     hioi_config_add (context, &posix_dataset->base.dataset_object, &fs_attr->fs_scount,
-                     "stripe_count", HIO_CONFIG_TYPE_UINT64, NULL, "Stripe count for all dataset "
+                     "stripe_count", HIO_CONFIG_TYPE_UINT32, NULL, "Stripe count for all dataset "
                      "data files", 0);
+
+    if (fs_attr->fs_scount > fs_attr->fs_smax_count) {
+      hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: requested stripe count %u exceeds the available resources. "
+                "adjusting to maximum %u", fs_attr->fs_scount, fs_attr->fs_smax_count);
+      fs_attr->fs_scount = fs_attr->fs_smax_count;
+    }
 
     hioi_config_add (context, &posix_dataset->base.dataset_object, &fs_attr->fs_ssize,
                      "stripe_size", HIO_CONFIG_TYPE_UINT64, NULL, "Stripe size for all dataset "
                      "data files", 0);
+
+    /* ensure the stripe size is a multiple of the stripe unit */
+    fs_attr->fs_ssize = fs_attr->fs_sunit * ((fs_attr->fs_ssize + fs_attr->fs_sunit - 1) / fs_attr->fs_sunit);
+    if (fs_attr->fs_ssize > fs_attr->fs_smax_size) {
+      hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: requested stripe size %" PRIu64 " exceeds the maximum %"
+                PRIu64 ". ", fs_attr->fs_ssize, fs_attr->fs_smax_size);
+      fs_attr->fs_ssize = fs_attr->fs_smax_size;
+    }
   }
 
   do {
