@@ -15,17 +15,20 @@
 #include <regex.h>
 #ifdef DLFCN
 #include <dlfcn.h>
-#endif
+#endif  // DLFCN
 #ifdef MPI
 #include <mpi.h>
-#endif
+#endif  // MPI
 #ifdef HIO
 #include "hio.h"
 #include "hio_config.h"
 #if HIO_USE_DATAWARP
 #include <datawarp.h>
-#endif
-#endif
+#ifndef DW_PH_2
+  #define DW_PH_2 0  // Phase 2 APIs not yet available
+#endif // DW_PH_2
+#endif // HIO_USE_DATAWARP
+#endif // HIO
 //----------------------------------------------------------------------------
 // DBGMAXLEV controls which debug messages are compiled into the program.
 // Set via compile option -DDBGMAXLEV=<n>, where <n> is 0 through 5.
@@ -162,7 +165,9 @@ char * help =
   "  hvse <name> <value>  Set hio elementq variable\n"
   #if HIO_USE_DATAWARP
   "  dwds <directory> Issue dw_wait_directory_stage\n"
+  #if DW_PH_2
   "  dwws <file>   Issue dw_wait_sync_complete\n"
+  #endif // DW_PH_2
   #endif // HIO_USE_DATAWARP
   #endif // HIO
   "  k <signal>    raise <signal> (number)\n"
@@ -1569,6 +1574,7 @@ ACTION_RUN(dwds_run) {
   VERB1("dw_wait_directory_stage(%s) rc: %d (%s)  time: %f Sec", V0.s, rc, strerror(abs(rc)), ETIMER_ELAPSED(&tmr));
 }
 
+#if DW_PH_2
 ACTION_RUN(dwws_run) {
   char * filename = V0.s;
   ETIMER tmr;
@@ -1591,6 +1597,7 @@ ACTION_RUN(dwws_run) {
     }
   }
 }
+#endif // DW_PH_2
 #endif // HIO_USE_DATAWARP
 
 #endif // HIO
@@ -1711,9 +1718,11 @@ struct parse {
   {"hvse",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvse_run    },
   #if HIO_USE_DATAWARP
   {"dwds",  {STR,  NONE,  NONE, NONE, NONE}, NULL,         dwds_run    },
+  #if DW_PH_2
   {"dwws",  {STR,  NONE,  NONE, NONE, NONE}, NULL,         dwws_run    },
-  #endif
-  #endif
+  #endif  // DW_PH_2
+  #endif  // HIO_USE_DATAWARP
+  #endif  // HIO
   {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",     {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
   {"grep",  {STR, STR,   NONE, NONE, NONE}, grep_check,    grep_run    },
