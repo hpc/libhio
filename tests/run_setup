@@ -35,11 +35,11 @@ synexit() {
   echo "        [-d <debug_level>]"
   echo ""
   echo "  Options:"   
-  echo "    -s <size>       Per rank run size t|s|m|l|x  (default s)"
-  echo "    -n <num_ranks>  Number of MPI ranks.  Default is all allocated"
-  echo "                    CPs or 2 on Mac OS"
-  echo "    -v <verbose_lev>   Verbosity level for xexec2, default 1"
-  echo "    -d <debug_lev>  Debug level for xexec2, default 0"
+  echo "    -s <size>         Per rank run size t|s|m|l|x  (default s)"
+  echo "    -n <num_ranks>    Number of MPI ranks.  Default is all"
+  echo "                      allocated CPs or 2 on Mac OS"
+  echo "    -v <verbose_lev>  Verbosity level for xexec2, default 1"
+  echo "    -d <debug_lev>    Debug level for xexec2, default 0"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
   
@@ -127,6 +127,8 @@ if [[ -z $HIO_TEST_ROOTS ]]; then
   elif [[ ${HOSTNAME:0:3} == "ga-" ]]; then
     HIO_TEST_ROOTS="DataWarp"
   elif [[ ${HOSTNAME:0:3} == "bu-" ]]; then
+    HIO_TEST_ROOTS="DataWarp"
+  elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then
     HIO_TEST_ROOTS="DataWarp"
   fi;
   addifd "/lscratch1/$LOGNAME"
