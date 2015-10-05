@@ -348,8 +348,14 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
 
   /* get a builtin-posix module for interfacing with the burst buffer file system */
   if (0 == strcmp (context->context_datawarp_root, "auto")) {
-    /* NTH: This will have to be updated or changed to a system parameter in the future */
-    rc = asprintf (&posix_data_root, "/dwphase1/%s", getenv ("USER"));
+    char *datawarp_tmp = getenv ("DW_JOB_STRIPED");
+
+    if (NULL == datawarp_tmp) {
+      /* NTH: This will have to be updated or changed to a system parameter in the future */
+      rc = asprintf (&posix_data_root, "/dwphase1/%s", getenv ("USER"));
+    } else {
+      rc = asprintf (&posix_data_root, "%s", datawarp_tmp);
+    }
   } else {
     rc = asprintf (&posix_data_root, "%s", context->context_datawarp_root);
   }
