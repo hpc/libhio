@@ -351,17 +351,21 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     char *datawarp_tmp = getenv ("DW_JOB_STRIPED");
 
     if (NULL == datawarp_tmp) {
-      /* NTH: This will have to be updated or changed to a system parameter in the future */
-      rc = asprintf (&posix_data_root, "/dwphase1/%s", getenv ("USER"));
-    } else {
-      rc = asprintf (&posix_data_root, "%s", datawarp_tmp);
+      hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: neither DW_JOB_STRIPED nor HIO_datawarp_root "
+                "set. disabling datawarp support");
+      return HIO_ERR_NOT_AVAILABLE;
+    }
+
+    posix_data_root = strdup (datawarp_tmp);
+    if (NULL == posix_data_root) {
+      return HIO_ERR_OUT_OF_RESOURCE;
     }
   } else {
     rc = asprintf (&posix_data_root, "%s", context->context_datawarp_root);
-  }
 
-  if (0 > rc) {
-    return HIO_ERR_OUT_OF_RESOURCE;
+    if (0 > rc) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
   }
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: using datawarp root: %s, pfs backing store: %s",
