@@ -808,10 +808,23 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
 
 static int builtin_posix_module_element_flush (struct hio_module_t *module, hio_element_t element,
                                                hio_flush_mode_t mode) {
-  hio_dataset_t dataset = hioi_element_dataset (element);
+  builtin_posix_module_dataset_t *posix_dataset =
+    (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
 
-  if (!(dataset->ds_flags & HIO_FLAG_WRITE)) {
+  if (!(posix_dataset->base.ds_flags & HIO_FLAG_WRITE)) {
     return HIO_ERR_PERM;
+  }
+
+  if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->base.ds_fmode) {
+    for (int i = 0 ; i < HIO_POSIX_MAX_OPEN_FILES ; ++i) {
+      if (element == posix_dataset->files[i].f_element) {
+        fflush (posix_dataset->files[i].f_fh);
+      }
+    }
+  } else {
+    if (element->e_fh) {
+      fflush (element->e_fh);
+    }
   }
 
   return HIO_SUCCESS;
