@@ -41,7 +41,7 @@ int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, 
                                  unsigned long reserved0, void *ptr, size_t count, size_t size,
                                  size_t stride) {
   hio_dataset_t dataset = hioi_element_dataset (element);
-  hio_module_t *module = dataset->dataset_module;
+  hio_module_t *module = dataset->ds_module;
   int rc;
 
   if (NULL == element) {

@@ -220,7 +220,7 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
   }
 
   do {
-    if (0 != context->context_rank) {
+    if (0 != context->c_rank) {
       break;
     }
 
@@ -273,7 +273,7 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
 
 #if HIO_USE_MPI
   if (hioi_context_using_mpi (context)) {
-    MPI_Bcast (fs_attr, sizeof (*fs_attr), MPI_BYTE, 0, context->context_comm);
+    MPI_Bcast (fs_attr, sizeof (*fs_attr), MPI_BYTE, 0, context->c_comm);
   }
 #endif
   if (0 > fs_attr->fs_type) {

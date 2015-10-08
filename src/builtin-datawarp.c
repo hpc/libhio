@@ -95,10 +95,10 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
 
   /* NTH -- TODO -- Need a way to expose the variable associated with the posix dataset up to the user */
   datawarp_dataset->posix_dataset = posix_dataset;
-  datawarp_dataset->base.dataset_module = module;
+  datawarp_dataset->base.ds_module = module;
 
   if (flags & HIO_FLAG_WRITE) {
-    hioi_config_add (context, &datawarp_dataset->base.dataset_object, &datawarp_dataset->stage_mode,
+    hioi_config_add (context, &datawarp_dataset->base.ds_object, &datawarp_dataset->stage_mode,
                      "datawarp_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
                      "Datawarp stage mode to use with this dataset instance", 0);
   }
@@ -118,7 +118,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
   char *dataset_path = NULL;
   int rc, stage_mode;
 
-  if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRITE)) {
+  if (0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE)) {
     /* keep a copy of the base path used by the posix module */
     dataset_path = strdup (posix_dataset->base_path);
     if (NULL == dataset_path) {
@@ -135,18 +135,18 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
   hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
 
-  if (0 == context->context_rank && (dataset->dataset_flags & HIO_FLAG_WRITE) && -2 != datawarp_dataset->stage_mode) {
+  if (0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE) && -2 != datawarp_dataset->stage_mode) {
     char *pfs_path;
 
-    rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->context_object.identifier,
-                   dataset->dataset_object.identifier, dataset->dataset_id);
+    rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->c_object.identifier,
+                   dataset->ds_object.identifier, dataset->dataset_id);
     if (0 > rc) {
       free (dataset_path);
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: staging datawarp dataset %s::%lld. "
-              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->dataset_object.identifier,
+              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->ds_object.identifier,
               dataset->dataset_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
     if (-1 == datawarp_dataset->stage_mode) {
@@ -164,8 +164,8 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     free (pfs_path);
     free (dataset_path);
     if (0 != rc) {
-      hio_err_push (HIO_ERROR, context, &dataset->dataset_object, "builtin-datawarp/dataset_close: error starting "
-                    "data stage on dataset %s::%lld. DWRC: %d", dataset->dataset_object.identifier, dataset->dataset_id, rc);
+      hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
+                    "data stage on dataset %s::%lld. DWRC: %d", dataset->ds_object.identifier, dataset->dataset_id, rc);
       return HIO_ERROR;
     }
 
@@ -173,9 +173,9 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     if (DW_STAGE_AT_JOB_END == stage_mode) {
       builtin_datawarp_dataset_backend_data_t *ds_data;
 
-      ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (dataset->dataset_data, "datawarp");
+      ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (dataset->ds_data, "datawarp");
       if (NULL == ds_data) {
-        ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_alloc (dataset->dataset_data, "datawarp",
+        ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_alloc (dataset->ds_data, "datawarp",
                                                                               sizeof (*ds_data));
         if (NULL == ds_data) {
           return HIO_ERR_OUT_OF_RESOURCE;
@@ -191,22 +191,22 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         return HIO_SUCCESS;
       }
 
-      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", module->data_root, context->context_object.identifier,
-                     dataset->dataset_object.identifier, ds_data->last_scheduled_stage_id);
+      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", module->data_root, context->c_object.identifier,
+                     dataset->ds_object.identifier, ds_data->last_scheduled_stage_id);
       if (0 > rc) {
         return HIO_ERR_OUT_OF_RESOURCE;
       }
 
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: revoking end-of-job stage for datawarp dataset %s::%lld. "
-                "burst-buffer directory: %s",  dataset->dataset_object.identifier, ds_data->last_scheduled_stage_id,
+                "burst-buffer directory: %s",  dataset->ds_object.identifier, ds_data->last_scheduled_stage_id,
                 dataset_path);
 
       /* revoke the end of job stage for the previous dataset */
       rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
       free (dataset_path);
       if (0 != rc) {
-        hio_err_push (HIO_ERROR, context, &dataset->dataset_object, "builtin-datawarp/dataset_close: error revoking prior "
-                      "end-of-job stage of dataset %s::%lld. errno: %d", dataset->dataset_object.identifier,
+        hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error revoking prior "
+                      "end-of-job stage of dataset %s::%lld. errno: %d", dataset->ds_object.identifier,
                       ds_data->last_scheduled_stage_id, errno);
         return HIO_ERROR;
       }
@@ -214,7 +214,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       ds_data->last_scheduled_stage_id = dataset->dataset_id;
 
       /* remove the last end-of-job dataset from the burst buffer */
-      (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->dataset_object.identifier,
+      (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->ds_object.identifier,
                                                 ds_data->last_scheduled_stage_id);
     }
   }
@@ -334,7 +334,7 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     return HIO_ERR_NOT_AVAILABLE;
   }
 
-  if (NULL == context->context_datawarp_root) {
+  if (NULL == context->c_dw_root) {
     hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempted to use datawarp without specifying "
               "the mount point of the datawarp file system");
     return HIO_ERR_NOT_AVAILABLE;
@@ -347,7 +347,7 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
   }
 
   /* get a builtin-posix module for interfacing with the burst buffer file system */
-  if (0 == strcmp (context->context_datawarp_root, "auto")) {
+  if (0 == strcmp (context->c_dw_root, "auto")) {
     char *datawarp_tmp = getenv ("DW_JOB_STRIPED");
 
     if (NULL == datawarp_tmp) {
@@ -361,7 +361,7 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
       return HIO_ERR_OUT_OF_RESOURCE;
     }
   } else {
-    rc = asprintf (&posix_data_root, "%s", context->context_datawarp_root);
+    rc = asprintf (&posix_data_root, "%s", context->c_dw_root);
 
     if (0 > rc) {
       return HIO_ERR_OUT_OF_RESOURCE;
@@ -395,7 +395,7 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  rc = asprintf (&new_module->base.data_root, "datawarp:%s", context->context_datawarp_root);
+  rc = asprintf (&new_module->base.data_root, "datawarp:%s", context->c_dw_root);
   if (0 > rc) {
     posix_module->fini (posix_module);
     free (new_module);

@@ -19,7 +19,7 @@ int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const c
     return HIO_ERR_BAD_PARAM;
   }
 
-  module = dataset->dataset_module;
+  module = dataset->ds_module;
 
   return module->element_open (module, dataset, element_out, element_name, flags);
 }

@@ -94,53 +94,51 @@ struct hio_object {
 };
 
 struct hio_context {
-  struct hio_object context_object;
+  struct hio_object c_object;
 
 #if HIO_USE_MPI
   /** internal communicator for this context */
-  MPI_Comm            context_comm;
-  bool                context_use_mpi;
+  MPI_Comm          c_comm;
+  bool              c_use_mpi;
 #endif
 
   /** my rank in the context */
-  int                 context_rank;
+  int               c_rank;
   /** number of ranks using this context */
-  int                 context_size;
+  int               c_size;
 
   /** unreported errors on this context */
-  void               *context_error_stack;
+  void             *c_estack;
   /** threading lock */
-  pthread_mutex_t     context_lock;
+  pthread_mutex_t   c_lock;
   /** comma-separated list of data roots available */
-  char               *context_data_roots;
+  char             *c_droots;
   /** print statistics on close */
-  bool                context_print_statistics;
+  bool              c_print_stats;
   /** number of bytes written to this context (local) */
-  uint64_t            context_bytes_written;
+  uint64_t          c_bwritten;
   /** number of bytes read from this context (local) */
-  uint64_t            context_bytes_read;
+  uint64_t          c_bread;
   /** context verbosity */
-  int32_t             context_verbose; // Signed to prevent Cray compiler error when comparing with 0 
-  /** time of last dataset completion */
-  struct timeval      context_last_checkpoint;
+  int32_t           c_verbose; // Signed to prevent Cray compiler error when comparing with 0
   /** file configuration for the context */
-  hio_config_kv_t    *context_file_configuration;
-  int                 context_file_configuration_count;
-  int                 context_file_configuration_size;
+  hio_config_kv_t  *c_fconfig;
+  int               c_fconfig_count;
+  int               c_fconfig_size;
 
   /** io modules (one for each data root) */
-  hio_module_t        *context_modules[HIO_MAX_DATA_ROOTS];
+  hio_module_t      *c_modules[HIO_MAX_DATA_ROOTS];
   /** number of data roots */
-  int                  context_module_count;
+  int                c_mcount;
   /** current active data root */
-  int                  context_current_module;
+  int                c_cur_module;
 
 #if HIO_USE_DATAWARP
   /** path to datawarp root */
-  char                *context_datawarp_root;
+  char              *c_dw_root;
 #endif
 
-  hio_list_t           context_dataset_data;
+  hio_list_t         c_ds_data;
 };
 
 struct hio_dataset_data_t {
@@ -173,13 +171,13 @@ struct hio_dataset_backend_data_t {
 };
 typedef struct hio_dataset_backend_data_t hio_dataset_backend_data_t;
 
-typedef enum hio_dataset_file_mode {
+typedef enum hio_dataset_fmode {
   /** use basic mode. unique address space results in a single file per element per rank.
    * shared address space results in a single file per element */
   HIO_FILE_MODE_BASIC,
   /** use optimized mode. there is no guarantee about file structure in this mode */
   HIO_FILE_MODE_OPTIMIZED,
-} hio_dataset_file_mode_t;
+} hio_dataset_fmode_t;
 
 struct hio_fs_attr_t;
 
@@ -226,95 +224,106 @@ typedef struct hio_fs_attr_t hio_fs_attr_t;
 
 struct hio_dataset {
   /** allows for type detection */
-  struct hio_object dataset_object;
+  struct hio_object   ds_object;
 
   /** dataset identifier */
-  uint64_t            dataset_id;
+  uint64_t            ds_id;
   /** flags used during creation of this dataset */
-  int                 dataset_flags;
+  int                 ds_flags;
   /** open mode */
-  hio_dataset_mode_t  dataset_mode;
+  hio_dataset_mode_t  ds_mode;
 
   /** module in use */
-  hio_module_t       *dataset_module;
+  hio_module_t       *ds_module;
 
   /** block size to use for optimized file mode */
   uint64_t            ds_bs;
 
   /** list of elements */
-  hio_list_t          dataset_element_list;
+  hio_list_t          ds_elist;
 
   /** dataset file modes */
-  hio_dataset_file_mode_t dataset_file_mode;
+  hio_dataset_fmode_t ds_fmode;
 
   /** open time */
-  struct timeval      dataset_open_time;
+  struct timeval      ds_otime;
 
   /** aggregate number of bytes read */
-  uint64_t            dataset_bytes_read;
+  uint64_t            ds_bread;
   /** aggregate read time */
-  uint64_t            dataset_read_time;
+  uint64_t            ds_rtime;
 
   /** aggregate number of bytes written */
-  uint64_t            dataset_bytes_written;
+  uint64_t            ds_bwritten;
   /** aggregate write time */
-  uint64_t            dataset_write_time;
+  uint64_t            ds_wtime;
 
   /** data associated with this dataset */
-  hio_dataset_data_t *dataset_data;
+  hio_dataset_data_t *ds_data;
 
   /** dataset status */
-  int                 dataset_status;
+  int                 ds_status;
 
   /** dataset open function (data) */
-  hio_fs_attr_t       dataset_fs_attr;
+  hio_fs_attr_t       fs_fsattr;
 };
 
 struct hio_request {
-  struct hio_object request_object;
-  bool         request_complete;
-  size_t       request_transferred;
-  int          request_status;
+  struct hio_object req_object;
+  /** completion indicator */
+  bool              req_complete;
+  /** number of bytes transferred */
+  size_t            req_transferred;
+  /** status of the request */
+  int               req_status;
 };
 
 typedef struct hio_manifest_segment_t {
-  hio_list_t             segment_list;
-  uint64_t               segment_file_offset;
-  uint64_t               segment_app_offset0;
-  uint64_t               segment_app_offset1;
-  uint64_t               segment_length;
+  /** list item (e_slist) */
+  hio_list_t seg_list;
+  /** file offset */
+  uint64_t   seg_foffset;
+  /** application offset */
+  uint64_t   seg_offset;
+  /** application rank (0 for shared) */
+  uint64_t   seg_rank;
+  /** length of segment */
+  uint64_t   seg_length;
 } hio_manifest_segment_t;
 
 struct hio_element {
-  struct hio_object element_object;
+  struct hio_object e_object;
 
   /** elements are held in a list on the associated dataset */
-  hio_list_t          element_list;
+  hio_list_t        e_list;
 
-  /** number of segments */
-  int                 element_segment_count;
   /** segment list */
-  hio_list_t          element_segment_list;
+  hio_list_t        e_slist;
 
   /** element is currently open */
-  bool                element_is_open;
+  bool              e_is_open;
 
   /** (basic mode only) backing file for this element */
-  char               *element_backing_file;
+  char             *e_bfile;
 
   /** first invalid offset after the last valid block */
-  int64_t             element_size;
+  int64_t           e_size;
 
   /** element file handle (not used by all backends) */
-  FILE               *element_fh;
+  FILE             *e_fh;
 };
 
 struct hio_dataset_header_t {
-  int64_t  dataset_id;
-  time_t   dataset_mtime;
-  int      dataset_mode;
-  int      dataset_file_mode;
-  int      dataset_status;
+  /** dataset identifier */
+  int64_t  ds_id;
+  /** dataset modification time */
+  time_t   ds_mtime;
+  /** dataset mode (unique, shared) */
+  int      ds_mode;
+  /** dataset file mode (optimized, basic) */
+  int      ds_fmode;
+  /** dataset status (set at close time) */
+  int      ds_status;
 };
 typedef struct hio_dataset_header_t hio_dataset_header_t;
 
@@ -341,7 +350,7 @@ hio_context_t hioi_object_context (hio_object_t object);
 /**
  * Macro to get the dataset for an hio element
  */
-#define hioi_element_dataset(e) (hio_dataset_t) (e)->element_object.parent
+#define hioi_element_dataset(e) (hio_dataset_t) (e)->e_object.parent
 
 /**
  * Allocate a new dataset object and populate it with common data (internal)
@@ -437,10 +446,10 @@ hio_request_t hioi_request_alloc (hio_context_t context);
 
 void hioi_request_release (hio_request_t request);
 
-int hioi_element_add_segment (hio_element_t element, off_t file_offset, uint64_t app_offset0,
-                              uint64_t app_offset1, size_t segment_length);
+int hioi_element_add_segment (hio_element_t element, off_t file_offset, uint64_t app_offset,
+                              int rank, size_t seg_length);
 
-int hioi_element_find_offset (hio_element_t element, uint64_t app_offset0, uint64_t app_offset1,
+int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int rank,
                               off_t *offset, size_t *length);
 
 /* manifest functions */
@@ -493,7 +502,7 @@ int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *head
 
 static inline bool hioi_context_using_mpi (hio_context_t context) {
 #if HIO_USE_MPI
-  return context->context_use_mpi;
+  return context->c_use_mpi;
 #endif
 
   return false;

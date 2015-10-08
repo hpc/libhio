@@ -41,7 +41,7 @@ int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request,
                                   unsigned long reserved0, const void *ptr, size_t count, size_t size,
                                   size_t stride) {
   hio_dataset_t dataset = hioi_element_dataset (element);
-  hio_module_t *module = dataset->dataset_module;
+  hio_module_t *module = dataset->ds_module;
   int rc;
 
   if (NULL == element) {
@@ -59,17 +59,17 @@ int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request,
 
 int hio_element_flush (hio_element_t element, hio_flush_mode_t mode) {
   hio_dataset_t dataset = hioi_element_dataset (element);
-  hio_module_t *module = dataset->dataset_module;
+  hio_module_t *module = dataset->ds_module;
 
   return module->element_flush (module, element, mode);
 }
 
 int hio_dataset_flush (hio_dataset_t dataset, hio_flush_mode_t mode) {
-  hio_module_t *module = dataset->dataset_module;
+  hio_module_t *module = dataset->ds_module;
   hio_element_t element;
   int rc;
 
-  hioi_list_foreach(element, dataset->dataset_element_list, struct hio_element, element_list) {
+  hioi_list_foreach(element, dataset->ds_elist, struct hio_element, e_list) {
     rc = module->element_flush (module, element, mode);
     if (HIO_SUCCESS != rc) {
       return rc;

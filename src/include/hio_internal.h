@@ -111,7 +111,7 @@ int hio_err_mpi (int mpirc);
 void hioi_log_unconditional (hio_context_t context, int level, char *format, ...);
  
 #define hioi_log(context, level,  ...)                            \
-  if ((context)->context_verbose >= level) {                      \
+  if ((context)->c_verbose >= level) {                      \
     hioi_log_unconditional ( (context), (level), __VA_ARGS__);    \
   }
 

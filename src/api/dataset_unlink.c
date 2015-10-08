@@ -19,7 +19,7 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio
     return HIO_ERR_BAD_PARAM;
   }
 
-  if (0 == ctx->context_module_count) {
+  if (0 == ctx->c_mcount) {
     /* create hio modules for each item in the specified data roots */
     rc = hioi_context_create_modules (ctx);
     if (HIO_SUCCESS != rc) {
@@ -38,8 +38,8 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio
   }
 
 
-  for (int i = 0 ; i < ctx->context_module_count ; ++i) {
-    module = ctx->context_modules[i];
+  for (int i = 0 ; i < ctx->c_mcount ; ++i) {
+    module = ctx->c_modules[i];
 
     if (HIO_SUCCESS == module->dataset_unlink (module, name, set_id)) {
       rc = HIO_SUCCESS;

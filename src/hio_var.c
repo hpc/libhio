@@ -215,8 +215,8 @@ static int hioi_config_set_value_internal (hio_context_t context, hio_var_t *var
  */
 static int hioi_config_set_from_file (hio_context_t context, hio_object_t object,
 				      hio_var_t *var) {
-  for (int i = 0 ; i < context->context_file_configuration_count ; ++i) {
-    hio_config_kv_t *kv = context->context_file_configuration + i;
+  for (int i = 0 ; i < context->c_fconfig_count ; ++i) {
+    hio_config_kv_t *kv = context->c_fconfig + i;
     if ((HIO_OBJECT_TYPE_ANY == kv->object_type || object->type == kv->object_type) &&
         (NULL == kv->object_identifier || !strcmp (object->identifier, kv->object_identifier)) &&
         !strcmp (var->var_name, kv->key)) {
@@ -236,7 +236,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
 
   if (HIO_OBJECT_TYPE_DATASET == object->type) {
     /* check for dataset specific variables */
-    snprintf (env_name, 256, "%sdataset_%s_%s_%s", hio_config_env_prefix, context->context_object.identifier,
+    snprintf (env_name, 256, "%sdataset_%s_%s_%s", hio_config_env_prefix, context->c_object.identifier,
               object->identifier, var->var_name);
 
     hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Looking for variable %s", env_name);
@@ -260,7 +260,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     }
   }
 
-  snprintf (env_name, 256, "%scontext_%s_%s", hio_config_env_prefix, context->context_object.identifier,
+  snprintf (env_name, 256, "%scontext_%s_%s", hio_config_env_prefix, context->c_object.identifier,
             var->var_name);
 
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Looking for variable %s", env_name);
@@ -332,8 +332,8 @@ static int hioi_config_kv_push (hio_context_t context, const char *identifier,
   hio_config_kv_t *kv = NULL;
   void *tmp;
 
-  for (int i = 0 ; i < context->context_file_configuration_count ; ++i) {
-    kv = context->context_file_configuration + i;
+  for (int i = 0 ; i < context->c_fconfig_count ; ++i) {
+    kv = context->c_fconfig + i;
 
     if (!strcmp (kv->key, key) && (kv->object_type == type ||
                                    HIO_OBJECT_TYPE_ANY == kv->object_type)) {
@@ -344,19 +344,19 @@ static int hioi_config_kv_push (hio_context_t context, const char *identifier,
   }
 
   if (NULL == kv) {
-    if (context->context_file_configuration_count == context->context_file_configuration_size) {
-      int new_size = context->context_file_configuration_size + 16;
+    if (context->c_fconfig_count == context->c_fconfig_size) {
+      int new_size = context->c_fconfig_size + 16;
 
-      tmp = realloc (context->context_file_configuration, new_size * sizeof (hio_config_kv_t));
+      tmp = realloc (context->c_fconfig, new_size * sizeof (hio_config_kv_t));
       if (NULL == tmp) {
         return HIO_ERR_OUT_OF_RESOURCE;
       }
 
-      context->context_file_configuration = tmp;
+      context->c_fconfig = tmp;
     }
 
-    new_index = context->context_file_configuration_count++;
-    kv = context->context_file_configuration + new_index;
+    new_index = context->c_fconfig_count++;
+    kv = context->c_fconfig + new_index;
 
     kv->key = strdup (key);
   } else {
@@ -399,9 +399,9 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
     return HIO_SUCCESS;
   }
 
-  if (!hioi_context_using_mpi (context) || 0 == context->context_rank) {
+  if (!hioi_context_using_mpi (context) || 0 == context->c_rank) {
     if (HIO_CONFIG_FILE_DEFAULT == config_file) {
-      asprintf (&default_file, "%s.cfg", context->context_object.identifier);
+      asprintf (&default_file, "%s.cfg", context->c_object.identifier);
       config_file = default_file;
     }
 
@@ -425,7 +425,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
 
 #if HIO_USE_MPI
   if (hioi_context_using_mpi (context)) {
-    MPI_Bcast (&data_size, 1, MPI_UNSIGNED, 0, context->context_comm);
+    MPI_Bcast (&data_size, 1, MPI_UNSIGNED, 0, context->c_comm);
   }
 #endif
 
@@ -441,7 +441,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
   }
 
 
-  if (!hioi_context_using_mpi (context) || 0 == context->context_rank) {
+  if (!hioi_context_using_mpi (context) || 0 == context->c_rank) {
     rc = read (fd, buffer, data_size);
     if (data_size != rc) {
       hio_err_push (HIO_ERR_TRUNCATE, context, NULL, "Read from configuration file %s trucated",
@@ -453,7 +453,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
 
 #if HIO_USE_MPI
   if (hioi_context_using_mpi (context)) {
-    MPI_Bcast (buffer, data_size, MPI_BYTE, 0, context->context_comm);
+    MPI_Bcast (buffer, data_size, MPI_BYTE, 0, context->c_comm);
   }
 #endif
 
@@ -477,7 +477,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
     }
 
     if (HIOI_CONFIG_PARSER_PARSE_KV == rc) {
-      if (HIO_OBJECT_TYPE_CONTEXT == type && strcmp (identifier, context->context_object.identifier)) {
+      if (HIO_OBJECT_TYPE_CONTEXT == type && strcmp (identifier, context->c_object.identifier)) {
         continue;
       }
 

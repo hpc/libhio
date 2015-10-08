@@ -13,7 +13,7 @@
 
 int hio_element_close (hio_element_t *element) {
   hio_dataset_t dataset = hioi_element_dataset (*element);
-  hio_module_t *module = dataset->dataset_module;
+  hio_module_t *module = dataset->ds_module;
   int rc;
 
   if (NULL == element || NULL == *element) {

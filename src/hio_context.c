@@ -32,38 +32,37 @@ static hio_context_t hio_context_alloc (const char *identifier) {
     return NULL;
   }
 
-  new_context->context_object.identifier = strdup (identifier);
-  if (NULL == new_context->context_object.identifier) {
+  new_context->c_object.identifier = strdup (identifier);
+  if (NULL == new_context->c_object.identifier) {
     free (new_context);
     return NULL;
   }
 
-  rc = hioi_var_init (&new_context->context_object);
+  rc = hioi_var_init (&new_context->c_object);
   if (HIO_SUCCESS != rc) {
-    free (new_context->context_object.identifier);
+    free (new_context->c_object.identifier);
     free (new_context);
 
     return NULL;
   }
 
-  new_context->context_object.type = HIO_OBJECT_TYPE_CONTEXT;
+  new_context->c_object.type = HIO_OBJECT_TYPE_CONTEXT;
 
   /* default context configuration */
-  new_context->context_verbose          = HIO_VERBOSE_ERROR;
-  new_context->context_print_statistics = false;
-  new_context->context_rank = 0;
-  new_context->context_size = 1;
-  new_context->context_last_checkpoint.tv_sec   = 0;
+  new_context->c_verbose          = HIO_VERBOSE_ERROR;
+  new_context->c_print_stats = false;
+  new_context->c_rank = 0;
+  new_context->c_size = 1;
 
-  new_context->context_file_configuration = NULL;
-  new_context->context_file_configuration_size = 0;
-  new_context->context_file_configuration_count = 0;
+  new_context->c_fconfig = NULL;
+  new_context->c_fconfig_size = 0;
+  new_context->c_fconfig_count = 0;
 
-  pthread_mutex_init (&new_context->context_lock, NULL);
+  pthread_mutex_init (&new_context->c_lock, NULL);
 
   // If env set, pick up verbose value from context or global env name
   char buf[256];
-  snprintf (buf, sizeof(buf), "HIO_context_%s_verbose", new_context->context_object.identifier);  
+  snprintf (buf, sizeof(buf), "HIO_context_%s_verbose", new_context->c_object.identifier);
   char *env_name = buf;
   char *verbose_env = getenv (env_name);
   if (!verbose_env) {
@@ -78,11 +77,11 @@ static hio_context_t hio_context_alloc (const char *identifier) {
       hioi_log (new_context, HIO_VERBOSE_ERROR, "Environment variable %s value \"%s\" not valid",
                 env_name, verbose_env);
     } else {
-      new_context->context_verbose = verbose_val;
+      new_context->c_verbose = verbose_val;
     }
   }
 
-  hioi_list_init (new_context->context_dataset_data);
+  hioi_list_init (new_context->c_ds_data);
 
   return new_context;
 }
@@ -95,15 +94,15 @@ static void hio_context_release (hio_context_t *contextp) {
   hio_context_t context = *contextp;
 
   /* clean up the context mutex */
-  pthread_mutex_destroy (&context->context_lock);
+  pthread_mutex_destroy (&context->c_lock);
 
-  for (int i = 0 ; i < context->context_module_count ; ++i) {
-    context->context_modules[i]->fini (context->context_modules[i]);
+  for (int i = 0 ; i < context->c_mcount ; ++i) {
+    context->c_modules[i]->fini (context->c_modules[i]);
   }
 
-  if (context->context_file_configuration) {
-    for (int i = 0 ; i < context->context_file_configuration_count ; ++i) {
-      hio_config_kv_t *kv = context->context_file_configuration + i;
+  if (context->c_fconfig) {
+    for (int i = 0 ; i < context->c_fconfig_count ; ++i) {
+      hio_config_kv_t *kv = context->c_fconfig + i;
       if (kv->key) {
         free (kv->key);
       }
@@ -114,15 +113,15 @@ static void hio_context_release (hio_context_t *contextp) {
         free (kv->object_identifier);
       }
     }
-    free (context->context_file_configuration);
+    free (context->c_fconfig);
   }
 
   /* clean up any mpi resources */
 #if HIO_USE_MPI
-  if (context->context_use_mpi) {
+  if (context->c_use_mpi) {
     int rc;
 
-    rc = MPI_Comm_free (&context->context_comm);
+    rc = MPI_Comm_free (&context->c_comm);
     if (MPI_SUCCESS != rc) {
       hio_err_push_mpi (rc, NULL, NULL, "Error freeing MPI communicator");
     }
@@ -130,25 +129,25 @@ static void hio_context_release (hio_context_t *contextp) {
 #endif
 
 #if HIO_USE_DATAWARP
-  if (context->context_datawarp_root) {
-    free (context->context_datawarp_root);
-    context->context_datawarp_root = NULL;
+  if (context->c_dw_root) {
+    free (context->c_dw_root);
+    context->c_dw_root = NULL;
   }
 #endif
 
   /* finalize object variables */
-  hioi_var_fini (&context->context_object);
+  hioi_var_fini (&context->c_object);
 
-  if (context->context_object.identifier) {
-    free (context->context_object.identifier);
+  if (context->c_object.identifier) {
+    free (context->c_object.identifier);
   }
 
-  if (context->context_data_roots) {
-    free (context->context_data_roots);
+  if (context->c_droots) {
+    free (context->c_droots);
   }
 
   /* clean up dataset data structures */
-  hioi_list_foreach_safe(ds_data, next, context->context_dataset_data, hio_dataset_data_t, dd_list) {
+  hioi_list_foreach_safe(ds_data, next, context->c_ds_data, hio_dataset_data_t, dd_list) {
     hio_dataset_backend_data_t *db_data, *db_next;
 
     hioi_list_remove(ds_data, dd_list);
@@ -171,13 +170,13 @@ static void hio_context_release (hio_context_t *contextp) {
 static int hioi_context_scatter (hio_context_t context) {
   int rc;
 
-  rc = hioi_string_scatter (context, &context->context_data_roots);
+  rc = hioi_string_scatter (context, &context->c_droots);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
 #if HIO_USE_DATAWARP
-  rc = hioi_string_scatter (context, &context->context_datawarp_root);
+  rc = hioi_string_scatter (context, &context->c_dw_root);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
@@ -197,7 +196,7 @@ int hioi_context_create_modules (hio_context_t context) {
     return rc;
   }
 
-  data_roots = strdup (context->context_data_roots);
+  data_roots = strdup (context->c_droots);
   if (NULL == data_roots) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
@@ -214,7 +213,7 @@ int hioi_context_create_modules (hio_context_t context) {
       break;
     }
 
-    context->context_modules[num_modules++] = module;
+    context->c_modules[num_modules++] = module;
     if (HIO_MAX_DATA_ROOTS == num_modules) {
       hioi_log (context, HIO_VERBOSE_WARN, "Maximum number of IO modules reached for this context");
       break;
@@ -222,8 +221,8 @@ int hioi_context_create_modules (hio_context_t context) {
     data_root = next_data_root;
   } while (NULL != data_root);
 
-  context->context_module_count = num_modules;
-  context->context_current_module = 0;
+  context->c_mcount = num_modules;
+  context->c_cur_module = 0;
 
   free (data_roots);
 
@@ -236,7 +235,7 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   char cwd_buffer[MAXPATHLEN] = "";
   int rc;
 
-  pthread_mutex_init (&context->context_lock, NULL);
+  pthread_mutex_init (&context->c_lock, NULL);
 
   rc = hioi_component_init (context);
   if (HIO_SUCCESS != rc) {
@@ -252,42 +251,42 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   /* default data root is the current working directory */
   getcwd (cwd_buffer, MAXPATHLEN);
 
-  rc = asprintf (&context->context_data_roots, "posix:%s", cwd_buffer);
+  rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  hioi_config_add (context, &context->context_object, &context->context_verbose,
+  hioi_config_add (context, &context->c_object, &context->c_verbose,
                    "verbose", HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Set context verbosity to %d", context->context_verbose);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Set context verbosity to %d", context->c_verbose);
 
-  hioi_config_add (context, &context->context_object, &context->context_data_roots,
+  hioi_config_add (context, &context->c_object, &context->c_droots,
                    "data_roots", HIO_CONFIG_TYPE_STRING, NULL,
                    "Comma-separated list of data roots to use with this context "
                    "(default: posix:$PWD)", 0);
 
-  hioi_config_add (context, &context->context_object, &context->context_print_statistics,
+  hioi_config_add (context, &context->c_object, &context->c_print_stats,
                    "print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
                    "to stdout when the context is closed (default: 0)", 0);
 
 #if HIO_USE_DATAWARP
-  context->context_datawarp_root = strdup ("auto");
-  hioi_config_add (context, &context->context_object, &context->context_datawarp_root,
+  context->c_dw_root = strdup ("auto");
+  hioi_config_add (context, &context->c_object, &context->c_dw_root,
                    "datawarp_root", HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
                    "for datawarp (burst-buffer) (default: auto-detect)", 0);
 #endif
 
-  hioi_perf_add (context, &context->context_object, &context->context_bytes_read,
+  hioi_perf_add (context, &context->c_object, &context->c_bread,
                  "bytes_read", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
                  "read in this context", 0);
 
-  hioi_perf_add (context, &context->context_object, &context->context_bytes_written,
+  hioi_perf_add (context, &context->c_object, &context->c_bwritten,
                  "bytes_written", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "
                  "written in this context", 0);
 
-  if (context->context_verbose > HIO_VERBOSE_MAX) {
-    context->context_verbose = HIO_VERBOSE_MAX;
+  if (context->c_verbose > HIO_VERBOSE_MAX) {
+    context->c_verbose = HIO_VERBOSE_MAX;
   }
 
   return HIO_SUCCESS;
@@ -345,17 +344,17 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 
   comm_in = comm ? *comm : MPI_COMM_WORLD;
 
-  rc = MPI_Comm_dup (comm_in, &context->context_comm);
-  if (MPI_COMM_NULL == context->context_comm) {
+  rc = MPI_Comm_dup (comm_in, &context->c_comm);
+  if (MPI_COMM_NULL == context->c_comm) {
     hio_err_push_mpi (rc, context, NULL, "Error duplicating MPI communicator");
     hio_context_release(&context);
     return hio_err_mpi (rc);
   }
 
-  context->context_use_mpi = true;
+  context->c_use_mpi = true;
 
-  MPI_Comm_rank (context->context_comm, &context->context_rank);
-  MPI_Comm_size (context->context_comm, &context->context_size);
+  MPI_Comm_rank (context->c_comm, &context->c_rank);
+  MPI_Comm_size (context->c_comm, &context->c_size);
 
   rc = hio_init_common (context, config_file, config_file_prefix, context_name);
   if (HIO_SUCCESS != rc) {
@@ -377,14 +376,14 @@ int hio_fini (hio_context_t *context) {
     return HIO_SUCCESS;
   }
 
-  if ((*context)->context_print_statistics) {
-    printf ("Context %s statistics:\n", (*context)->context_object.identifier);
-    printf ("  Bytes read: %" PRIu64 "\n", (*context)->context_bytes_read);
-    printf ("  Bytes written: %" PRIu64 "\n", (*context)->context_bytes_written);
+  if ((*context)->c_print_stats) {
+    printf ("Context %s statistics:\n", (*context)->c_object.identifier);
+    printf ("  Bytes read: %" PRIu64 "\n", (*context)->c_bread);
+    printf ("  Bytes written: %" PRIu64 "\n", (*context)->c_bwritten);
   }
 
   hioi_log (*context, HIO_VERBOSE_DEBUG_LOW, "Destroying context with identifier %s",
-            (*context)->context_object.identifier);
+            (*context)->c_object.identifier);
 
   hio_context_release (context);
   return hioi_component_fini ();
@@ -397,12 +396,12 @@ void hio_should_checkpoint (hio_context_t ctx, int *hint) {
 
 hio_module_t *hioi_context_select_module (hio_context_t context) {
   /* TODO -- finish implementation */
-  if (-1 == context->context_current_module) {
-    context->context_current_module = 0;
+  if (-1 == context->c_cur_module) {
+    context->c_cur_module = 0;
   }
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Selected module %d with data root %s",
-            context->context_current_module, context->context_modules[context->context_current_module]->data_root);
+            context->c_cur_module, context->c_modules[context->c_cur_module]->data_root);
 
-  return context->context_modules[context->context_current_module];
+  return context->c_modules[context->c_cur_module];
 }

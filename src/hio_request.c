@@ -23,7 +23,7 @@ hio_request_t hioi_request_alloc (hio_context_t context) {
     return NULL;
   }
 
-  request->request_object.type = HIO_OBJECT_TYPE_REQUEST;
+  request->req_object.type = HIO_OBJECT_TYPE_REQUEST;
 
   return request;
 }
@@ -53,13 +53,13 @@ int hio_request_test_internal (hio_request_t *requests, int nrequests, ssize_t *
       ++ncomplete;
     }
 
-    if (requests[i]->request_complete) {
+    if (requests[i]->req_complete) {
       if (complete) {
         complete[i] = true;
       }
 
       if (bytes_transferred) {
-        bytes_transferred[i] = requests[i]->request_transferred;
+        bytes_transferred[i] = requests[i]->req_transferred;
       }
 
       hioi_request_release (requests[i]);

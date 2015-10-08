@@ -47,7 +47,7 @@ void hioi_log_unconditional (hio_context_t context, int level, char *format, ...
 
   va_start (vargs, format);
   fprintf (stderr, "%s [hio:%d] (context: %s): ", time_buf, level, 
-           context->context_object.identifier);
+           context->c_object.identifier);
   vfprintf (stderr, format, vargs);
   fputs ("\n", stderr);
   va_end (vargs);
@@ -109,10 +109,10 @@ void hio_err_push (int hrc, hio_context_t context, hio_object_t object, char *fo
     hio_error_stack_head = new_item;
     pthread_mutex_unlock (&hio_error_stack_mutex);
   } else {
-    pthread_mutex_lock (&context->context_lock);
-    new_item->next = (hio_error_stack_item_t *) context->context_error_stack;
-    context->context_error_stack = (void *) new_item;
-    pthread_mutex_unlock (&context->context_lock);
+    pthread_mutex_lock (&context->c_lock);
+    new_item->next = (hio_error_stack_item_t *) context->c_estack;
+    context->c_estack = (void *) new_item;
+    pthread_mutex_unlock (&context->c_lock);
   }
 }
 
@@ -170,10 +170,10 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
     hio_error_stack_head = new_item;
     pthread_mutex_unlock (&hio_error_stack_mutex);
   } else {
-    pthread_mutex_lock (&context->context_lock);
-    new_item->next = (hio_error_stack_item_t *) context->context_error_stack;
-    context->context_error_stack = (void *) new_item;
-    pthread_mutex_unlock (&context->context_lock);
+    pthread_mutex_lock (&context->c_lock);
+    new_item->next = (hio_error_stack_item_t *) context->c_estack;
+    context->c_estack = (void *) new_item;
+    pthread_mutex_unlock (&context->c_lock);
   }
 }
 
@@ -199,12 +199,12 @@ int hio_err_get_last (hio_context_t context, char **error) {
     }
     pthread_mutex_unlock (&hio_error_stack_mutex);
   } else {
-    pthread_mutex_lock (&context->context_lock);
-    stack_error = (hio_error_stack_item_t *) context->context_error_stack;
+    pthread_mutex_lock (&context->c_lock);
+    stack_error = (hio_error_stack_item_t *) context->c_estack;
     if (NULL != stack_error) {
-      context->context_error_stack = (void *) stack_error->next;
+      context->c_estack = (void *) stack_error->next;
     }
-    pthread_mutex_unlock (&context->context_lock);
+    pthread_mutex_unlock (&context->c_lock);
   }
 
   if (NULL == stack_error) {
@@ -254,7 +254,7 @@ static int hio_err_print_last_vargs (hio_context_t context, FILE *output, char *
     rc = fprintf (output, "HIO %s <%s>: error code (%d) ", hostname, datetime, hrc);
   } else {
     rc = fprintf (output, "HIO %s <%s>: error code (%d) context (%s) ", hostname, datetime,
-                  hrc, context->context_object.identifier);
+                  hrc, context->c_object.identifier);
   }
 
   /* print the user's error message */
@@ -358,19 +358,19 @@ int hioi_string_scatter (hio_context_t context, char **string) {
   if (hioi_context_using_mpi (context)) {
     int string_len;
 
-    if (0 == context->context_rank) {
+    if (0 == context->c_rank) {
       string_len = strlen (*string);
     }
 
-    MPI_Bcast (&string_len, 1, MPI_INT, 0, context->context_comm);
+    MPI_Bcast (&string_len, 1, MPI_INT, 0, context->c_comm);
 
-    if (0 != context->context_rank) {
+    if (0 != context->c_rank) {
       free (*string);
       *string = malloc (string_len + 1);
       assert (NULL != *string);
     }
 
-    MPI_Bcast (*string, string_len + 1, MPI_BYTE, 0, context->context_comm);
+    MPI_Bcast (*string, string_len + 1, MPI_BYTE, 0, context->c_comm);
   }
 #endif
 

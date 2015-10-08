@@ -48,20 +48,20 @@ static void hio_dataset_item_swap (hio_dataset_item_t *itema, hio_dataset_item_t
 }
 
 static int hioi_dataset_header_highest_setid (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
-  if (ha->dataset_id > hb->dataset_id) {
+  if (ha->ds_id > hb->ds_id) {
     return 1;
   }
-  if (ha->dataset_id == hb->dataset_id) {
+  if (ha->ds_id == hb->ds_id) {
     return 0;
   }
   return -1;
 }
 
 static int hioi_dataset_header_newest (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
-  if (ha->dataset_mtime > hb->dataset_mtime) {
+  if (ha->ds_mtime > hb->ds_mtime) {
     return 1;
   }
-  if (ha->dataset_mtime == hb->dataset_mtime) {
+  if (ha->ds_mtime == hb->ds_mtime) {
     return 0;
   }
   return -1;
@@ -158,8 +158,8 @@ static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out,
     return HIO_ERR_BAD_PARAM;
   }
 
-  for (int i = 0 ; i < context->context_module_count ; ++i) {
-    module = context->context_modules[i];
+  for (int i = 0 ; i < context->c_mcount ; ++i) {
+    module = context->c_modules[i];
 
     rc = module->dataset_list (module, name, &headers, &count);
     if (!(HIO_SUCCESS == rc && count)) {
@@ -192,7 +192,7 @@ static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out,
   }
 
   while (HIO_SUCCESS == (rc = hio_dataset_item_pop (items, &item_count, &header, &module, compare))) {
-    rc = hio_dataset_open_internal (module, set_out, name, header.dataset_id, flags, mode);
+    rc = hio_dataset_open_internal (module, set_out, name, header.ds_id, flags, mode);
     if (HIO_SUCCESS == rc) {
       break;
     }
@@ -213,10 +213,10 @@ static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t *set_
     return HIO_ERR_NOT_FOUND;
   }
 
-  for (int i = 0 ; i <= context->context_module_count ; ++i) {
-    int module_index = (context->context_current_module + i) % context->context_module_count;
+  for (int i = 0 ; i <= context->c_mcount ; ++i) {
+    int module_index = (context->c_cur_module + i) % context->c_mcount;
 
-    module = context->context_modules[module_index];
+    module = context->c_modules[module_index];
 
     rc = hio_dataset_open_internal (module, set_out, name, set_id, flags, mode);
     if (HIO_SUCCESS == rc) {
@@ -235,7 +235,7 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
     return HIO_ERR_BAD_PARAM;
   }
 
-  if (0 == context->context_module_count) {
+  if (0 == context->c_mcount) {
     /* create hio modules for each item in the specified data roots */
     rc = hioi_context_create_modules (context);
     if (HIO_SUCCESS != rc) {

@@ -16,7 +16,7 @@ int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  *set_id = dataset->dataset_id;
+  *set_id = dataset->ds_id;
 
   return HIO_SUCCESS;
 }
