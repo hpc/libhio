@@ -1133,7 +1133,7 @@ int hio_dataset_should_checkpoint (hio_context_t context, const char *name);
  * type as returned by hio_config_get_info(). Dataset specific values can be
  * set on a context and will apply to all datasets opened in that context.
  */
-int hio_config_set_value (hio_object_t object, char *variable, char *value);
+int hio_config_set_value (hio_object_t object, const char *variable, const char *value);
 
 /**
  * @ingroup configuration

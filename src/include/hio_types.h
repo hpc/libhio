@@ -238,11 +238,11 @@ struct hio_dataset {
   /** module in use */
   hio_module_t       *dataset_module;
 
+  /** block size to use for optimized file mode */
+  uint64_t            ds_bs;
+
   /** list of elements */
   hio_list_t          dataset_element_list;
-
-  /** local process dataset backing file (relative to data root) */
-  char               *dataset_backing_file;
 
   /** dataset file modes */
   hio_dataset_file_mode_t dataset_file_mode;
@@ -377,6 +377,13 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
 int hioi_dataset_scatter (hio_dataset_t dataset, int rc);
 
 /**
+ * @brief gather dataset configuration from all processes
+ *
+ * @param[in] dataset     dataset to gather
+ */
+int hioi_dataset_gather (hio_dataset_t dataset);
+
+/**
  * Release a dataset object (internal)
  */
 void hioi_dataset_release (hio_dataset_t *set);
@@ -461,8 +468,10 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
  */
 int hioi_manifest_save (hio_dataset_t dataset, const char *path);
 
-int hioi_manifest_deserialize (hio_dataset_t dataset, unsigned char *data, size_t data_size);
+int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
 int hioi_manifest_load (hio_dataset_t dataset, const char *path);
+int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
+
 
 /**
  * Read header data from a manifest

@@ -503,7 +503,7 @@ void hioi_var_fini (hio_object_t object) {
   hioi_var_array_fini (&object->performance);
 }
 
-int hio_config_set_value (hio_object_t object, char *variable, char *value) {
+int hio_config_set_value (hio_object_t object, const char *variable, const char *value) {
   hio_var_t *var;
   int config_index;
 
@@ -540,6 +540,16 @@ int hio_config_get_value (hio_object_t object, char *variable, char **value) {
   }
 
   var = object->configuration.vars + config_index;
+
+  if (var->var_enum) {
+    for (int i = 0 ; i < var->var_enum->count ; ++i) {
+      if (var->var_storage->int32val == var->var_enum->values[i].value) {
+        *value = strdup (var->var_enum->values[i].string_value);
+
+        return *value ? HIO_SUCCESS : HIO_ERR_OUT_OF_RESOURCE;
+      }
+    }
+  }
 
   switch (var->var_type) {
   case HIO_CONFIG_TYPE_BOOL:
@@ -606,7 +616,11 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
   }
 
   if (type) {
-    *type = var->var_type;
+    if (var->var_enum) {
+      *type = HIO_CONFIG_TYPE_STRING;
+    } else {
+      *type = var->var_type;
+    }
   }
 
   if (read_only) {

@@ -137,6 +137,19 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                    "dataset_file_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
                    "Modes for writing dataset files. Valid values: (0: basic, 1: optimized)", 0);
 
+  if (context->context_size < 8192) {
+    new_dataset->ds_bs = 1ul << 30;
+  } else if (context->context_size < 131072) {
+    new_dataset->ds_bs = 1ul << 34;
+  } else {
+    new_dataset->ds_bs = 1ul << 38;
+  }
+
+  new_dataset->ds_bs = 1ul << 34;
+  hioi_config_add (context, &new_dataset->dataset_object, &new_dataset->ds_bs,
+                   "dataset_block_size", HIO_CONFIG_TYPE_INT64, NULL,
+                   "Block size to use when writing in optimized mode (default: job size dependent)", 0);
+
   /* set up performance variables */
   hioi_perf_add (context, &new_dataset->dataset_object, &new_dataset->dataset_bytes_read, "bytes_read",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset instance", 0);
@@ -254,6 +267,80 @@ hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *da
   }
 
   return NULL;
+}
+
+int hioi_dataset_gather (hio_dataset_t dataset) {
+#if HIO_USE_MPI
+  hio_context_t context = (hio_context_t) dataset->dataset_object.parent;
+  int parent = (context->context_rank - 1) >> 1;
+  int left = context->context_rank * 2 + 1, right = left + 1;
+  long int recv_size_left = 0, recv_size_right = 0, send_size;
+  MPI_Request reqs[2];
+  int64_t *sizes;
+  unsigned char *data;
+  size_t data_size;
+  int rc, nreqs = 0;
+
+  if (1 == context->context_size) {
+    /* nothing to do */
+    return rc;
+  }
+
+  /* the needs of this routine are a little more complicated than MPI_Reduce. the data size may
+   * grow as the results are reduced. this function implements a basic reduction algorithm on
+   * the hio dataset */
+
+  if (right < context->context_size) {
+    MPI_Irecv (&recv_size_right, 1, MPI_LONG, right, 1001, context->context_comm, reqs + 1);
+    ++nreqs;
+  }
+
+  if (left < context->context_size) {
+    MPI_Irecv (&recv_size_left, 1, MPI_LONG, left, 1001, context->context_comm, reqs);
+    ++nreqs;
+  }
+
+  if (nreqs) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "waiting on %d requests", nreqs);
+
+    MPI_Waitall (nreqs, reqs, MPI_STATUSES_IGNORE);
+
+    data = malloc (recv_size_right > recv_size_left ? recv_size_right : recv_size_left);
+    if (NULL == data) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    if (right < context->context_size) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "receiving %lu bytes of manifest data from %d", recv_size_right,
+                right);
+      MPI_Recv (data, recv_size_right, MPI_CHAR, right, 1002, context->context_comm, MPI_STATUS_IGNORE);
+      hioi_manifest_merge_data (dataset, data, recv_size_right);
+    }
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "receiving %lu bytes of manifest data from %d", recv_size_left,
+              left);
+    MPI_Recv (data, recv_size_left, MPI_CHAR, left, 1002, context->context_comm, MPI_STATUS_IGNORE);
+    hioi_manifest_merge_data (dataset, data, recv_size_left);
+    free (data);
+  }
+
+  if (parent >= 0) {
+    rc = hioi_manifest_serialize (dataset, &data, &data_size);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+
+    send_size = data_size;
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "sending %lu bytes of manifest data from %d to %d", send_size,
+              context->context_rank, parent);
+
+    MPI_Send (&send_size, 1, MPI_LONG, parent, 1001, context->context_comm);
+    MPI_Send (data, send_size, MPI_CHAR, parent, 1002, context->context_comm);
+
+    free (data);
+  }
+#endif
+  return HIO_SUCCESS;
 }
 
 int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {

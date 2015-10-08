@@ -172,4 +172,24 @@ int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode);
  */
 int hioi_string_scatter (hio_context_t context, char **string);
 
+/**
+ * Calculate CRC32 of buffer
+ *
+ * @param[in] buf     buffer to CRC
+ * @param[in] length  length of buffer
+ *
+ * @return CRC32 checksum
+ */
+uint32_t hioi_crc32 (uint8_t *buf, size_t length);
+
+/**
+ * Calculate CRC64 of buffer
+ *
+ * @param[in] buf     buffer to CRC
+ * @param[in] length  length of buffer
+ *
+ * @return CRC64 checksum
+ */
+uint64_t hioi_crc64 (uint8_t *buf, size_t length);
+
 #endif /* !defined(HIO_INTERNAL_H) */
