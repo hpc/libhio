@@ -139,7 +139,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     char *pfs_path;
 
     rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->c_object.identifier,
-                   dataset->ds_object.identifier, dataset->dataset_id);
+                   dataset->ds_object.identifier, dataset->ds_id);
     if (0 > rc) {
       free (dataset_path);
       return HIO_ERR_OUT_OF_RESOURCE;
@@ -147,7 +147,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: staging datawarp dataset %s::%lld. "
               "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->ds_object.identifier,
-              dataset->dataset_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
+              dataset->ds_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
     if (-1 == datawarp_dataset->stage_mode) {
       stage_mode = DW_STAGE_AT_JOB_END;
@@ -165,7 +165,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     free (dataset_path);
     if (0 != rc) {
       hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
-                    "data stage on dataset %s::%lld. DWRC: %d", dataset->ds_object.identifier, dataset->dataset_id, rc);
+                    "data stage on dataset %s::%lld. DWRC: %d", dataset->ds_object.identifier, dataset->ds_id, rc);
       return HIO_ERROR;
     }
 
@@ -181,10 +181,10 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
           return HIO_ERR_OUT_OF_RESOURCE;
         }
 
-        ds_data->last_scheduled_stage_id = dataset->dataset_id;
+        ds_data->last_scheduled_stage_id = dataset->ds_id;
       }
 
-      if (ds_data->last_scheduled_stage_id == dataset->dataset_id) {
+      if (ds_data->last_scheduled_stage_id == dataset->ds_id) {
         /* this dataset has the same identifier as the last know good one or this is the first successful stage
          * of this dataset in this context. destaging the dataset will undo the stage that was just performed so
          * just return */
@@ -211,7 +211,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         return HIO_ERROR;
       }
 
-      ds_data->last_scheduled_stage_id = dataset->dataset_id;
+      ds_data->last_scheduled_stage_id = dataset->ds_id;
 
       /* remove the last end-of-job dataset from the burst buffer */
       (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->ds_object.identifier,
