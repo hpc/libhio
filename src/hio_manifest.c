@@ -86,7 +86,7 @@ static int hioi_manifest_get_string (xmlDocPtr xml_doc, xmlNodePtr node, const x
 
   value_node = hioi_manifest_find_node (node, name);
   if (NULL == value_node) {
-    fprintf (stderr, "Could not find mode for %s\n", name);
+    fprintf (stderr, "Could not find node for %s\n", name);
     return HIO_ERR_NOT_FOUND;
   }
 
@@ -525,9 +525,7 @@ static int hioi_manifest_parse_1_0 (hio_dataset_t dataset, xmlDocPtr xml_doc, bo
     }
     xmlFree (tmp_string);
 
-    dataset->ds_fmode = mode;
-
-    if (HIO_FILE_MODE_OPTIMIZED == mode) {
+    if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
       rc = hioi_manifest_get_number (xml_doc, top, HIO_MANIFEST_KEY_BLOCK_SIZE, &size);
       if (HIO_SUCCESS != rc) {
         return HIO_ERR_BAD_PARAM;
