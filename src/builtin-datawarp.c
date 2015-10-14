@@ -135,7 +135,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
   hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
 
-  if (0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE) && -2 != datawarp_dataset->stage_mode) {
+  if (datawarp_module->pfs_path && 0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE) && -2 != datawarp_dataset->stage_mode) {
     char *pfs_path;
 
     rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->c_object.identifier,
@@ -334,15 +334,19 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     return HIO_ERR_NOT_AVAILABLE;
   }
 
-  if (NULL == context->c_dw_root) {
-    hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempted to use datawarp without specifying "
-              "the mount point of the datawarp file system");
+  if (NULL != next_data_root && (strncasecmp (next_data_root, "posix:", 6) || access (next_data_root + 6, F_OK))) {
+    hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempting to use datawarp but PFS stage out "
+              "path %s is not accessible", next_data_root);
     return HIO_ERR_NOT_AVAILABLE;
   }
 
-  if (NULL == next_data_root || strncasecmp (next_data_root, "posix:", 6) || access (next_data_root + 6, F_OK)) {
-    hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempting to use datawarp but PFS stage out "
-              "path %s is not accessible", next_data_root);
+  if (NULL == next_data_root) {
+    hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: using datawarp without file staging support");
+  }
+
+  if (NULL == context->c_dw_root) {
+    hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempted to use datawarp without specifying "
+              "the mount point of the datawarp file system");
     return HIO_ERR_NOT_AVAILABLE;
   }
 
@@ -388,11 +392,13 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
 
   new_module->posix_module = (builtin_posix_module_t *) posix_module;
 
-  new_module->pfs_path = strdup (next_data_root + 6);
-  if (NULL == new_module->pfs_path) {
-    posix_module->fini (posix_module);
-    free (new_module);
-    return HIO_ERR_OUT_OF_RESOURCE;
+  if (next_data_root) {
+    new_module->pfs_path = strdup (next_data_root + 6);
+    if (NULL == new_module->pfs_path) {
+      posix_module->fini (posix_module);
+      free (new_module);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
   }
 
   rc = asprintf (&new_module->base.data_root, "datawarp:%s", context->c_dw_root);
