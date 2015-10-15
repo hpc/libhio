@@ -13,3 +13,4 @@ test01_x_SOURCES = test01.c
 xexec_x_SOURCES = xexec.c cw_misc.c cw_misc.h
 
 xexec_x_CFLAGS = -DMPI -DHIO -DDLFCN
+xexec_x_LDFLAGS = -ldl -lm
