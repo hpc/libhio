@@ -4,19 +4,20 @@
 # Read and write N-1 test case with read data value checking.  
 
 case $size in
-  t ) blk=1k;   nblk=5;  segsz=5k;    nseg=2;;
-  s ) blk=20ki; nblk=8;  segsz=160ki; nseg=10;;
-  m ) blk=1Mi;  nblk=16; segsz=16Mi;  nseg=16;;
-  l ) blk=2Mi;  nblk=16; segsz=32Mi;  nseg=32;;
-  x ) blk=2Mi;  nblk=32; segsz=64Mi;  nseg=32;; 
+  t ) blk=1024;              nblk=5;  segsz=$((5   * $cons_ki)); nseg=2;;
+  s ) blk=20480;             nblk=8;  segsz=$((160 * $cons_ki)); nseg=10;;
+  m ) blk=$((1 * $cons_mi)); nblk=16; segsz=$((16  * $cons_mi)); nseg=16;;
+  l ) blk=$((2 * $cons_mi)); nblk=16; segsz=$((32  * $cons_mi)); nseg=32;;
+  x ) blk=$((2 * $cons_mi)); nblk=32; segsz=$((64  * $cons_mi)); nseg=64;; 
   * ) synexit "Error: invalid size $size";;
 esac
 
-msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg" 
+batch_sub $(( $segsz * $nseg * $ranks ))
+msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg  dw_cap: $dw_cap" 
 
 cmdw="
-  /@@ Write N-1 test case @/  
   name run03w v $verbose_lev d $debug_lev mi 0
+  /@@ Write N-1 test case @/  
   hi MY_CTX $HIO_TEST_ROOTS
   hdu NT1_DS 98 ALL 
   hdo NT1_DS 98 WRITE,CREAT SHARED
@@ -32,8 +33,8 @@ cmdw="
 "
 
 cmdr="
+  name run03r v $verbose_lev d $debug_lev mi 32
   /@@ Read N-1 test case with data checking @/  
-  name run03r v $verbose_lev d $debug_lev mi 0
   hi MY_CTX $HIO_TEST_ROOTS 
   hdo NT1_DS 98 READ SHARED
   heo MY_EL READ 20Mi
@@ -53,4 +54,4 @@ clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec.x $cmdw
 myrun .libs/xexec.x $cmdr
 check_rc
-clean_roots $HIO_TEST_ROOTS
+if [[ $max_rc == 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi

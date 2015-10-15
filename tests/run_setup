@@ -30,22 +30,33 @@ synexit() {
   echo "  Syntax:"
   echo "    $0"
   echo "        [-s <size>]]"
-  echo "        [-n <num_ranks>]"
+  echo "        [-r <num_ranks>]"
+  echo "        [-n <num_nodes>]"
+  echo "        [-p <ppn>]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
+  echo "        [-b] [-c]"
   echo ""
   echo "  Options:"   
-  echo "    -s <size>         Per rank run size t|s|m|l|x  (default s)"
-  echo "    -n <num_ranks>    Number of MPI ranks.  Default is all"
-  echo "                      allocated CPs or 2 on Mac OS"
-  echo "    -v <verbose_lev>  Verbosity level for xexec2, default 1"
-  echo "    -d <debug_lev>    Debug level for xexec2, default 0"
+  echo "    -s <size>       Per rank run size t|s|m|l|x  (default s)"
+  echo "    -r <num_ranks>  Number of MPI ranks.  Default is all allocated"
+  echo "                    PEs or 2 on Mac OS"
+  echo "    -n <num_nodes>  Number of nodes.  Default is all allocated nodes"
+  echo "                    or 2 or 1 on Mac OS"
+  echo "    -p <ppn>        PEs per node.  If specified with -n and -r, must agree"
+  echo "    -v <verbose_lev>   Verbosity level for xexec2, default 1"
+  echo "    -d <debug_lev>  Debug level for xexec2, default 0"
+  echo "    -b              Submit batch job with these options"
+  echo "    -c              Chain jobs - make this job dependant on previous job"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
   
   exit 8
 }
 
+#----------------------------------------------------------------------------
+# Functions for run_setup and test scripts to use
+#----------------------------------------------------------------------------
 cmd() {
   echo "$host ---> $*"
   eval "$*"
@@ -56,97 +67,76 @@ msg() {
   echo "$host $*" 
 }
 
-#----------------------------------------------------------------------------
-# Parse arguments
-#----------------------------------------------------------------------------
-host=`hostname -s`
-max_rc=0
-verbose_lev=1
-debug_lev=0
-
-# Platform specific defaults
-if [[ ${OSTYPE:0:6} == "darwin" ]]; then
-  mympicmd="mpirun"
-  size="s"
-  ranks=2
-else
-  size="m"
-  type aprun > /dev/null 2>&1
-  if [[ $? -eq 0 ]]; then
-    # aprun available - must be a Cray
-    mympicmd="aprun"
-    ranks=$PBS_NP
-  else
-    # aprun not available - use mpirun
-    mympicmd="mpirun"
-    ranks=$((SLURM_JOB_CPUS_PER_NODE * SLURM_JOB_NODES))
-  fi
-fi
-
-while getopts "hs:n:v:d:" optname; do
-  case $optname in
-    h ) synexit;;
-    s ) size=$OPTARG;;
-    n ) ranks=$OPTARG;;
-    v ) verbose_lev=$OPTARG;;
-    d ) debug_lev=$OPTARG;;
-   \? ) synexit "Error: invalid option";;
-  esac
-done
-shift $((OPTIND - 1 ))
-if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
-
-# Add .lib dir to library path
-build=${HIO_BUILD:=$PWD/..}
-libs=$build/src/.libs
-
-if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
-elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
-else echo "run_setup: OSTYPE \"$OSTYPE\" not recognized"; exit; fi
-
-# Load module environment recorded at build
-mod_script="hiobuild.modules.bash"
-if [[ -e $HIO_BUILD/$mod_script ]]; then . $HIO_BUILD/$mod_script; fi 
-
-#----------------------------------------------------------------------------
-# If HIO_TEST_ROOTS not set, set up default
-#----------------------------------------------------------------------------
-if [[ -n $PBS_JOBID ]]; then
-  job_dir="/${PBS_JOBID%%.*}"
-else
-  job_dir=""
-fi
-
-addifd() {
-  if [[ -d $1 ]]; then HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"; fi
+# Function to set dw_cap to a rounded DW capacity parameter
+dw_cap_round() {
+  dw_cap="$(( ($1 + $cons_mi - 1) / $cons_mi ))MiB" 
 }
 
-if [[ -z $HIO_TEST_ROOTS ]]; then
-  if [[ ${OSTYPE:0:6} == "darwin" ]]; then
-    HIO_TEST_ROOTS="posix:$PWD/.test_root1"
-  elif [[ ${HOSTNAME:0:3} == "ga-" ]]; then
-    HIO_TEST_ROOTS="DataWarp"
-  elif [[ ${HOSTNAME:0:3} == "bu-" ]]; then
-    HIO_TEST_ROOTS="DataWarp"
-  elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then
-    HIO_TEST_ROOTS="DataWarp"
-  fi;
-  addifd "/lscratch1/$LOGNAME"
-  addifd "/lscratch2/$LOGNAME"
-  addifd "/lscratch3/$LOGNAME"
-  addifd "/lscratch4/$LOGNAME"
-  addifd "/scratch1/users/$LOGNAME"
-  addifd "/lustre/scratch1/yellow/$LOGNAME"
-  addifd "$HOME/scratch-tmp"
-  if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
-fi
+# Function to check max_rc and output a summary message
+check_rc(){
+  if [[ $max_rc > 0 ]]; then result="FAILURE"
+  else result="SUCCESS"; fi
+  echo "###############################################################################"
+  echo "`date "+%Y-%m-%d %H:%M:%S"` Test: $0 -s $size -n $nodes -r $ranks   RESULT: $result"
+  echo "###############################################################################"
+}
 
-#----------------------------------------------------------------------------
-# Clean data roots, i.e., create or empty them out 
-#----------------------------------------------------------------------------
-# Late DW Ph 1 - location of BB directory
-HIO_TEST_DW="/tmp/dw_scr/$LOGNAME$job_dir"
-export HIO_datawarp_root=$HIO_TEST_DW
+# Function to build run script and submit batch job if batch mode
+batch_sub() {
+  # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
+  dw_cap="$(( (($1 * 21 / 20) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
+  if [[ $batch -eq 1 ]]; then
+    rundir="$PWD/run"
+    if [[ ! -d $rundir ]]; then cmd "mkdir -p $rundir"; fi
+    lastjob="$rundir/last_jobid"
+
+    # Ensure unique job name
+    jobname=`date +%Y%m%d.%H%M%S`
+    jobsh="$rundir/job.$jobname.sh"
+    while [[ -e $jobsh ]]; do
+      msg "File $jobsh already exists, trying another"
+      sleep 1
+      jobname=`date +%Y%m%d.%H%M%S`
+      jobsh="$rundir/job.$jobname.sh"
+    done
+
+    echo "#! /bin/bash" > $jobsh
+    echo "#MSUB -l nodes=$nodes:ppn=$ppn" >> $jobsh
+    echo "#MSUB -l walltime=8:00:00" >> $jobsh
+    if [[ $chain -ne 0 ]]; then
+      if [[ -r $lastjob ]]; then
+        read lastjobid < $lastjob
+        echo "#MSUB -l depend=$lastjobid" >> $jobsh
+      else
+        msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
+      fi
+    fi 
+    echo "#MSUB -o $rundir/job.$jobname.out -joe" >> $jobsh
+    echo "#MSUB -d $PWD" >> $jobsh
+    echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
+
+    echo "echo \"\`date \"+%Y-%m-%d %H:%M:%S\"\` Job $jobname start\"" >> $jobsh
+    echo "echo \"\"" >> $jobsh
+    echo "echo \"$jobsh:\"" >> $jobsh
+    echo "cat $jobsh" >> $jobsh
+    echo "echo \"\"" >> $jobsh
+
+    echo "$0 -s $size -v $verbose_lev -d $debug_lev" >> $jobsh
+
+    echo "echo \"\`date \"+%Y-%m-%d %H:%M:%S\"\` Job $jobname   end\"" >> $jobsh
+
+    msub_msg=`msub $jobsh`
+
+    shopt -s extglob
+    #jobid=${msub_msg##*([!0-9])}
+    jobid=${msub_msg:1}
+
+    echo "$jobid" > $lastjob
+    msg "run_setup: nodes/ranks/ppn: $nodes / $ranks / $ppn"
+    msg "run_setup: job $jobname ID: $jobid submitted"
+    exit
+  fi
+}
 
 # This string contains the logic to check, empty or create a test data root
 # directory.  It needs to be executed on a compute node via aprun for datawarp.
@@ -175,16 +165,23 @@ clean_cmd="
   fi
 "
 
+# Function to clean data roots, i.e., create or empty them out 
 clean_roots() {
   allroots=${1-HIO_TEST_ROOTS}
   IFS=","; read -ra root <<< "$allroots"; unset IFS
   for r in "${root[@]}"; do
     shopt -s nocasematch
-    echo "Cleaning: \"$r\""
     if [[ "$r" == "dw" || "$r" == "datawarp" ]]; then
-      echo "===> aprun bash"
-      aprun -n 1 -b bash -c "$clean_cmd" $HIO_TEST_DW
+      clean=""
+      if [[ -n $DW_JOB_STRIPED    ]]; then clean=$DW_JOB_STRIPED; fi
+      if [[ -n $HIO_datawarp_root ]]; then clean=$HIO_datawarp_root; fi
+      if [[ -n $clean ]]; then
+        echo "Cleaning: \"$r\""
+        echo "===> aprun bash"
+        aprun -n 1 -b bash -c "$clean_cmd" $HIO_datawarp_root
+      fi
     elif [[ ${r:0:6} == "posix:" ]]; then
+      echo "Cleaning: \"$r\""
       r=${r:6}
       # r=${r%"/"}
       # last=${r##*/}
@@ -201,10 +198,7 @@ clean_roots() {
   done
 }
 
-
-
-
-# function to invoke mpi on various platforms
+# function to invoke mpi on various platforms - sets max_rc
 myrun() {
   cmd "$mympicmd -n $ranks $*"
   rc=$?
@@ -212,27 +206,169 @@ myrun() {
   return $rc
 }
 
-# Function to check max_rc and output a summary message
-check_rc(){
-  if [[ $max_rc > 0 ]]; then result="FAILURE"
-  else result="SUCCESS"; fi
-  echo "############################################################"
-  echo "# TEST: $0   `date "+%Y-%m-%d %H:%M:%S"`   RESULT: $result"
-  echo "############################################################"
-}
+#----------------------------------------------------------------------------
+# Parse arguments and other common setup
+#----------------------------------------------------------------------------
+host=`hostname -s`
+max_rc=0
+verbose_lev=1
+debug_lev=0
+batch=0
+chain=0
 
-# Display results of run_setup
-msg "run_setup:            PWD: \"$PWD\""
-msg "run_setup:          build: \"$build\""
-msg "run_setup:           libs: \"$libs\""
-msg "run_setup: HIO_TEST_ROOTS: \"$HIO_TEST_ROOTS\""
-msg "run_setup:         mpicmd: \"$mympicmd\""
-msg "run_setup:           size: \"$size\""
-msg "run_setup:          ranks: $ranks"
-msg "run_setup:    verbose_lev: $verbose_lev"
-msg "run_setup:      debug_lev: $debug_lev"
-if [[ -n HIO_datawarp_root ]]; then
-  msg "run_setup: HIO_datawarp_root: \"$HIO_datawarp_root\""
+size="s"
+job_dir=""
+# Platform specific defaults
+if [[ ${OSTYPE:0:6} == "darwin" ]]; then
+  mympicmd="mpirun"
+else
+  size="m"
+  type aprun > /dev/null 2>&1
+  if [[ $? -eq 0 ]]; then
+    # aprun available - must be a Cray
+    mympicmd="aprun"
+    size="m"
+    if [[ -n $PBS_JOBID ]]; then
+      set | egrep "^PBS|^DW"
+      job_dir="/${PBS_JOBID%%.*}"
+    fi
+  else
+    # aprun not available - use mpirun
+    mympicmd="mpirun"
+    if [[ -n $SLURM_JOB_ID ]]; then
+      set | egrep "^SLURM|^DW"
+      job_dir="/SLURM_JOB_ID"
+    fi
+  fi
+fi
+
+args="$0 $*"
+while getopts "hs:r:n:p:v:d:bc" optname; do
+  case $optname in
+    h ) synexit;;
+    s ) size=$OPTARG;;
+    r ) ranks=$OPTARG;;
+    n ) nodes=$OPTARG;;
+    p ) ppn=$OPTARG;;
+    v ) verbose_lev=$OPTARG;;
+    d ) debug_lev=$OPTARG;;
+    b ) batch=1;;
+    c ) chain=1;;
+   \? ) synexit "Error: invalid option";;
+  esac
+done
+shift $((OPTIND - 1 ))
+if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
+
+# Figure out nodes, ranks and ppn
+until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
+  # Two parm cases -- calc third parm
+  if   [[ -n $nodes && -n $ranks ]]; then   ppn=$(( $ranks / $nodes ))   
+  elif [[ -n $nodes && -n $ppn ]];   then ranks=$(( $nodes * $ppn   ))   
+  elif [[ -n $ranks && -n $ppn ]];   then nodes=$(( $ranks / $ppn   ))
+  # Nodes only specified, determine ppn and iterate
+  elif [[ -n $nodes ]]; then
+    if   [[ -n $PBS_NUM_PPN ]]; then ppn=$PBS_NUM_PPN
+    elif [[ -n $SLURM_NTASKS_PER_NODE ]]; then ppn=$SLURM_NTASKS_PER_NODE
+    elif [[ ${OSTYPE:0:6} == "darwin" ]]; then ppn=2
+    else                                       ppn=2
+    fi
+  # Ranks only specified, determine nodes and iterate
+  elif [[ -n ranks ]]; then
+    if   [[ -n $PBS_NUM_NODES ]];         then nodes=$PBS_NUM_NODES
+    elif [[ -n $SLURM_JOB_NUM_NODES ]];   then nodes=$SLURM_JOB_NUM_NODES
+    elif [[ ${OSTYPE:0:6} == "darwin" ]]; then nodes=1
+    elif [[ $ranks -eq 1 ]];              then nodes=1
+    else                                       nodes=2
+    fi
+  # ppn only specified, determine nodes and iterate
+  elif [[ -n ranks ]]; then
+    if [[ ${OSTYPE:0:6} == "darwin" ]]; then nodes=1
+    else                                     nodes=2
+    fi 
+  # Nothing specified, determine ranks and iterate
+  else
+    if   [[ -n $PBS_NP ]]; then                ranks=$PBS_NP
+    elif [[ -n $SLURN_NPROCS ]]; then          ranks=$SLURM_NPROCS
+    elif [[ ${OSTYPE:0:6} == "darwin" ]]; then ranks=2
+    else                                       ranks=4
+    fi
+  fi
+done  
+
+
+if [[ $ranks -ne $(($nodes * $ppn)) ]]; then
+  msg "ranks ($ranks) != nodes ($nodes) x ppn ($ppn)"
+  exit
+fi
+
+# set some convenient constants
+cons_ki=1024
+cons_mi=$((1024*1024))
+cons_gi=$((1024*1024*1024))
+
+# Following commands for actually running, i.e., not batch submission
+if [[ $batch -eq 0 ]]; then
+  # Add .lib dir to library path
+  build=${HIO_BUILD:=$PWD/..}
+  libs=$build/src/.libs
+
+  if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
+  elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
+  else echo "run_setup: OSTYPE \"$OSTYPE\" not recognized"; exit; fi
+
+  # Load module environment recorded at build
+  mod_script="hiobuild.modules.bash"
+  if [[ -e $HIO_BUILD/$mod_script ]]; then . $HIO_BUILD/$mod_script; fi 
+
+  # If HIO_datawarp_root not set, set up manually allocated DW if needed
+  # If not set, HIO will use $DW_JOB_STRIPED
+  if [[ ${HOST:0:3} == "tt-" ]]; then
+    # Late DW Ph 1 - location of manually allocated BB directory
+    export HIO_datawarp_root="/tmp/dw_scr/$LOGNAME$job_dir"
+  fi
+
+  addifd() {
+    if [[ -d $1 ]]; then HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"; fi
+  }
+
+  # If HIO_TEST_ROOTS not set, set up default
+  if [[ -z $HIO_TEST_ROOTS ]]; then
+    if [[ ${HOSTNAME:0:3} == "ga-" ]]; then
+      HIO_TEST_ROOTS="DataWarp"
+    elif [[ ${HOST:0:3} == "bu-" ]]; then # buffy only sets HOST corrrectly
+      HIO_TEST_ROOTS="DataWarp"
+    elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then
+      HIO_TEST_ROOTS="DataWarp"
+    fi;
+    addifd "/lscratch1/$LOGNAME"
+    addifd "/lscratch2/$LOGNAME"
+    addifd "/lscratch3/$LOGNAME"
+    addifd "/lscratch4/$LOGNAME"
+    addifd "/scratch1/users/$LOGNAME"
+    addifd "/lustre/scratch1/yellow/$LOGNAME"
+    addifd "$HOME/scratch-tmp"
+    if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
+  fi
+  
+  # Special hack for buffy - since no PFS, inhibit staging for sizes larger than tiny
+  if [[ ${HOST:0:3} == "bu-" && $size != "t" ]]; then
+    msg "Buffy with size > tiny, disabling datawarp staging"
+    export HIO_datawarp_stage_mode="disable"
+  fi
+
+  # Display results of run_setup
+  msg "run_setup:                    Args: \"$args\""
+  msg "run_setup:                     PWD: \"$PWD\""
+  msg "run_setup:                   build: \"$build\""
+  msg "run_setup:                    libs: \"$libs\""
+  msg "run_setup:          HIO_TEST_ROOTS: \"$HIO_TEST_ROOTS\""
+  msg "run_setup:                  mpicmd: \"$mympicmd\""
+  msg "run_setup:                    size: \"$size\""
+  msg "run_setup:         nodes/ranks/ppn: $nodes / $ranks / $ppn"
+  msg "run_setup:           verbose/debug: $verbose_lev / $debug_lev"
+  msg "run_setup:       HIO_datawarp_root: \"$HIO_datawarp_root\""
+  msg "run_setup: HIO_datawarp_stage_mode: \"$HIO_datawarp_stage_mode\""
 fi
 
 # --- end of run_setup ---

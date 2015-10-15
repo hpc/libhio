@@ -4,19 +4,21 @@
 # Read and write N-N test case with read data value checking.  
 
 case $size in
-  t ) blk=1k;   nblk=5;;
-  s ) blk=20ki; nblk=8;;   
-  m ) blk=1Mi;  nblk=200;;
-  l ) blk=2Mi;  nblk=512;;
-  x ) blk=2Mi;  nblk=1024;;
+  t ) blk=1024;                nblk=5;;
+  s ) blk=20480;               nblk=8;;   
+  m ) blk=$((1 * $cons_mi));  nblk=200;;
+  l ) blk=$((2 * $cons_mi));  nblk=512;;
+  x ) blk=$((4 * $cons_mi));  nblk=1024;;
   * ) synexit "Error: invalid size $size";;
 esac
 
-msg "blk: $blk  nblk: $nblk  segsz: $segsz  nseg: $nseg" 
+batch_sub $(( $blk * $nblk * $ranks ))
+
+msg "blk: $blk  nblk: $nblk  dw_cap: $dw_cap" 
 
 cmdw="
-  /@@ Read and write N-N test case with read data value checking @/
   name run02w v $verbose_lev d $debug_lev mi 0
+  /@@ Read and write N-N test case with read data value checking @/
   hi MY_CTX $HIO_TEST_ROOTS 
   hdo NTN_DS 97 WRITE,CREAT UNIQUE
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
@@ -28,8 +30,8 @@ cmdw="
 "
 
 cmdr="
+  name run02r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N test case with read data value checking @/
-  name run02r v $verbose_lev d $debug_lev mi 0
   hi MY_CTX $HIO_TEST_ROOTS 
   hdo NTN_DS 97 READ UNIQUE
   heo MY_EL READ 20Mi
@@ -45,4 +47,4 @@ clean_roots $HIO_TEST_ROOTS
 myrun .libs/xexec.x $cmdw
 myrun .libs/xexec.x $cmdr
 check_rc
-clean_roots $HIO_TEST_ROOTS
+if [[ $max_rc == 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi
