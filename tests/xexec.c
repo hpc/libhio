@@ -45,6 +45,8 @@
 #endif
 #include "cw_misc.h"
 
+#define VERB_LEV_MULTI 2
+
 //----------------------------------------------------------------------------
 // To build:    cc -O3       xexec.c cw_misc.c -I. -o xexec.x
 //       or: mpicc -O3 -DMPI xexec.c cw_misc.c -I. -o xexec.x
@@ -151,12 +153,12 @@ char * help =
   "  hdc           Dataset close\n"
   "  hdu <name> <id> CURRENT|FIRST|ALL  Dataset unlink\n"
   "  hf            Fini\n"
-  "  hck <ON|OFF>  Enable read data checking\n"
+  "  hck <ON|OFF>  Enable read data checking [2]\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
   "  hxdi <id> Expect dataset ID on next hdo\n"
   "  hvp <type regex> <name regex> Prints config and performance variables that match\n"
-  "                the type and name regex's.  Types are two letter codes {c|p} {c|d|e}\n"
+  "                the type and name regex's [1][2].  Types are two letter codes {c|p} {c|d|e}\n"
   "                where c|p is config or perf and c|d|e is context or dataset or element\n"
   "                \"hvp . .\" will print everything\n"
   "                \"hvp p total\" will print all perf vars containing \"total\" in the name\n"
@@ -172,17 +174,20 @@ char * help =
   #endif // HIO
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
-  "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines\n"
+  "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines [1]\n"
   "\n"
-  "  Numbers can be specified with suffixes %s\n"
+  "Notes:\n"
+  " Numbers can be specified with suffixes %s\n"
   "\n"
-  "  Comments are delimited with /@, /@@ and @/, however those must stand alone in the \n"
-  "  actions as separate tokens.  Also, /@ is only recognized if it is the first\n"
-  "  token of an action. Comments starting with /@@ are printed. Comments may be nested.\n"
+  " Comments are delimited with /@, /@@ and @/, however those must stand alone in the \n"
+  " actions as separate tokens.  Also, /@ is only recognized if it is the first\n"
+  " token of an action. Comments starting with /@@ are printed. Comments may be nested.\n"
   "\n"
-  "  <regex> parameters are POSIX extended regular expressions. See man 7 regex\n"
+  " [1] <regex> parameters are POSIX extended regular expressions. See man 7 regex\n"
   "\n"
-  "  Example action sequences:\n"
+  " [2] Output only if MPI not active or if rank 0 or if verbose >= " STRINGIFY(VERB_LEV_MULTI) ".\n" 
+  "\n"
+  " Example action sequences:\n"
   "    v 1 d 1\n"
   "    lc 3 s 0 le\n"
   "    lt 3 s 1 le\n"
@@ -284,6 +289,7 @@ MSG_CONTEXT my_msg_context;
 
   // Serialize execution of all MPI ranks
   #define RANK_SERIALIZE_START                           \
+    DBG4("RANK_SERIALIZE_START");                        \
     MPI_CK(MPI_Barrier(mpi_comm));                       \
     if (mpi_size > 0 && myrank != 0) {                   \
       char buf;                                          \
@@ -292,15 +298,25 @@ MSG_CONTEXT my_msg_context;
              MPI_ANY_TAG, mpi_comm, &status));           \
     }
   #define RANK_SERIALIZE_END                             \
+    DBG4("RANK_SERIALIZE_END");                          \
     if (mpi_size > 0 && myrank != mpi_size - 1) {        \
       char buf;                                          \
       MPI_CK(MPI_Send(&buf, 1, MPI_CHAR, myrank + 1,     \
              0, mpi_comm));                              \
-    }
+    }                                                    \
+    MPI_CK(MPI_Barrier(mpi_comm));                       
 #else
   #define RANK_SERIALIZE_START
   #define RANK_SERIALIZE_END
 #endif
+
+#define R0_OR_VERB_START                                                                  \
+  if ( (MY_MSG_CTX)->verbose_level >= VERB_LEV_MULTI ) RANK_SERIALIZE_START;              \
+  if ( mpi_size == 0 || myrank == 0 || (MY_MSG_CTX)->verbose_level >= VERB_LEV_MULTI ) {  
+
+#define R0_OR_VERB_END                                                                    \
+  }                                                                                       \
+  if ( (MY_MSG_CTX)->verbose_level >= VERB_LEV_MULTI ) RANK_SERIALIZE_END;
 
 void get_id() {
   char * p;
@@ -1192,9 +1208,9 @@ static ETIMER hio_tmr;
 #define HRC_TEST(API_NAME)  {                                                                \
   local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);           \
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                          \
-    MSG("%s: " #API_NAME " %s; rc: %s exp: %s", A.desc, hio_fail ? "FAIL": "OK",             \
-         enum_name(MY_MSG_CTX, &etab_herr, hrc),                                             \
-         enum_name(MY_MSG_CTX, &etab_herr, hio_rc_exp));                                     \
+    MSG("%s: " #API_NAME " %s; rc: %s exp: %s errno: %d(%s)", A.desc,                        \
+         hio_fail ? "FAIL": "OK", enum_name(MY_MSG_CTX, &etab_herr, hrc),                    \
+         enum_name(MY_MSG_CTX, &etab_herr, hio_rc_exp), errno, strerror(errno));             \
   }                                                                                          \
   if (hrc != HIO_SUCCESS) hio_err_print_all(context, stderr, "[" #API_NAME " error]");       \
   hio_rc_exp = HIO_SUCCESS;                                                                  \
@@ -1204,8 +1220,8 @@ static ETIMER hio_tmr;
   if (HIO_CNT_REQ == hio_cnt_exp) hio_cnt_exp = hreq;                                        \
   local_fails += (hio_fail = ( hcnt != hio_cnt_exp && hio_cnt_exp != HIO_CNT_ANY ) ? 1: 0);  \
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {                                          \
-    MSG("%s: " #API_NAME " %s; cnt: %d exp: %d", A.desc, hio_fail ? "FAIL": "OK",            \
-         hcnt, hio_cnt_exp);                                                                 \
+    MSG("%s: " #API_NAME " %s; cnt: %d exp: %d errno: %d(%s)", A.desc,                       \
+         hio_fail ? "FAIL": "OK", hcnt, hio_cnt_exp, errno, strerror(errno));                \
   }                                                                                          \
   hio_err_print_all(context, stderr, "[" #API_NAME " error]");                               \
   hio_cnt_exp = HIO_CNT_REQ;                                                                 \
@@ -1297,7 +1313,9 @@ ACTION_RUN(heo_run) {
 
 ACTION_RUN(hck_run) {
   hio_check = V0.i;
-  VERB1("HIO read data checking is now %s", V0.s); 
+  R0_OR_VERB_START
+    VERB1("HIO read data checking is now %s", V0.s); 
+  R0_OR_VERB_END
 }
 
 ACTION_CHECK(hew_check) {
@@ -1393,6 +1411,8 @@ ACTION_RUN(hec_run) {
   bufsz = 0;
 }
 
+#define GIGBIN (1024.0 * 1024.0 * 1024.0)
+
 ACTION_RUN(hdc_run) {
   hio_return_t hrc;
   hrc = hio_dataset_close(&dataset);
@@ -1402,11 +1422,11 @@ ACTION_RUN(hdc_run) {
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   if (myrank == 0) {
-    VERB1("hdo-hdc R/W GB: %f %f  time: %f S  R/W speed: %f %f GB/S",
-          (double)rw_count_sum[0]/1E9, (double)rw_count_sum[1]/1E9, time, 
-           rw_count_sum[0] / time / 1E9, rw_count_sum[1] / time / 1E9 ); 
-    printf("<td> Read_speed %f GB/S\n", rw_count_sum[0] / time / 1E9 ); 
-    printf("<td> Write_speed %f GB/S\n", rw_count_sum[1] / time / 1E9 ); 
+    VERB1("hdo-hdc R/W GiB: %f %f  time: %f S  R/W speed: %f %f GiB/S",
+          (double)rw_count_sum[0]/GIGBIN, (double)rw_count_sum[1]/GIGBIN, time, 
+           rw_count_sum[0] / time / GIGBIN, rw_count_sum[1] / time / GIGBIN ); 
+    printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / time / GIGBIN ); 
+    printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / time / GIGBIN ); 
   }
 }
 
@@ -1533,15 +1553,16 @@ ACTION_CHECK(hvp_check) {
   rx_comp(1, actionp);
 }
 
+
 ACTION_RUN(hvp_run) {
-  RANK_SERIALIZE_START
-  if (!rx_run(0, actionp, "cc") && context) pr_cfg((hio_object_t)context, "Context", actionp);
-  if (!rx_run(0, actionp, "cd") && dataset) pr_cfg((hio_object_t)dataset, "Dataset", actionp);
-  if (!rx_run(0, actionp, "ce") && element) pr_cfg((hio_object_t)element, "Element", actionp);
-  if (!rx_run(0, actionp, "pc") && context) pr_perf((hio_object_t)context, "Context", actionp);
-  if (!rx_run(0, actionp, "pd") && dataset) pr_perf((hio_object_t)dataset, "Dataset", actionp);
-  if (!rx_run(0, actionp, "pe") && element) pr_perf((hio_object_t)element, "Element", actionp);
-  RANK_SERIALIZE_END
+  R0_OR_VERB_START
+    if (!rx_run(0, actionp, "cc") && context) pr_cfg((hio_object_t)context, "Context", actionp);
+    if (!rx_run(0, actionp, "cd") && dataset) pr_cfg((hio_object_t)dataset, "Dataset", actionp);
+    if (!rx_run(0, actionp, "ce") && element) pr_cfg((hio_object_t)element, "Element", actionp);
+    if (!rx_run(0, actionp, "pc") && context) pr_perf((hio_object_t)context, "Context", actionp);
+    if (!rx_run(0, actionp, "pd") && dataset) pr_perf((hio_object_t)dataset, "Dataset", actionp);
+    if (!rx_run(0, actionp, "pe") && element) pr_perf((hio_object_t)element, "Element", actionp);
+  R0_OR_VERB_END
 }
 
 ACTION_RUN(hvsc_run) {
@@ -1604,7 +1625,9 @@ ACTION_RUN(dwws_run) {
 
 // Special action runner for printing out /@@ comments
 ACTION_RUN(cmsg_run) {
-  VERB1("%s", V0.s);
+  R0_OR_VERB_START
+    VERB1("%s", V0.s);
+  R0_OR_VERB_END
 }
 
 //----------------------------------------------------------------------------
@@ -1881,6 +1904,7 @@ void run_action() {
   while ( ++a < actc ) {
     VERB2("--- Running %s", actv[a].desc); 
     // Runner routine may modify variable a for looping
+    errno = 0;
     if (actv[a].runner) actv[a].runner(&actv[a], &a);
     DBG3("Done %s; fails: %d qof: %d", actv[a].desc, local_fails, quit_on_fail);
     if (quit_on_fail != 0 && local_fails >= quit_on_fail) {
