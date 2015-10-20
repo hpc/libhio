@@ -14,7 +14,7 @@ EXTRA_DIST = config_parser.l
 libconfig_parser_a-config_parser.c: config_parser.l
 	$(LEX) --prefix=hioi_config_parser -o libconfig_parser_a-config_parser.c config_parser.l
 
-libhio_la_CPPFLAGS = -I$(builddir)/include
+libhio_la_CPPFLAGS = -I$(srcdir)/include
 libhio_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS)
 libhio_la_LDFLAGS = $(LTLDFLAGS) $(XML_LIBS)
 libhio_la_SOURCES = hio_context.c hio_component.c hio_var.c hio_crc.c \
