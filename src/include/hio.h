@@ -162,8 +162,8 @@
  * by setting the datawarp_stage_mode on the dataset.
  * See @ref subsubsec_configuration_dataset. The target for any stage
  * operation is taken from the next available data root. Ex.
- * data_roots=datawarp,/lscratch2/<moniker>/data will stage complete datasets to the
- * /lscratch2/<moniker>/data directory.
+ * data_roots=datawarp,/lscratch2/\<moniker\>/data will stage complete datasets to the
+ * /lscratch2/\<moniker\>/data directory.
  *
  * @section sec_configuration Configuration Interface
  *
@@ -224,7 +224,7 @@
  *
  * Any characters appearing after a # character are treated as comments and
  * ignored by libhio unless the # character appears at the beginning of the line
- * and is part of the application specified line prefix (eg #HIO).
+ * and is part of the application specified line prefix (eg \#HIO).
  *
  * @subsection subsec_configuration_env Environment Configuration
  *
