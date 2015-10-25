@@ -10,7 +10,7 @@
  */
 
 /**
- * @file hio_api.h
+ * @file hio.h
  * @brief API for libhio
  *
  * This file describes the design and API of libhio. This library is intended to
@@ -59,7 +59,7 @@
  * - A configuration interface that allows applications to specify
  *   configuration options via the environment, API calls, and file parsing.
  *   The file parsing support includes support for reading options from
- *   a user-specified file. More on configuration can be found in @ref config.
+ *   a user-specified file. More on configuration can be found in @ref sec_configuration.
  * - Supports transparent (when possible) fall back on other destinations if
  *   part of the IO hierarchy fails. For example, falling back on a parallel
  *   file system on failure of a burst buffer.
@@ -159,7 +159,8 @@
  * end of the job. Additionally, to increase robustness in face of potential datawarp
  * filesystem failure the datawarp module will periodically mark a completed dataset
  * to immediately stage out to the parallel file system. This behavior can be modified
- * by setting the \ref datawarp_stage_mode on the dataset. The target for any stage
+ * by setting the datawarp_stage_mode on the dataset.
+ * See @ref subsubsec_configuration_dataset. The target for any stage
  * operation is taken from the next available data root. Ex.
  * data_roots=datawarp,/lscratch2/<moniker>/data will stage complete datasets to the
  * /lscratch2/<moniker>/data directory.
@@ -689,7 +690,7 @@ int hio_dataset_close (hio_dataset_t *set);
  * @ingroup API
  * @brief Get the identifier for a dataset
  *
- * @param[in]  set    hio dataset handle
+ * @param[in]  dataset hio dataset handle
  * @param[out] set_id identifier for this dataset
  *
  * This function can be used to get the identifier for an open dataset. This is
@@ -731,8 +732,7 @@ int hio_dataset_unlink (hio_context_t context, const char *name, int64_t set_id,
  * configuration. On return the element handle can be used even though the element
  * may not be open. If an error occurred during open it may be returned by another
  * call (hio_elemen_read, hio_element_write, etc). This call is not collective and can be called
- * from any rank. Calls to open the same element from multiple ranks is allowed unless
- * exclusive access (see @ref HIO_FLAG_EXCL) is requested.
+ * from any rank. Calls to open the same element from multiple ranks is allowed.
  */
 int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *name,
                       int flags);
@@ -743,7 +743,6 @@ int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const c
  *
  * @param[in]  element      element to query
  * @param[out] e_size size of the element
- * @param[in]  flags        open flags
  *
  * @returns hio_return_t
  *
@@ -1066,11 +1065,11 @@ int hio_complete (hio_element_t element);
  * @ingroup API
  * @brief Test for completion of an I/O request
  *
- * @param[in,out] request           array of hio I/O requests
- * @param[in]     nrequests         number of requests in requests array
- * @param[out]    bytes_transferred array of bytes transferred. entries for incomplete
- *                                  requests are undefined
- * @param[out]    complete          array of flags indicating which requests are complete
+ * @param[in,out] requests           array of hio I/O requests
+ * @param[in]     nrequests          number of requests in requests array
+ * @param[out]    bytes_transferred  array of bytes transferred. entries for incomplete
+ *                                   requests are undefined
+ * @param[out]    complete           array of flags indicating which requests are complete
  *
  * @returns the number of completed requests on success
  * @returns and hio error code on failure
@@ -1089,7 +1088,8 @@ int hio_request_test (hio_request_t *requests, int nrequests, ssize_t *bytes_tra
  * @ingroup API
  * @brief Wait for completion of an I/O request
  *
- * @param[in,out] request            hio IO request
+ * @param[in,out] requests           hio IO request
+ * @param[in]     nrequests          number of requests in requests array
  * @param[out]    bytes_transferred  number of bytes read/written
  *
  * This function waits for the completion of IO requests. On completion
