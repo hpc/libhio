@@ -56,13 +56,8 @@ void checkpoint (void *data, size_t size, int timestep) {
   hio_return_t hrc;
   hio_recommendation_t hint;
  
-  // Not yet implemented, fake it for now
-  #define hio_should_checkpoint(a, b) *(b) = HIO_SCP_MUST_CHECKPOINT
- 
-  hio_should_checkpoint (hio_context, &hint);
-  if (HIO_SCP_NOT_NOW == hint) {
-    return;
-  }
+  hint = hio_dataset_should_checkpoint (hio_context, "restart");
+  if (HIO_SCP_NOT_NOW == hint) return;
 
   /* Open the dataset associated with this timestep. The timestep can be used
    * later to ensure ordering when automatically rolling back to a prior
