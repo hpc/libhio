@@ -93,6 +93,11 @@
  * of POSIX IO calls (open, close read, write). We are investigating providing this
  * capability in a future version.
  *
+ * @section distribution Distribution
+ *
+ * HIO is distributed as a source tarball. See the file README within the tarball
+ * for build and test information.
+ *
  * @section namespace Namespace
  *
  * libhio provides an abstract namespace to enable performance improvements and abstract
@@ -524,8 +529,8 @@ typedef enum hio_unlink_mode_t {
  * Note: some errors may not be reported until hio_dataset_open () is called with the
  * new context.
  */
-int hio_init_single (hio_context_t *new_context, const char *config_file, const char *config_file_prefix,
-                     const char *context_name);
+hio_return_t hio_init_single (hio_context_t *new_context, const char *config_file,
+                              const char *config_file_prefix, const char *context_name);
 
 /**
  * @ingroup API
@@ -556,11 +561,11 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
  */
 /* Check for MPI */
 #if !defined(MPI_VERSION)
-int hio_init_mpi (hio_context_t *new_context, void *comm, const char *config_file,
-                  const char *config_file_prefix, const char *name);
+hio_return_t hio_init_mpi (hio_context_t *new_context, void *comm, const char *config_file,
+                           const char *config_file_prefix, const char *name);
 #else
-int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config_file,
-                  const char *config_file_prefix, const char *name);
+hio_return_t hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config_file,
+                           const char *config_file_prefix, const char *name);
 #endif
 
 /**
@@ -575,7 +580,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
  * It is erroneous to call this function while there are any outstanding open
  * datasets in the context.
  */
-int hio_fini (hio_context_t *context);
+hio_return_t hio_fini (hio_context_t *context);
 
 /**
  * @ingroup error_handling
@@ -593,7 +598,7 @@ int hio_fini (hio_context_t *context);
  * and rank. Note that the absolute ordering of errors is not specified if the
  * application is using libhio from multiple threads.
  */
-int hio_err_get_last (hio_context_t context, char **error_string);
+hio_return_t hio_err_get_last (hio_context_t context, char **error_string);
 
 /**
  * @ingroup error_handling
@@ -608,7 +613,7 @@ int hio_err_get_last (hio_context_t context, char **error_string);
  * string representation of the hio error last seen on this thread.
  * Like hio_err_get_last() this function dequeues the last error.
  */
-int hio_err_print_last (hio_context_t context, FILE *output, char *format, ...);
+hio_return_t hio_err_print_last (hio_context_t context, FILE *output, char *format, ...);
 
 /**
  * @ingroup error_handling
@@ -623,7 +628,7 @@ int hio_err_print_last (hio_context_t context, FILE *output, char *format, ...);
  * the string specified by {format} and {...}. This call dequeues all errors
  * that are pending being reported.
  */
-int hio_err_print_all (hio_context_t context, FILE *output, char *format, ...);
+hio_return_t hio_err_print_all (hio_context_t context, FILE *output, char *format, ...);
 
 /**
  * @ingroup API
@@ -669,8 +674,8 @@ int hio_err_print_all (hio_context_t context, FILE *output, char *format, ...);
  * libhio does not currently support opening an existing dataset, id pair with
  * a different mode than it was created with.
  */
-int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                      int64_t set_id, int flags, hio_dataset_mode_t mode);
+hio_return_t hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char *name,
+                               int64_t set_id, int flags, hio_dataset_mode_t mode);
 
 /**
  * @ingroup API
@@ -684,7 +689,7 @@ int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char 
  * It is erroneous to call this function on a dataset while there are outstanding
  * elements open locally in the dataset.
  */
-int hio_dataset_close (hio_dataset_t *set);
+hio_return_t hio_dataset_close (hio_dataset_t *set);
 
 /**
  * @ingroup API
@@ -697,7 +702,7 @@ int hio_dataset_close (hio_dataset_t *set);
  * useful for determining which dataset was opened by hio_dataset_open() when
  * using HIO_DATASET_ID_HIGHEST or HIO_DATASET_ID_NEWEST as the set id.
  */
-int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
+hio_return_t hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
 
 /**
  * @ingroup API
@@ -714,7 +719,7 @@ int hio_dataset_get_id (hio_dataset_t dataset, int64_t *set_id);
  * This function removes all data associated with an hio dataset on all data
  * roots. It is invalid to specify HIO_DATASET_ID_HIGHEST for {set_id}.
  */
-int hio_dataset_unlink (hio_context_t context, const char *name, int64_t set_id, hio_unlink_mode_t mode);
+hio_return_t hio_dataset_unlink (hio_context_t context, const char *name, int64_t set_id, hio_unlink_mode_t mode);
 
 /**
  * @ingroup API
@@ -734,8 +739,8 @@ int hio_dataset_unlink (hio_context_t context, const char *name, int64_t set_id,
  * call (hio_elemen_read, hio_element_write, etc). This call is not collective and can be called
  * from any rank. Calls to open the same element from multiple ranks is allowed.
  */
-int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *name,
-                      int flags);
+hio_return_t hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const char *name,
+                               int flags);
 
 /**
  * @ingroup API
@@ -749,7 +754,7 @@ int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const c
  * This function returns the offset of the first invalid offset after the last valid
  * data block in the element. The value returned is synonymous to a file size.
  */
-int hio_e_size (hio_element_t element, int64_t *e_size);
+hio_return_t hio_e_size (hio_element_t element, int64_t *e_size);
 
 /**
  * @ingroup API
@@ -774,7 +779,7 @@ int hio_e_size (hio_element_t element, int64_t *e_size);
  * dataset. This functionality is also under development pending the
  * finalization of the rest of the libhio API.
  */
-int hio_dataset_construct (hio_dataset_t dataset, const char *destination, int flags);
+hio_return_t hio_dataset_construct (hio_dataset_t dataset, const char *destination, int flags);
 
 
 /**
@@ -788,7 +793,7 @@ int hio_dataset_construct (hio_dataset_t dataset, const char *destination, int f
  * This function finalizes all outstanding I/O on an open element. On success
  * {hio_element} is set to HIO_OBJECT_NULL.
  */
-int hio_element_close (hio_element_t *element);
+hio_return_t hio_element_close (hio_element_t *element);
 
 /**
  * @ingroup blocking
@@ -801,7 +806,8 @@ int hio_element_close (hio_element_t *element);
  * @param[in]  count        number of elements to write
  * @param[in]  size         size of each element
  *
- * @returns the number of bytes written if the write was successful
+ * @returns the number of bytes written if the write was successful or an
+ * hio_return_t value on error (all of which are negative)
  *
  * This function writes contiguous data from ptr to the element specified in
  * {element}. The call returns when the buffer pointed to by {ptr} is no
@@ -824,7 +830,7 @@ ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long re
  * @param[in]  count        number of elements to write
  * @param[in]  size         size of each element
  *
- * @returns HIO success if the write has successfully been scheduled or completed
+ * @returns HIO_SUCCESS if the write has successfully been scheduled or completed
  *
  * This function schedules a non-blocking write of contiguous data from {ptr} to the
  * element specified in {element}. The call returns immediately even if the
@@ -839,7 +845,7 @@ ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long re
  * {ptr} is free to be modified. Completion of a write request does not guarantee
  * the data has been written.
  */
-int hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
+hio_return_t hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
                           unsigned long reserved0, const void *ptr, size_t count, size_t size);
 
 /**
@@ -854,7 +860,8 @@ int hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t o
  * @param[in]  size         size of each element
  * @param[in]  stride       stride between each element
  *
- * @returns the number of bytes written if the write was successful
+ * @returns the number of bytes written if the write was successful or an
+ * hio_return_t value on error (all of which are negative)
  *
  * This function writes strided data specified by {ptr}, {size}, and {stride}
  * to the element specified in {element}. The call returns when the
@@ -878,7 +885,7 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
  * @param[in]  size         size of each element
  * @param[in]  stride       stride between each element
  *
- * @returns HIO success if the write has successfully been scheduled or completed
+ * @returns HIO_SUCCESS if the write has successfully been scheduled or completed
  *
  * This function schedules a non-blocking write of strided data specified by {ptr},
  * {size}, and {stride} to the
@@ -894,7 +901,7 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
  * {ptr} is free to be modified. Completion of a write request does not guarantee
  * the data has been written.
  */
-int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
+hio_return_t hio_element_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
                                   unsigned long reserved0, const void *ptr, size_t count, size_t size,
                                   size_t stride);
 
@@ -917,7 +924,7 @@ int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request,
  * This function will return an error code if any write on the specified hio element
  * can not complete.
  */
-int hio_element_flush (hio_element_t element, hio_flush_mode_t mode);
+hio_return_t hio_element_flush (hio_element_t element, hio_flush_mode_t mode);
 
 /**
  * @ingroup nonblocking
@@ -938,7 +945,7 @@ int hio_element_flush (hio_element_t element, hio_flush_mode_t mode);
  * This function will return an error code if any write on the dataset can not
  * complete.
  */
-int hio_dataset_flush (hio_dataset_t dataset, hio_flush_mode_t mode);
+hio_return_t hio_dataset_flush (hio_dataset_t dataset, hio_flush_mode_t mode);
 
 /**
  * @ingroup blocking
@@ -951,7 +958,8 @@ int hio_dataset_flush (hio_dataset_t dataset, hio_flush_mode_t mode);
  * @param[in]  count        number of elements to read
  * @param[in]  size         size of each element
  *
- * @returns the number of bytes read if the read was successful
+ * @returns the number of bytes read if the read was successful or an
+ * hio_return_t value on error (all of which are negative)
  *
  * This function reads contiguous data from the element specified in
  * {element} to the contiguous buffer specified in {ptr}. The call
@@ -973,7 +981,7 @@ ssize_t hio_element_read (hio_element_t element, off_t offset, unsigned long res
  * @param[in]  count        number of elements to read
  * @param[in]  size         size of each element
  *
- * @returns HIO success if the read has successfully been scheduled or
+ * @returns HIO_SUCCESS if the read has successfully been scheduled or
  *          completed
  *
  * This function schedules a non-blocking read of contiguous data from the
@@ -989,8 +997,8 @@ ssize_t hio_element_read (hio_element_t element, off_t offset, unsigned long res
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
  */
-int hio_element_read_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                         unsigned long reserved0, void *ptr, size_t count, size_t size);
+hio_return_t hio_element_read_nb (hio_element_t element, hio_request_t *request, off_t offset,
+                                  unsigned long reserved0, void *ptr, size_t count, size_t size);
 
 /**
  * @ingroup blocking
@@ -1004,7 +1012,8 @@ int hio_element_read_nb (hio_element_t element, hio_request_t *request, off_t of
  * @param[in]  size        size of each element
  * @param[in]  stride      stride between each element
  *
- * @returns the number of bytes read if the read was successful
+ * @returns the number of bytes read if the read was successful or an
+ * hio_return_t value on error (all of which are negative)
  *
  * This function reads contiguous data from the element specified in
  * {element} to the strided buffer specified by {ptr}, {size},
@@ -1027,7 +1036,7 @@ ssize_t hio_element_read_strided (hio_element_t element, off_t offset, unsigned 
  * @param[in]  size        size of each element
  * @param[in]  stride      stride between each element
  *
- * @returns HIO success if the read has successfully been scheduled or
+ * @returns HIO_SUCCESS if the read has successfully been scheduled or
  *          completed
  *
  * This function schedules a non-blocking read of contiguous data from the
@@ -1043,8 +1052,9 @@ ssize_t hio_element_read_strided (hio_element_t element, off_t offset, unsigned 
  * read is complete. In the context of reads a request is complete when the buffer
  * specified by {ptr} contains the requested data or the request failed.
  */
-int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                                 unsigned long reserved0, void *ptr, size_t count, size_t size, size_t stride);
+hio_return_t hio_element_read_strided_nb (hio_element_t element, hio_request_t *request,
+                                          off_t offset, unsigned long reserved0, void *ptr,
+                                          size_t count, size_t size, size_t stride);
 
 /**
  * @ingroup nonblocking
@@ -1059,7 +1069,7 @@ int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, 
  * {element}. This function will return an error code if any read on the
  * dataset did not complete. Note: A short read is considered an error.
  */
-int hio_complete (hio_element_t element);
+hio_return_t hio_complete (hio_element_t element);
 
 /**
  * @ingroup API
@@ -1072,14 +1082,16 @@ int hio_complete (hio_element_t element);
  * @param[out]    complete           array of flags indicating which requests are complete
  *
  * @returns the number of completed requests on success
- * @returns and hio error code on failure
+ * @returns an hio_return_t value on failure (all of which are negative)
  *
  * This function checks for the completion of IO request(s). If the hio request at an
  * index i is complete then complete[i] is set to true, the request and all associated
  * internal data is released, requests[i] is set to HIO_OBJECT_NULL, and the number of
  * bytes read/written is stored in bytes_transferred[i]. If any index in the requests
  * array is set to HIO_OBJECT_NULL the corresponding location in the complete array
- * is set to true and bytes_transferred is set to 0.
+ * is set to true and bytes_transferred is set to 0.  If a request completes in error,
+ * the cooresponding bytes_transferred entry is set to the hio_return_t error value
+ * (all of which are negative).
  */
 int hio_request_test (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred,
                       bool *complete);
@@ -1092,15 +1104,19 @@ int hio_request_test (hio_request_t *requests, int nrequests, ssize_t *bytes_tra
  * @param[in]     nrequests          number of requests in requests array
  * @param[out]    bytes_transferred  number of bytes read/written
  *
+ * @returns hio_return_t
+ *
  * This function waits for the completion of IO requests. On completion
  * of all hio requests this function stores the number of bytes transferred
  * for each request in the corresponding location in the {bytes_transferred}
  * array and sets all indices in the requests array to HIO_OBJECT_NULL. This
  * function releases each request and all associated internal data. If any
  * index in the {requests} array is HIO_OBJECT_NULL the corresponding location
- * in the {bytes_transferred} array is set to 0.
+ * in the {bytes_transferred} array is set to 0. If a request completes in error,
+ * the cooresponding bytes_transferred entry is set to the hio_return_t error value
+ * (all of which are negative).
  */
-int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred);
+hio_return_t hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred);
 
 /**
  * @ingroup API
@@ -1109,7 +1125,7 @@ int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_tra
  * @param[in]  context hio context
  * @param[in]  name    dataset name
  *
- * @returns checkpoint recommendation
+ * @returns hio_recommendation_t
  *
  * This function attempts to determine if now is an optimal time to write an
  * instance of a dataset. This function will take into account the currently
@@ -1117,7 +1133,7 @@ int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_tra
  * It may query the runtime, system configuration, or more to calculate the
  * recommendation. See @ref hio_recommendation_t for valid return codes.
  */
-int hio_dataset_should_checkpoint (hio_context_t context, const char *name);
+hio_recommendation_t hio_dataset_should_checkpoint (hio_context_t context, const char *name);
 
 /**
  * @ingroup configuration
@@ -1127,13 +1143,15 @@ int hio_dataset_should_checkpoint (hio_context_t context, const char *name);
  * @param[in] variable  variable to set
  * @param[in] value     new value for this variable
  *
+ * @returns hio_return_t
+ *
  * This function sets the value of the given variable within the hio object
  * specified in {object}. {object} must be a context, dataset, or element. The
  * value is expected to be a string representation that matches the variable's
  * type as returned by hio_config_get_info(). Dataset specific values can be
  * set on a context and will apply to all datasets opened in that context.
  */
-int hio_config_set_value (hio_object_t object, const char *variable, const char *value);
+hio_return_t hio_config_set_value (hio_object_t object, const char *variable, const char *value);
 
 /**
  * @ingroup configuration
@@ -1144,13 +1162,15 @@ int hio_config_set_value (hio_object_t object, const char *variable, const char 
  * @param[in]  variable  variable to get the value of
  * @param[out] value     string representation of the value of {variable}
  *
+ * @returns hio_return_t
+ *
  * This function gets the string value of the given variable within the hio
  * object specified in {object}. {object} must be a context, dataset, or element.
  * On success the string representation of the value is stored in a newly
  * allocated pointer and returned in {value}. It is the responsibility of the
  * caller to free {value}.
  */
-int hio_config_get_value (hio_object_t object, char *variable, char **value);
+hio_return_t hio_config_get_value (hio_object_t object, char *variable, char **value);
 
 /**
  * @ingroup configuration
@@ -1165,7 +1185,7 @@ int hio_config_get_value (hio_object_t object, char *variable, char **value);
  * hio object specified in {object}. {object} must be a context, dataset, or
  * element. On success the number of configuration variables is stored in {count}.
  */
-int hio_config_get_count (hio_object_t object, int *count);
+hio_return_t hio_config_get_count (hio_object_t object, int *count);
 
 /**
  * @ingroup configuration
@@ -1191,7 +1211,7 @@ int hio_config_get_count (hio_object_t object, int *count);
  * The value specified in {index} must be a number in the range [0, hio_config_get_count()).
  * If a non-existent index is specified an error is returned.
  */
-int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+hio_return_t hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
                          bool *read_only);
 
 /**
@@ -1207,7 +1227,7 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
  * hio object specified in {object}. {object} must be a context, dataset, or
  * element. On success the number of performance variables is stored in {count}.
  */
-int hio_perf_get_count (hio_object_t object, int *count);
+hio_return_t hio_perf_get_count (hio_object_t object, int *count);
 
 /**
  * @ingroup performance
@@ -1230,7 +1250,7 @@ int hio_perf_get_count (hio_object_t object, int *count);
  * The value specified in {index} should be a number in the range [0, hio_perf_get_count()).
  * If a non-existent index is specified an error is returned.
  */
-int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type);
+hio_return_t hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type);
 
 /**
  * @ingroup performance
@@ -1250,7 +1270,7 @@ int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_t
  * of the performance variable is stored in the buffer specified in {value} according
  * to it's type.
  */
-int hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
+hio_return_t hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
 
 #if __cplusplus
 }

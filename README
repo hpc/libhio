@@ -1,53 +1,72 @@
-Testing (updated 20150504)
-==========================
+HIO Readme
+==========
 
-More general information needed here, but for now, here's how
-to recreate a specific failure in test run03.
+Last updated 20151026.
 
-1) Get the tarball from ~cornell/dw_miscompare_20150504
 
-2) untar into <dir>
+Building
+--------
 
-3) cd <dir>/libhio-0.1
+HIO builds via a standard autoconf/automake build.  So, to build:
 
-4) module swap PrgEnv-cray PrgEnv-gnu
-    module load craype-haswell cray-mpich
+1) Untar
+2) cd to root of tarball
+3) module load needed compiler or MPI environment 
+4) ./configure
+5) make 
 
-5) ./configure
+Additional generally useful make targets include clean and docs.  make docs
+will build the HIO API document, but it requires doxygen and various latex
+packages to run, so you may prefer to use the document distributed in file
+design/libhio_api.pdf.
 
-6) make all
+Our target build environments include gcc with OpenMPI on Mac OSX for unit
+test and gcc, Intel and Cray compilers on LANL Cray systems and TOSS clusters
+with OpenMPI or Cray MPI.  
 
-7) cd <dir>/libhio-0.1/tests
+Included with HIO is a build script named hiobuild.  It will perform all of
+the above steps in one invocation.  The HIO development team uses it to launch
+builds on remote systems.  You may find it useful; a typical invocation might 
+look like:
 
-8) Create a directory in DW
-    e.g. aprun -b mkdir /dwphase1/cornell/hio_test2
+./hiobuild -c -s PrgEnv-intel PrgEnv-gnu
 
-9) export HIO_ROOT=<DW DIR>
-    export HIO_ROOT=/dwphase1/cornell/hio_test2
+hiobuild will also create a small script named hiobuild.modules.bash that
+can be sourced to recreate the module environment used for build.
 
-10) ./run03 -d 4 -v 3 -n 256 -s m 1>run03.db01.out 2>&1
 
-11) grep miscompare run03.db*.out 
+Testing
+-------
 
-12) Parameters to run03 are:
+HIO's tests are in the tests subdirectory.  There is a simple API test named
+test01 which can also serve as a coding example.  Additionally, other tests
+are named run02, run03, etc.  Theses tests are able to run in a variety of
+environments:
 
-  Syntax:
-    ./run03
-        [-s <size>]
-        [-n <num_ranks>]
-        [-v <verb_level>]
-        [-d <debug_level>]
+1) On Mac OSX for unit testing
+2) On a non-DataWarp cluster in interactive or batch mode
+3) On one of the Trinity systems with DataWarp in interactive or batch mode
 
-  Options:
-    -s <size>       Per rank run size t|s|m|l|x  (default s)
-    -n <num_ranks>  Number of MPI ranks.  Default is all allocated
-                    CPs or 2 on Mac OS
-    -v <verb_lev>   Verbosity level for xexec2, default 1
-    -d <debug_lev>  Debug level for xexec2, default 0
+run02 and run03 are N-N and N-1 tests (respectively). Options help can be
+displayed by invoking with a -h option.  These tests use a common script 
+named run_setup to process options and establish the testing environment.
+They invoke hio using a program named xexec which is driven by command strings
+contained in the runxx test scripts.
 
-The test driver xexec2 has a bit of help text that will describe the
-parameters in run03.
+A typical usage to submit a test DataWarp batch job on buffy (the only system
+currently so configured) might look like:
+
+cd <tarball>/tests
+./run02 -s m -r 32 -n 2 -b 
+
+Options used:
+  -s m    ---> Size medium (200 MB per rank)
+  -r 32   ---> Use 32 ranks
+  -n 2    ---> Use 2 nodes
+  -b      ---> Submit a batch job  
+
+The runxx tests will use the hiobuild.modules.bash files saved by hiobuild
+(if available) to reestablish the same module environment used at build
+time.
 
 --- End of README ---
-
-
