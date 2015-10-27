@@ -754,7 +754,7 @@ hio_return_t hio_element_open (hio_dataset_t dataset, hio_element_t *element_out
  * This function returns the offset of the first invalid offset after the last valid
  * data block in the element. The value returned is synonymous to a file size.
  */
-hio_return_t hio_e_size (hio_element_t element, int64_t *e_size);
+hio_return_t hio_element_size (hio_element_t element, int64_t *e_size);
 
 /**
  * @ingroup API

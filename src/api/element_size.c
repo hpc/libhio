@@ -11,7 +11,7 @@
 
 #include "hio_types.h"
 
-int hio_e_size (hio_element_t element, int64_t *e_size) {
+int hio_element_size (hio_element_t element, int64_t *e_size) {
   if (HIO_OBJECT_NULL == element || NULL == e_size) {
     return HIO_ERR_BAD_PARAM;
   }
