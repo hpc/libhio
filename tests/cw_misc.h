@@ -243,4 +243,9 @@ int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t
 
 // Return a pointer to a string containing a comma delimited list of valid suffixes
 const char * cvt_num_suffix(void);
+
+// Return a random number within an inclusive range with a specified alignment.
+// lrand48 used internally, so can be seeded with srand48()
+I64 rand_range(I64 min, I64 max, size_t align);
+
 // --- end of cw_misc.h ---

@@ -581,4 +581,44 @@ int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t
 const char * cvt_num_suffix(void) {
   return "k, ki, M, Mi, G, Gi, T, Ti, P, Pi";
 }
+
+// Return a random number within an inclusive range with a specified alignment.
+// lrand48 used internally, so can be seeded with srand48()
+I64 rand_range(I64 min, I64 max, size_t align) {
+  #define PR231 2147483563              // Prime close to but < 2^31
+  I64 align64, minda, maxda, rlen;
+
+  align64 = (I64) align;
+  // min rounded up to next boundary divided by alignment
+  if (min < 0) {                  
+    minda = min / align64;
+  } else {
+    minda = (min + align64 - 1) / align64;
+  }
+
+  // max rounded down to next boundary divided by alignment
+  if (max < 0) {
+    maxda = (max - align64 + 1) / align64;
+  } else {  
+    maxda = max/align64;                  
+  }
+
+  rlen = maxda - minda + 1;              // range length
+
+  //printf("min: %lld  max: %lld  align64: %lld\n", min, max, align64);
+  //printf("minda: %lld  maxda: %lld  rlen:%lld\n", minda, maxda, rlen);
+  
+  if (rlen < 1) {
+    fprintf(stderr, "Error: rand_range range length < 1, exiting\n");
+    exit(EXIT_FAILURE);
+  }
+
+  // Multiplying by almost 2^31 expands the random range to close to 2^62, mitigating
+  // uneven distribution caused by using modulo with a very large result range
+  long r = (lrand48() * PR231 % rlen) * align64 + (minda * align64); 
+
+  return r;
+};
+
+
 // --- end of cw_misc.c ---
