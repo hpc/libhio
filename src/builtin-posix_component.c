@@ -432,7 +432,6 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
   if (fd < 0) {
     hio_err_push (fd, context, hio_object, "posix: error opening element path %s. "
                   "errno: %d", path, errno);
-    free (path);
     return fd;
   }
 
@@ -442,7 +441,6 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
     int hrc = hioi_err_errno (errno);
     hio_err_push (hrc, context, hio_object, "posix: error opening element file %s. "
                   "errno: %d", path, errno);
-    free (path);
     return hrc;
   }
 
