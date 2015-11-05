@@ -24,7 +24,7 @@
  *
  * libhio is a library intended for writing data to hierarchical data
  * store systems. These systems may be comprised of one or more logical layers
- * including parallel file systems (PFS), burst buffers (BB), and local memory.
+ * including parallel file systems, burst buffers, and local memory.
  * libhio provides support for automated fall-back on alternate destinations if
  * part of the storage hierarchy becomes unavailable.
  *
@@ -70,6 +70,7 @@
  * - An interface to provide applications with the optimal checkpointing interval.
  *   This will take into account the file size, current system stability, and
  *   the current destination.
+ * - Support for burst buffers implemented by the Cray DataWarp product.
  * - Support for managing available burst buffer space.
  * - Support for scheduling automatic drain from temporary data roots (BB, local
  *   memory) to more permanent data roots (PFS).
@@ -206,10 +207,10 @@
        context_base_verbose = 10
    [global]
    # these are also global
-       data_roots = BB,PFS:/lscatch1,/lscratch2
+       data_roots = DW,posix:/lscratch1,/lscratch2
    [context:foo]
    # apply only to context "foo"
-       data_roots = PFS:/lscratch1
+       data_roots = posix:/lscratch1
    [dataset:restart]
    # apply to dataset "restart" in any context
        stripe_width = 4M
@@ -220,9 +221,9 @@
  *
  * Example (Prefix HIO): @code
    HIO [global]
-   HIO     data_roots = BB,PFS:/lscatch1,/lscratch2
+   HIO     data_roots = DW,posix:/lscatch1,/lscratch2
    HIO [context:foo]
-   HIO     data_roots = PFS:/lscratch1
+   HIO     data_roots = posix:/lscratch1
    HIO [dataset:restart]
    HIO     stripe_width = 4M
 @endcode
@@ -252,7 +253,7 @@
  * @subsubsection subsubsec_configuration_context Context Specific Variables
  *
  * - @b data_roots - List of data roots to use for this context. This is a comma-delimited
- *   list including any of the following: BB (burst buffer), or PFS:path (parallel file
+ *   list including any of the following: DW, DataWarp (burst buffer), or posix:path (parallel file
  *   system).
  *
  * - @b print_statistics - Print IO statistics when hio_fini() is called. This value is only meaningful
@@ -264,7 +265,7 @@
  *
  * @subsubsection subsubsec_configuration_dataset Dataset Specific Variables
  *
- * - @b datawarp_stage_mode - Mode to use for staging datasets to more permanent data stores (ex: BB \-\> PFS).
+ * - @b datawarp_stage_mode - Mode to use for staging datasets to more permanent data stores (ex: DW \-\> PFS).
  *   Available modes: disable (do not stage), auto (stage most recent id at end of job), end_of_job
  *   (stage at end of job), immediate (stage when the dataset is closed). Note: @b datawarp_stage_mode 
  *   is only valid for datasets opened for writing.
