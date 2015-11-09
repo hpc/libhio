@@ -26,7 +26,7 @@ cmdw="
   lc $nseg
     hsegr 0 $segsz 0
     lc $nblk
-      hew -$blk $blk 
+      hew 0 $blk 
     le 
   le 
   hec hdc hf mgf mf
@@ -43,7 +43,7 @@ cmdr="
   lc $nseg
     hsegr 0 $segsz 17
     lc $nblk
-      her -$blk $blk 
+      her 0 $blk 
     le 
   le 
   hec hdc hf mgf mf

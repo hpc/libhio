@@ -90,8 +90,10 @@ char * help =
   "  qof <number>  Quit after <number> of failures. 0 = never, default is 1.\n"
   "  name <test name> Set test name for final success / fail message\n"
   "  im <file>     imbed a file of actions at this point, - means stdin\n"
+  "  srr <seed>    seed random rank - seed RNG with <seed> + rank (or 0 if non-MPI)\n" 
   "  lc <count>    loop start; repeat the following actions (up to the matching\n"
   "                loop end) <count> times\n"
+  "  lcr <min> <max>  like lc, but count random within inclusive range\n"
   "  lt <seconds>  loop start; repeat the following actions (up to the matching\n"
   "                loop end) for at least <seconds>\n"
   #ifdef MPI
@@ -143,8 +145,11 @@ char * help =
   "  hi  <name> <data_root>  Init hio context\n"
   "  hdo <name> <id> <flags> <mode> Dataset open\n"
   "  heo <name> <flags> Element open\n"
-  "  hew <offset> <size> Element write - if offset negative, auto increment\n"
-  "  her <offset> <size> Element read - if offset negative, auto increment\n"
+  "  hso <offset> Set element offset.  Also set to 0 by heo, incremented by hew, her\n"
+  "  hew <offset> <size> Element write, offset relative to current element offset\n"
+  "  her <offset> <size> Element read, offset relative to current element offset\n"
+  "  hewr <offset> <min> <max> <align> Element write random size, offset relative to current element offset\n"
+  "  herr <offset> <min> <max> <align> Element read random size, offset relative to cucrrent element offset\n"
   "  hsega <start> <size_per_rank> <rank_shift> Activate absolute segmented\n"
   "                addressing. Actual offset now ofs + <start> + rank*size\n"
   "  hsegr <start> <size_per_rank> <rank_shift> Activate relative segmented\n"
@@ -520,6 +525,27 @@ ACTION_CHECK(imbed_check) {
 }
 
 //----------------------------------------------------------------------------
+// srr (seed random rank) action handler
+//----------------------------------------------------------------------------
+ACTION_RUN(srr_run) {
+  I64 seed = V0.u;
+  #define PR231_100 (U64)2147481317              // Prime close to but < 2^31
+  #define PR231_200 (U64)2147479259              // Prime close to but < 2^31
+  unsigned short seed16v[3]; 
+
+  // Multiply by prime so seed48(rank+1, seed) != seed(48(rank, seed+1)
+  seed *= PR231_100;  
+  #ifdef MPI
+    if (mpi_size > 0) seed += (myrank * PR231_200);
+  #endif
+  seed16v[0] = seed & 0xFFFF;
+  seed16v[1] = seed >> 16;
+  seed16v[2] = 0;
+  DBG3("srr seed: %lld; calling seed48(0x%04hX 0x%04hX 0x%04hX)", seed, seed16v[2], seed16v[1], seed16v[0]);
+  seed48(seed16v);
+}
+
+//----------------------------------------------------------------------------
 // lc, lt, ls, le (looping) action handlers
 //----------------------------------------------------------------------------
 #define MAX_LOOP 16
@@ -534,9 +560,10 @@ struct loop_ctl {
 struct loop_ctl * lcur = &lctl[0];
 
 ACTION_CHECK(loop_check) {
-  if ( !strcmp(A.action, "lc") || 
+  if ( !strcmp(A.action, "lc")  || 
+       !strcmp(A.action, "lcr") || 
     #ifdef MPI
-       !strcmp(A.action, "ls") ||
+       !strcmp(A.action, "ls")  ||
     #endif
        !strcmp(A.action, "lt") ) {
     if (++lcur - lctl >= MAX_LOOP) ERRX("%s: Maximum nested loop depth of %d exceeded", A.desc, MAX_LOOP);
@@ -551,6 +578,15 @@ ACTION_RUN(lc_run) {
   DBG4("loop count start; depth: %d top actn: %d count: %d", lcur-lctl, *pactn, V0.u);
   lcur->type = COUNT;
   lcur->count = V0.u;
+  lcur->top = *pactn;
+}
+
+ACTION_RUN(lcr_run) {
+  int count = rand_range(V0.u, V1.u, 1);
+  lcur++;
+  DBG4("loop count rand start; depth: %d top actn: %d count: %d", lcur-lctl, *pactn, count);
+  lcur->type = COUNT;
+  lcur->count = count;
   lcur->top = *pactn;
 }
 
@@ -1198,10 +1234,8 @@ static int hio_fail = 0;
 static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
 static int hio_check = 0;
-static U64 hew_ofs, her_ofs;
+static int hio_e_ofs;
 static I64 hseg_start = 0;
-static I64 hseg_size_per_rank = 0;
-static I64 hseg_rank_shift = 0;
 static U64 rw_count[2];
 static ETIMER hio_tmr;
 
@@ -1299,7 +1333,7 @@ ACTION_RUN(heo_run) {
   lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE); 
 
   rbuf = MALLOCX(bufsz);
-  hew_ofs = her_ofs = 0;
+  hio_e_ofs = 0;
 
   // Calculate element hash which is added to the offset for read verification
   char * hash_str = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
@@ -1309,6 +1343,10 @@ ACTION_RUN(heo_run) {
   DBG4("heo hash: \"%s\" 0x%04X", hash_str, hio_element_hash);
   FREEX(hash_str);
 
+}
+
+ACTION_RUN(hso_run) {
+  hio_e_ofs = V0.u;
 }
 
 ACTION_RUN(hck_run) {
@@ -1324,17 +1362,21 @@ ACTION_CHECK(hew_check) {
 }
 
 ACTION_RUN(hsega_run) {
-  hseg_start = V0.u;
-  hseg_size_per_rank = V1.u;
-  hseg_rank_shift = V2.u;
-  hew_ofs = her_ofs = 0;
+  U64 start = V0.u;
+  U64 size_per_rank = V1.u;
+  U64 rank_shift = V2.u;
+  hseg_start = start;
+  hio_e_ofs = hseg_start + size_per_rank * ((myrank + rank_shift) % mpi_size);
+  hseg_start += size_per_rank * mpi_size;
 }
 
 ACTION_RUN(hsegr_run) {
-  hseg_start += (hseg_size_per_rank * mpi_size + V0.u); 
-  hseg_size_per_rank = V1.u;
-  hseg_rank_shift = V2.u;
-  hew_ofs = her_ofs = 0;
+  U64 start = V0.u;
+  U64 size_per_rank = V1.u;
+  U64 rank_shift = V2.u;
+  hseg_start += start; 
+  hio_e_ofs = hseg_start + size_per_rank * ((myrank + rank_shift) % mpi_size);
+  hseg_start += size_per_rank * mpi_size;
 }
 
 ACTION_RUN(hew_run) {
@@ -1342,20 +1384,21 @@ ACTION_RUN(hew_run) {
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
   U64 ofs_segrel, ofs_abs;
-  if (ofs_param < 0) { 
-    ofs_segrel = hew_ofs;
-    hew_ofs += -ofs_param;
-  } else {
-    ofs_segrel = ofs_param;
-  } 
 
-  ofs_abs = hseg_start + hseg_size_per_rank * ((myrank + hseg_rank_shift) % mpi_size) + ofs_segrel; 
-  
-  DBG2("hew ofs_param: %lld ofs_segrel: %lld ofs_abs: %lld len: %lld", ofs_param, ofs_segrel, ofs_abs, hreq);
+  ofs_abs = hio_e_ofs + ofs_param;
+  DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
+  hio_e_ofs = ofs_abs + hreq;
   hcnt = hio_element_write (element, ofs_abs, 0, wbuf + ( (ofs_abs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
   HCNT_TEST(hio_element_write)
   rw_count[1] += hcnt;
 }
+
+// Randomize length, then call hew action handler
+ACTION_RUN(hewr_run) {
+  struct action new = *actionp;
+  new.v[1].u = rand_range(V1.u, V2.u, V3.u);
+  hew_run(&new, pactn);
+} 
 
 ACTION_CHECK(her_check) {
   U64 size = V1.u;
@@ -1367,16 +1410,10 @@ ACTION_RUN(her_run) {
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
   U64 ofs_segrel, ofs_abs;
-  if (ofs_param < 0) { 
-    ofs_segrel = her_ofs;
-    her_ofs += -ofs_param;
-  } else {
-    ofs_segrel = ofs_param;
-  }
 
-  ofs_abs = hseg_start + hseg_size_per_rank * ((myrank + hseg_rank_shift) % mpi_size) + ofs_segrel; 
-
-  DBG2("her ofs_param: %lld ofs_segrel: %lld ofs_abs: %lld len: %lld", ofs_param, ofs_segrel, ofs_abs, hreq);
+  ofs_abs = hio_e_ofs + ofs_param;
+  DBG2("her el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
+  hio_e_ofs = ofs_abs + hreq;
   hcnt = hio_element_read (element, ofs_abs, 0, rbuf, 1, hreq);
   HCNT_TEST(hio_element_read)
   rw_count[0] += hcnt;
@@ -1401,6 +1438,13 @@ ACTION_RUN(her_run) {
     }
   }
 }
+
+// Randomize length, then call her action handler
+ACTION_RUN(herr_run) {
+  struct action new = *actionp;
+  new.v[1].u = rand_range(V1.u, V2.u, V3.u);
+  her_run(&new, pactn);
+} 
 
 ACTION_RUN(hec_run) {
   hio_return_t hrc;
@@ -1687,7 +1731,9 @@ struct parse {
   {"qof",   {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
   {"name",  {STR,  NONE, NONE, NONE, NONE}, NULL,          name_run    },
   {"im",    {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
+  {"srr",   {SINT, NONE, NONE, NONE, NONE}, NULL,          srr_run     },
   {"lc",    {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
+  {"lcr",   {UINT, UINT, NONE, NONE, NONE}, loop_check,    lcr_run     },
   {"lt",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
   #ifdef MPI
   {"ls",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
@@ -1724,10 +1770,13 @@ struct parse {
   {"hdo",   {STR,  HDSI, HFLG, HDSM, NONE}, NULL,          hdo_run     },
   {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
   {"heo",   {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
+  {"hso",   {UINT, NONE, NONE, NONE, NONE}, NULL,          hso_run      },
   {"hsega", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsega_run   },
   {"hsegr", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsegr_run   },
   {"hew",   {SINT, UINT, NONE, NONE, NONE}, hew_check,     hew_run     },
   {"her",   {SINT, UINT, NONE, NONE, NONE}, her_check,     her_run     },
+  {"hewr",  {SINT, UINT, UINT, UINT, NONE}, hew_check,     hewr_run    },
+  {"herr",  {SINT, UINT, UINT, UINT, NONE}, her_check,     herr_run    },
   {"hec",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
   {"hdc",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
   {"hdu",   {STR,  UINT, HULM, NONE, NONE}, NULL,          hdu_run     },
