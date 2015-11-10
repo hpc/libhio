@@ -481,7 +481,6 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data,
 int hioi_manifest_load (hio_dataset_t dataset, const char *path);
 int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
 
-
 /**
  * Read header data from a manifest
  *

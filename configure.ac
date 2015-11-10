@@ -3,7 +3,7 @@
 #                     reserved.
 
 AC_PREREQ([2.69])
-AC_INIT([libhio], [1.1], [hjelmn@lanl.gov])
+AC_INIT([libhio], [1.2], [hjelmn@lanl.gov])
 AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -31,8 +31,10 @@ fi
 AM_INIT_AUTOMAKE
 LT_INIT
 
-PKG_CHECK_MODULES(XML, libxml-2.0 >= 2.4)
-hio_pkgconfig_requires="libxml-2.0 >= 2.4"
+PKG_CHECK_MODULES(json, json-c >= 0.10)
+hio_pkgconfig_requires="$hio_pkgconfig_requires, json-c >= 0.10"
+CPPFLAGS="$CPPFLAGS $json_CFLAGS"
+LIBS="$LIBS $json_LIBS"
 
 # Check for datawarp availability
 AC_ARG_WITH(datawarp, [AS_HELP_STRING([--with-datawarp=DIR], [enable support for Cray datawarp @<:@default=auto@:>@])],

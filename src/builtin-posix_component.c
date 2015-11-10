@@ -115,7 +115,7 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
 
       char *manifest_path;
 
-      rc = asprintf (&manifest_path, "%s/%s/manifest.xml", path, dp->d_name);
+      rc = asprintf (&manifest_path, "%s/%s/manifest.json", path, dp->d_name);
       assert (0 <= rc);
 
       rc = hioi_manifest_read_header (context, headers[0] + set_id_index, manifest_path);
@@ -261,7 +261,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
 
     if (!(flags & HIO_FLAG_CREAT)) {
       /* load manifest. the manifest data will be shared with other processes in hioi_dataset_scatter */
-      rc = asprintf (&path, "%s/manifest.xml", posix_dataset->base_path);
+      rc = asprintf (&path, "%s/manifest.json", posix_dataset->base_path);
       assert (0 < rc);
 
       if (access (path, F_OK)) {
@@ -339,7 +339,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
     if (0 == context->c_rank) {
       char *path;
 
-      rc = asprintf (&path, "%s/manifest.xml", posix_dataset->base_path);
+      rc = asprintf (&path, "%s/manifest.json", posix_dataset->base_path);
       if (0 < rc) {
         rc = hioi_manifest_save (dataset, path);
         free (path);
