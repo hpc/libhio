@@ -127,7 +127,7 @@ msg "buildall $args: Starting at `date`"
 autogen=0
 incremental=0
 tree=$PWD
-tarname="libhio-1.1"
+tarname="libhio-1.2"
 
 goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel tt-gnu bu-gnu bu-cray"
 otherver="ct-cray ct-pgi ga-gnu ga-cray ga-intel ga-pgi tt-intel tt-pgi tt-cray"
