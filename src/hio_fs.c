@@ -232,6 +232,7 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
     /* get general filesystem data */
     rc = statfs (tmp, &fsinfo);
     if (0 > rc) {
+      hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "statfs path:%s rc:%d errno:%d(%s)", tmp, rc, errno, strerror(errno));  
       fs_attr->fs_type = hioi_err_errno (errno);
       break;
     }
