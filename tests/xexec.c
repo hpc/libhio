@@ -90,7 +90,7 @@ char * help =
   "  qof <number>  Quit after <number> of failures. 0 = never, default is 1.\n"
   "  name <test name> Set test name for final success / fail message\n"
   "  im <file>     imbed a file of actions at this point, - means stdin\n"
-  "  srr <seed>    seed random rank - seed RNG with <seed> + rank (or 0 if non-MPI)\n" 
+  "  srr <seed>    seed random rank - seed RNG with <seed> mixed with rank (if MPI)\n" 
   "  lc <count>    loop start; repeat the following actions (up to the matching\n"
   "                loop end) <count> times\n"
   "  lcr <min> <max>  like lc, but count random within inclusive range\n"
