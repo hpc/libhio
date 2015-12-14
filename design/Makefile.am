@@ -1,5 +1,9 @@
 subdirs=template
-EXTRA_DIST=doxygen.conf.in example.c libhio_api.pdf
+EXTRA_DIST=doxygen.conf.in example.c
+
+if HAVE_PDFLATEX
+EXTRA_DIST += libhio_api.pdf
+endif
 
 latex: doxygen.conf template/header.tex template/footer.tex template/style.sty ${top_srcdir}/src/include/hio.h
 	doxygen doxygen.conf

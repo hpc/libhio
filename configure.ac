@@ -102,6 +102,9 @@ AC_PROG_CC_C99
 
 AC_PROG_LEX
 
+AC_ARG_VAR([HAVE_PDFLATEX], [Whether pdflatex exists and is executable])
+AC_CHECK_PROG([HAVE_PDFLATEX], [pdflatex], [yes], [no])
+
 # Checks for libraries.
 
 # Checks for header files.
@@ -122,6 +125,7 @@ AC_DEFINE([_GNU_SOURCE], [1], [Define _GNU_SOURCE feature macro])
 AC_DEFINE_UNQUOTED([HIO_PREFIX], ["$prefix"], [HIO install prefix])
 AC_DEFINE_UNQUOTED([HIO_USE_DATAWARP], [$use_datawarp], [Whether to use datawarp for bb])
 AM_CONDITIONAL([DATAWARP_AVAILABLE], [test x$use_datawarp = x1])
+AM_CONDITIONAL([HAVE_PDFLATEX], [test $HAVE_PDFLATEX = yes])
 
 AC_SUBST([HIO_PKGCONFIG_REQUIRES], [$hio_pkgconfig_requires])
 
