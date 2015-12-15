@@ -1,0 +1,114 @@
+/* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
+/*
+ * Copyright (c) 2015      Los Alamos National Security, LLC. All rights
+ *                         reserved.
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
+#if !defined(HIO_JSON_RENAME_H)
+#define HIO_JSON_RENAME_H
+
+#define array_list_add hio_internal_array_list_add
+#define array_list_free hio_internal_array_list_free
+#define array_list_get_idx hio_internal_array_list_get_idx
+#define array_list_length hio_internal_array_list_length
+#define array_list_new hio_internal_array_list_new
+#define array_list_put_idx hio_internal_array_list_put_idx
+#define array_list_sort hio_internal_array_list_sort
+#define mc_debug hio_internal_mc_debug
+#define mc_error hio_internal_mc_error
+#define mc_get_debug hio_internal_mc_get_debug
+#define mc_info hio_internal_mc_info
+#define mc_set_debug hio_internal_mc_set_debug
+#define mc_set_syslog hio_internal_mc_set_syslog
+#define json_c_version hio_internal_json_c_version
+#define json_c_version_num hio_internal_json_c_version_num
+#define json_object_array_add hio_internal_json_object_array_add
+#define json_object_array_get_idx hio_internal_json_object_array_get_idx
+#define json_object_array_length hio_internal_json_object_array_length
+#define json_object_array_put_idx hio_internal_json_object_array_put_idx
+#define json_object_array_sort hio_internal_json_object_array_sort
+#define json_object_free_userdata hio_internal_json_object_free_userdata
+#define json_object_get hio_internal_json_object_get
+#define json_object_get_array hio_internal_json_object_get_array
+#define json_object_get_boolean hio_internal_json_object_get_boolean
+#define json_object_get_double hio_internal_json_object_get_double
+#define json_object_get_int hio_internal_json_object_get_int
+#define json_object_get_int64 hio_internal_json_object_get_int64
+#define json_object_get_object hio_internal_json_object_get_object
+#define json_object_get_string hio_internal_json_object_get_string
+#define json_object_get_string_len hio_internal_json_object_get_string_len
+#define json_object_get_type hio_internal_json_object_get_type
+#define json_object_is_type hio_internal_json_object_is_type
+#define json_object_new_array hio_internal_json_object_new_array
+#define json_object_new_boolean hio_internal_json_object_new_boolean
+#define json_object_new_double hio_internal_json_object_new_double
+#define json_object_new_double_s hio_internal_json_object_new_double_s
+#define json_object_new_int hio_internal_json_object_new_int
+#define json_object_new_int64 hio_internal_json_object_new_int64
+#define json_object_new_object hio_internal_json_object_new_object
+#define json_object_new_string hio_internal_json_object_new_string
+#define json_object_new_string_len hio_internal_json_object_new_string_len
+#define json_object_object_add hio_internal_json_object_object_add
+#define json_object_object_del hio_internal_json_object_object_del
+#define json_object_object_get hio_internal_json_object_object_get
+#define json_object_object_get_ex hio_internal_json_object_object_get_ex
+#define json_object_object_length hio_internal_json_object_object_length
+#define json_object_put hio_internal_json_object_put
+#define json_object_set_serializer hio_internal_json_object_set_serializer
+#define json_object_to_json_string hio_internal_json_object_to_json_string
+#define json_object_to_json_string_ext hio_internal_json_object_to_json_string_ext
+#define json_object_userdata_to_json_string hio_internal_json_object_userdata_to_json_string
+#define json_object_iter_begin hio_internal_json_object_iter_begin
+#define json_object_iter_end hio_internal_json_object_iter_end
+#define json_object_iter_equal hio_internal_json_object_iter_equal
+#define json_object_iter_init_default hio_internal_json_object_iter_init_default
+#define json_object_iter_next hio_internal_json_object_iter_next
+#define json_object_iter_peek_name hio_internal_json_object_iter_peek_name
+#define json_object_iter_peek_value hio_internal_json_object_iter_peek_value
+#define json_tokener_error_desc hio_internal_json_tokener_error_desc
+#define json_tokener_free hio_internal_json_tokener_free
+#define json_tokener_get_error hio_internal_json_tokener_get_error
+#define json_tokener_new hio_internal_json_tokener_new
+#define json_tokener_new_ex hio_internal_json_tokener_new_ex
+#define json_tokener_parse hio_internal_json_tokener_parse
+#define json_tokener_parse_ex hio_internal_json_tokener_parse_ex
+#define json_tokener_parse_verbose hio_internal_json_tokener_parse_verbose
+#define json_tokener_reset hio_internal_json_tokener_reset
+#define json_tokener_set_flags hio_internal_json_tokener_set_flags
+#define json_object_from_file hio_internal_json_object_from_file
+#define json_object_to_file hio_internal_json_object_to_file
+#define json_object_to_file_ext hio_internal_json_object_to_file_ext
+#define json_parse_double hio_internal_json_parse_double
+#define json_parse_int64 hio_internal_json_parse_int64
+#define json_type_to_name hio_internal_json_type_to_name
+#define lh_abort hio_internal_lh_abort
+#define lh_char_equal hio_internal_lh_char_equal
+#define lh_char_hash hio_internal_lh_char_hash
+#define lh_kchar_table_new hio_internal_lh_kchar_table_new
+#define lh_kptr_table_new hio_internal_lh_kptr_table_new
+#define lh_ptr_equal hio_internal_lh_ptr_equal
+#define lh_ptr_hash hio_internal_lh_ptr_hash
+#define lh_table_delete hio_internal_lh_table_delete
+#define lh_table_delete_entry hio_internal_lh_table_delete_entry
+#define lh_table_free hio_internal_lh_table_free
+#define lh_table_insert hio_internal_lh_table_insert
+#define lh_table_length hio_internal_lh_table_length
+#define lh_table_lookup hio_internal_lh_table_lookup
+#define lh_table_lookup_entry hio_internal_lh_table_lookup_entry
+#define lh_table_lookup_ex hio_internal_lh_table_lookup_ex
+#define lh_table_new hio_internal_lh_table_new
+#define lh_table_resize hio_internal_lh_table_resize
+#define printbuf_free hio_internal_printbuf_free
+#define printbuf_memappend hio_internal_printbuf_memappend
+#define printbuf_memset hio_internal_printbuf_memset
+#define printbuf_new hio_internal_printbuf_new
+#define printbuf_reset hio_internal_printbuf_reset
+#define sprintbuf hio_internal_sprintbuf
+#define json_c_get_random_seed hio_internal_json_c_get_random_seed
+
+#endif /* defined(HIO_JSON_RENAME_H) */

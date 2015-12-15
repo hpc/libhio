@@ -31,27 +31,7 @@ fi
 AM_INIT_AUTOMAKE
 LT_INIT
 
-AC_ARG_WITH(json, [AS_HELP_STRING([--with-json=PATH], [prefix where json-c is installed @<:@default=pkgconfig@:>@])],
-                  [], [with_json=pkgconfig])
-
-if test $with_json = pkgconfig ; then
-    PKG_CHECK_MODULES(json, json-c >= 0.10)
-    hio_pkgconfig_requires="$hio_pkgconfig_requires, json-c >= 0.10"
-else
-    json_CFLAGS="-I$with_json/include/json-c"
-    if test -d "$with_json/lib64" ; then
-        json_LIBS="-L$with_json/lib64"
-    else
-        json_LIBS="-L$with_json/lib"
-    fi
-
-    json_LIBS="$json_LIBS -ljson-c"
-fi
-
-CPPFLAGS="$CPPFLAGS $json_CFLAGS"
-LIBS="$LIBS $json_LIBS"
-
-AC_CHECK_FUNCS([json_object_new_object],[],[AC_ERROR([json-c is required])])
+HIO_CHECK_JSON
 
 # Check for datawarp availability
 AC_ARG_WITH(datawarp, [AS_HELP_STRING([--with-datawarp=DIR], [enable support for Cray datawarp @<:@default=auto@:>@])],

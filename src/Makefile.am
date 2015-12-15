@@ -23,6 +23,13 @@ libhio_la_SOURCES = hio_context.c hio_component.c hio_var.c hio_crc.c \
 	api/element_open.c api/element_close.c api/element_write.c \
 	api/element_read.c api/dataset_unlink.c api/dataset_get_id.c \
 	api/element_size.c libconfig_parser_a-config_parser.c
+if INTERNAL_JSON_C
+libhio_la_LIBADD = $(top_builddir)/extra/json/build/.libs/libjson-c.a
+libhio_la_CPPFLAGS += -I$(top_builddir)/extra/json/json-c-0.12 -I$(top_builddir)/extra/json/build
+.PHONY: json
+$(top_builddir)/extra/json/build/.libs/libjson-c.a:
+	make -C $(top_builddir)/extra/json/build
+endif
 
 if DATAWARP_AVAILABLE
 

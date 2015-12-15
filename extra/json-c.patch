@@ -1,0 +1,59 @@
+diff -au a/arraylist.h b/arraylist.h
+--- a/arraylist.h	2014-04-10 18:41:08.000000000 -0600
++++ b/arraylist.h	2015-12-15 11:59:51.000000000 -0700
+@@ -12,6 +12,8 @@
+ #ifndef _arraylist_h_
+ #define _arraylist_h_
+
++#include "json_rename.h"
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+diff -au a/debug.h b/debug.h
+--- a/debug.h	2014-04-10 18:41:08.000000000 -0600
++++ b/debug.h	2015-12-15 11:59:15.000000000 -0700
+@@ -15,6 +15,8 @@
+
+ #include <stdlib.h>
+
++#include "json_rename.h"
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+diff -au a/json_inttypes.h b/json_inttypes.h
+--- a/json_inttypes.h	2015-12-15 12:10:23.000000000 -0700
++++ b/json_inttypes.h	2014-04-10 18:41:08.000000000 -0600
+@@ -3,6 +3,7 @@
+ #define _json_inttypes_h_
+
+ #include "json_config.h"
++#include "json_rename.h"
+
+ #if defined(_MSC_VER) && _MSC_VER <= 1700
+
+diff -au a/printbuf.h b/printbuf.h
+--- a/printbuf.h	2014-04-10 18:41:08.000000000 -0600
++++ b/printbuf.h	2015-12-15 11:58:51.000000000 -0700
+@@ -16,6 +16,8 @@
+ #ifndef _printbuf_h_
+ #define _printbuf_h_
+
++#include "json_rename.h"
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+diff -au a/random_seed.h b/random_seed.h
+--- a/random_seed.h	2014-04-10 18:41:08.000000000 -0600
++++ b/random_seed.h	2015-12-15 12:06:03.000000000 -0700
+@@ -12,6 +12,8 @@
+ #ifndef seed_h
+ #define seed_h
+
++#include "json_rename.h"
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
