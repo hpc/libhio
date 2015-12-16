@@ -9,6 +9,7 @@ AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE([disable])
 AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
+AM_SILENT_RULES([yes])
 
 hio_use_mpi=0
 
