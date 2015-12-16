@@ -44,7 +44,7 @@ int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, 
   hio_module_t *module = dataset->ds_module;
   int rc;
 
-  if (NULL == element) {
+  if (NULL == element || offset < 0) {
     return HIO_ERR_BAD_PARAM;
   }
 

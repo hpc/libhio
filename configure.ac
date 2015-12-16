@@ -24,6 +24,8 @@ if test -n "$XTOS_VERSION" && test ! "$CC" ; then
     fi
     # Force cray's linker to act like it should
     LDFLAGS="$LDFLAGS -dynamic"
+    # We may be cross-compiling so trick configure
+    cross_compiling=yes
 elif test ${MPICC} = "mpicc" ; then
     CC=${MPICC}
     hio_use_mpi=1
