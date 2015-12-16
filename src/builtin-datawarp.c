@@ -98,6 +98,8 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
   datawarp_dataset->base.ds_module = module;
 
   if (flags & HIO_FLAG_WRITE) {
+    /* default to auto mode */
+    datawarp_dataset->stage_mode = -1;
     hioi_config_add (context, &datawarp_dataset->base.ds_object, &datawarp_dataset->stage_mode,
                      "datawarp_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
                      "Datawarp stage mode to use with this dataset instance", 0);
