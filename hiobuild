@@ -147,9 +147,10 @@ msg "====[HIOBUILD_RESULT_START]===($name)======================================
 msg "buildhio $name: Checking $log for build problems"
 sed1="s/error_test/err0r_test/g"
 sed2="s/-Werror/-Werr0r/g"
-sed3="s/Warning: Linking the shared library libhio.la against the/W@rning: Linking the shared library libhio.la against the/g"
+sed3="s/-Wno-error/-Wno-err0r/g"
+sed4="s/Warning: Linking the shared library libhio.la against the/W@rning: Linking the shared library libhio.la against the/g"
 tmpfile="tmp.hiobuild.grep.out"
-cat $log | sed -e $sed1 -e $sed2 -e "$sed3" | egrep -ni "error|warn|fail" 1>$tmpfile 2>&1
+cat $log | sed -e $sed1 -e $sed2 -e "$sed3" -e "$sed4" | egrep -ni "error|warn|fail" 1>$tmpfile 2>&1
 rc=$?
 cat $tmpfile 2>&1 | tee -a $log
 rm $tmpfile
