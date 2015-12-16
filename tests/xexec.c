@@ -1234,7 +1234,7 @@ static int hio_fail = 0;
 static void * wbuf = NULL, *rbuf = NULL;
 static U64 bufsz = 0;
 static int hio_check = 0;
-static int hio_e_ofs;
+static U64 hio_e_ofs;
 static I64 hseg_start = 0;
 static U64 rw_count[2];
 static ETIMER hio_tmr;
