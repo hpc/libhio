@@ -34,13 +34,9 @@ else
     AC_MSG_NOTICE([configuring json-c])
     rm -rf extra/json
     mkdir -p extra/json/build
-    tar -C extra/json -x -z -f "${abs_srcdir}"/extra/json-c-0.12-nodoc.tar.gz
-    cp "${abs_srcdir}"/extra/json_rename.h extra/json/json-c-0.12/
-    cd "${abs_builddir}"/extra/json/json-c-0.12 ; patch -p1 < "${abs_srcdir}"/extra/json-c.patch &> /dev/null
-    hio_check_json_CFLAGS_save="$CFLAGS"
-    CFLAGS=""
+    tar -C extra/json -x -z -f "${abs_srcdir}"/extra/json-c-0.12-nodoc-patched.tar.gz
+    cd "${abs_builddir}"/extra/json/json-c-0.12
     cd "${abs_srcdir}"/extra/json/build ; "${abs_srcdir}"/extra/json/json-c-0.12/configure --disable-shared --enable-static --with-pic &> config.out
-    CFLAGS="$hio_check_json_CFLAGS_save"
     cd "${abs_builddir}"
     if test ! "$?" = "0" ; then
         AC_ERROR([failed to configure json-c])
