@@ -1,6 +1,6 @@
 diff -au a/arraylist.h b/arraylist.h
 --- a/arraylist.h	2014-04-10 18:41:08.000000000 -0600
-+++ b/arraylist.h	2015-12-15 11:59:51.000000000 -0700
++++ b/arraylist.h	2015-12-16 12:05:00.000000000 -0700
 @@ -12,6 +12,8 @@
  #ifndef _arraylist_h_
  #define _arraylist_h_
@@ -12,7 +12,7 @@ diff -au a/arraylist.h b/arraylist.h
  #endif
 diff -au a/debug.h b/debug.h
 --- a/debug.h	2014-04-10 18:41:08.000000000 -0600
-+++ b/debug.h	2015-12-15 11:59:15.000000000 -0700
++++ b/debug.h	2015-12-16 12:05:00.000000000 -0700
 @@ -15,6 +15,8 @@
 
  #include <stdlib.h>
@@ -22,9 +22,21 @@ diff -au a/debug.h b/debug.h
  #ifdef __cplusplus
  extern "C" {
  #endif
+diff -au a/json_c_version.h b/json_c_version.h
+--- a/json_c_version.h	2014-04-10 19:09:19.000000000 -0600
++++ b/json_c_version.h	2015-12-16 12:05:00.000000000 -0700
+@@ -8,6 +8,8 @@
+ #ifndef _json_c_version_h_
+ #define _json_c_version_h_
+
++#include "json_rename.h"
++
+ #define JSON_C_MAJOR_VERSION 0
+ #define JSON_C_MINOR_VERSION 12
+ #define JSON_C_MICRO_VERSION 0
 diff -au a/json_inttypes.h b/json_inttypes.h
---- a/json_inttypes.h	2015-12-15 12:10:23.000000000 -0700
-+++ b/json_inttypes.h	2014-04-10 18:41:08.000000000 -0600
+--- a/json_inttypes.h	2014-04-10 18:41:08.000000000 -0600
++++ b/json_inttypes.h	2015-12-16 12:05:00.000000000 -0700
 @@ -3,6 +3,7 @@
  #define _json_inttypes_h_
 
@@ -33,9 +45,25 @@ diff -au a/json_inttypes.h b/json_inttypes.h
 
  #if defined(_MSC_VER) && _MSC_VER <= 1700
 
+diff -au a/json_tokener.c b/json_tokener.c
+--- a/json_tokener.c	2014-04-10 18:41:08.000000000 -0600
++++ b/json_tokener.c	2015-12-16 12:07:04.000000000 -0700
+@@ -352,12 +352,10 @@
+
+     case json_tokener_state_inf: /* aka starts with 'i' */
+       {
+-	int size;
+	int size_inf;
+	int is_negative = 0;
+
+	printbuf_memappend_fast(tok->pb, &c, 1);
+-	size = json_min(tok->st_pos+1, json_null_str_len);
+	size_inf = json_min(tok->st_pos+1, json_inf_str_len);
+	char *infbuf = tok->pb->buf;
+	if (*infbuf == '-')
 diff -au a/printbuf.h b/printbuf.h
 --- a/printbuf.h	2014-04-10 18:41:08.000000000 -0600
-+++ b/printbuf.h	2015-12-15 11:58:51.000000000 -0700
++++ b/printbuf.h	2015-12-16 12:05:00.000000000 -0700
 @@ -16,6 +16,8 @@
  #ifndef _printbuf_h_
  #define _printbuf_h_
@@ -45,9 +73,21 @@ diff -au a/printbuf.h b/printbuf.h
  #ifdef __cplusplus
  extern "C" {
  #endif
+diff -au a/random_seed.c b/random_seed.c
+--- a/random_seed.c	2014-04-10 18:41:08.000000000 -0600
++++ b/random_seed.c	2015-12-16 12:05:00.000000000 -0700
+@@ -12,6 +12,8 @@
+ #include <stdio.h>
+ #include "config.h"
+
++#include "json_rename.h"
++
+ #define DEBUG_SEED(s)
+
+
 diff -au a/random_seed.h b/random_seed.h
 --- a/random_seed.h	2014-04-10 18:41:08.000000000 -0600
-+++ b/random_seed.h	2015-12-15 12:06:03.000000000 -0700
++++ b/random_seed.h	2015-12-16 12:05:00.000000000 -0700
 @@ -12,6 +12,8 @@
  #ifndef seed_h
  #define seed_h

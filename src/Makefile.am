@@ -24,10 +24,29 @@ libhio_la_SOURCES = hio_context.c hio_component.c hio_var.c hio_crc.c \
 	api/element_read.c api/dataset_unlink.c api/dataset_get_id.c \
 	api/element_size.c libconfig_parser_a-config_parser.c
 if INTERNAL_JSON_C
-libhio_la_LIBADD = $(top_builddir)/extra/json/build/.libs/libjson-c.a
+# just link in the json objects directly
+json_objects = $(top_builddir)/extra/json/build/arraylist.lo $(top_builddir)/extra/json/build/debug.lo \
+	$(top_builddir)/extra/json/build/json_c_version.lo $(top_builddir)/extra/json/build/json_object.lo \
+	$(top_builddir)/extra/json/build/json_object_iterator.lo $(top_builddir)/extra/json/build/json_tokener.lo \
+	$(top_builddir)/extra/json/build/json_util.lo $(top_builddir)/extra/json/build/linkhash.lo \
+	$(top_builddir)/extra/json/build/printbuf.lo $(top_builddir)/extra/json/build/random_seed.lo
+# include both the archive (for the dynamic library) and the object files (for the static library)
+libhio_la_LDFLAGS += --whole-archive $(top_builddir)/extra/json/build/.libs/libjson-c.a --no-whole-archive
+libhio_la_LIBADD = $(json_objects)
 libhio_la_CPPFLAGS += -I$(top_builddir)/extra/json/json-c-0.12 -I$(top_builddir)/extra/json/build
+$(top_builddir)/extra/json/build/arraylist.lo: json
+$(top_builddir)/extra/json/build/debug.lo: json
+$(top_builddir)/extra/json/build/json_c_version.lo: json
+$(top_builddir)/extra/json/build/json_object.lo: json
+$(top_builddir)/extra/json/build/json_object_iterator.lo: json
+$(top_builddir)/extra/json/build/json_tokener.lo: json
+$(top_builddir)/extra/json/build/json_util.lo: json
+$(top_builddir)/extra/json/build/linkhash.lo: json
+$(top_builddir)/extra/json/build/printbuf.lo: json
+$(top_builddir)/extra/json/build/random_seed.lo: json
+$(top_builddir)/extra/json/build/.libs/libjson-c.la: json
 .PHONY: json
-$(top_builddir)/extra/json/build/.libs/libjson-c.a:
+json:
 	make -C $(top_builddir)/extra/json/build
 endif
 

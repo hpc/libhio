@@ -4,11 +4,11 @@
 
 AC_DEFUN([HIO_CHECK_JSON],[
 
-AC_ARG_WITH(json, [AS_HELP_STRING([--with-external-json=PATH], [use external json-c. pass pkgconfig to use packageconfig @<:@default=no@:>@])],
+AC_ARG_WITH(json, [AS_HELP_STRING([--with-external-json=PATH], [use external json-c. pass yes to use pkgconfig @<:@default=no@:>@])],
                   [], [with_external_json=no])
 
 if test ! $with_external_json = no ; then
-    if test $with_external_json = pkgconfig ; then
+    if test $with_external_json = yes ; then
         PKG_CHECK_MODULES(json, json-c >= 0.10)
         hio_pkgconfig_requires="$hio_pkgconfig_requires, json-c >= 0.10"
     else
@@ -37,7 +37,10 @@ else
     tar -C extra/json -x -z -f "${abs_srcdir}"/extra/json-c-0.12-nodoc.tar.gz
     cp "${abs_srcdir}"/extra/json_rename.h extra/json/json-c-0.12/
     cd "${abs_builddir}"/extra/json/json-c-0.12 ; patch -p1 < "${abs_srcdir}"/extra/json-c.patch &> /dev/null
-    cd "${abs_srcdir}"/extra/json/build ; "${abs_srcdir}"/extra/json/json-c-0.12/configure --disable-shared --enable-static &> config.out
+    hio_check_json_CFLAGS_save="$CFLAGS"
+    CFLAGS=""
+    cd "${abs_srcdir}"/extra/json/build ; "${abs_srcdir}"/extra/json/json-c-0.12/configure --disable-shared --enable-static --with-pic &> config.out
+    CFLAGS="$hio_check_json_CFLAGS_save"
     cd "${abs_builddir}"
     if test ! "$?" = "0" ; then
         AC_ERROR([failed to configure json-c])
