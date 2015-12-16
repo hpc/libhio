@@ -31,7 +31,7 @@ json_objects = $(top_builddir)/extra/json/build/arraylist.lo $(top_builddir)/ext
 	$(top_builddir)/extra/json/build/json_util.lo $(top_builddir)/extra/json/build/linkhash.lo \
 	$(top_builddir)/extra/json/build/printbuf.lo $(top_builddir)/extra/json/build/random_seed.lo
 # include both the archive (for the dynamic library) and the object files (for the static library)
-libhio_la_LDFLAGS += --whole-archive $(top_builddir)/extra/json/build/.libs/libjson-c.a --no-whole-archive
+libhio_la_LDFLAGS += --whole-archive $(top_builddir)/extra/json/build/.libs/libjson-c.la --no-whole-archive
 libhio_la_LIBADD = $(json_objects)
 libhio_la_CPPFLAGS += -I$(top_builddir)/extra/json/json-c-0.12 -I$(top_builddir)/extra/json/build
 $(top_builddir)/extra/json/build/arraylist.lo: json
