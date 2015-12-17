@@ -1,0 +1,16 @@
+HIO NEWS
+========
+
+Last updated 2015-12-17
+
+Release hio.1.2.0.0:
+
+Switched from XML to JSON format for the manifest file.  This means that hio
+datasets created with previous releases cannot be read with this version. We
+don't expect to be this casual about incompatible changes in the future, but
+since at the moment, hio is only being used for development and testing
+activities an exception seems reasonable.
+
+Minor bug fixes, diagnostic, testing and build improvements.
+
+--- End of NEWS ---
