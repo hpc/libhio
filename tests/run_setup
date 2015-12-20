@@ -125,7 +125,7 @@ batch_sub() {
 
     echo "echo \"\`date \"+%Y-%m-%d %H:%M:%S\"\` Job $jobname   end\"" >> $jobsh
 
-    msub_msg=`msub $jobsh`
+    msub_msg=`msub -v HIO_verbose $jobsh`
 
     shopt -s extglob
     #jobid=${msub_msg##*([!0-9])}
@@ -229,7 +229,7 @@ else
     mympicmd="aprun"
     size="m"
     if [[ -n $PBS_JOBID ]]; then
-      set | egrep "^PBS|^DW"
+      set | egrep "^PBS|^DW|^HOST|^HIO"
       job_dir="/${PBS_JOBID%%.*}"
     fi
   else
@@ -334,11 +334,9 @@ if [[ $batch -eq 0 ]]; then
 
   # If HIO_TEST_ROOTS not set, set up default
   if [[ -z $HIO_TEST_ROOTS ]]; then
-    if [[ ${HOSTNAME:0:3} == "ga-" ]]; then
+    if [[ -n $DW_JOB_STRIPED ]]; then
       HIO_TEST_ROOTS="DataWarp"
-    elif [[ ${HOST:0:3} == "bu-" ]]; then # buffy only sets HOST corrrectly
-      HIO_TEST_ROOTS="DataWarp"
-    elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then
+    elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then # Special for trinitite since Moab not integrated
       HIO_TEST_ROOTS="DataWarp"
     fi;
     addifd "/lscratch1/$LOGNAME"
