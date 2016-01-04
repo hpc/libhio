@@ -99,6 +99,10 @@ static uint64_t hioi_string_to_int (const char *strval) {
   uint64_t value = 0;
   char *tmp;
 
+  if (NULL == strval || '\0' == strval[0]) {
+    return 0;
+  }
+
   value = strtol (strval, &tmp, 0);
   if (tmp == strval) {
     return (uint64_t) -1;
