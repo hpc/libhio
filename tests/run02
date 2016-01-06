@@ -9,6 +9,8 @@ case $size in
   m ) blk=$((1 * $cons_mi));  nblk=200;;
   l ) blk=$((2 * $cons_mi));  nblk=512;;
   x ) blk=$((4 * $cons_mi));  nblk=1024;;
+  y ) blk=$((4 * $cons_mi));  nblk=1536;;
+  z ) blk=$((4 * $cons_mi));  nblk=2048;;
   * ) synexit "Error: invalid size $size";;
 esac
 

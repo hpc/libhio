@@ -7,7 +7,7 @@
 #
 # BASH variables set that can be used by test script:
 #        root - data root for test, created or emptied
-#        size - gross size of IO, per rank t|s|m|l|x
+#        size - gross size of IO, per rank t|s|m|l|x|y|z
 #       ranks - number of MPI ranks
 #    verbose_lev - xexec2 verbosity level
 #   debug_lev - xexec2 debug level
@@ -38,7 +38,7 @@ synexit() {
   echo "        [-b] [-c]"
   echo ""
   echo "  Options:"   
-  echo "    -s <size>       Per rank run size t|s|m|l|x  (default s)"
+  echo "    -s <size>       Per rank run size t|s|m|l|x|y|z  (default s)"
   echo "    -r <num_ranks>  Number of MPI ranks.  Default is all allocated"
   echo "                    PEs or 2 on Mac OS"
   echo "    -n <num_nodes>  Number of nodes.  Default is all allocated nodes"
@@ -65,11 +65,6 @@ cmd() {
 
 msg() { 
   echo "$host $*" 
-}
-
-# Function to set dw_cap to a rounded DW capacity parameter
-dw_cap_round() {
-  dw_cap="$(( ($1 + $cons_mi - 1) / $cons_mi ))MiB" 
 }
 
 # Function to check max_rc and output a summary message
@@ -177,8 +172,8 @@ clean_roots() {
       if [[ -n $HIO_datawarp_root ]]; then clean=$HIO_datawarp_root; fi
       if [[ -n $clean ]]; then
         echo "Cleaning: \"$r\""
-        echo "===> aprun bash"
-        aprun -n 1 -b bash -c "$clean_cmd" $HIO_datawarp_root
+        echo "===> aprun bash -c \$clean_cmd $clean"
+        aprun -n 1 -b bash -c "$clean_cmd" $clean
       fi
     elif [[ ${r:0:6} == "posix:" ]]; then
       echo "Cleaning: \"$r\""

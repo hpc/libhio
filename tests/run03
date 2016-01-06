@@ -4,11 +4,13 @@
 # Read and write N-1 test case with read data value checking.  
 
 case $size in
-  t ) blk=1024;              nblk=5;  segsz=$((5   * $cons_ki)); nseg=2;;
-  s ) blk=20480;             nblk=8;  segsz=$((160 * $cons_ki)); nseg=10;;
-  m ) blk=$((1 * $cons_mi)); nblk=16; segsz=$((16  * $cons_mi)); nseg=16;;
-  l ) blk=$((2 * $cons_mi)); nblk=16; segsz=$((32  * $cons_mi)); nseg=32;;
-  x ) blk=$((2 * $cons_mi)); nblk=32; segsz=$((64  * $cons_mi)); nseg=64;; 
+  t ) blk=1024;              nblk=5;  segsz=$((5    * $cons_ki)); nseg=2;;
+  s ) blk=20480;             nblk=8;  segsz=$((160  * $cons_ki)); nseg=10;;
+  m ) blk=$((1 * $cons_mi)); nblk=16; segsz=$((16   * $cons_mi)); nseg=16;;
+  l ) blk=$((2 * $cons_mi)); nblk=16; segsz=$((32   * $cons_mi)); nseg=32;;
+  x ) blk=$((2 * $cons_mi)); nblk=32; segsz=$((64   * $cons_mi)); nseg=64;;
+  y ) blk=$((2 * $cons_mi)); nblk=32; segsz=$((64   * $cons_mi)); nseg=128;; 
+  z ) blk=$((2 * $cons_mi)); nblk=64; segsz=$((128  * $cons_mi)); nseg=128;; 
   * ) synexit "Error: invalid size $size";;
 esac
 
