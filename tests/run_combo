@@ -1,0 +1,161 @@
+#----------------------------------------------------------------------------
+# run_combo - run tests with multiple combinations of parameters 
+#----------------------------------------------------------------------------
+synexit() {
+  echo ""
+  if [[ -n $* ]]; then echo $*; echo ""; fi
+  echo "run_combo - run tests with multiple parameter combinations"
+  echo ""
+  echo "Iterates through all combinations of specified tests and paramters"
+  echo ""
+  echo "  Syntax:"
+  echo "    $0"
+  echo "        [-t <test> [<test>...] ]"
+  echo "        [-s <size> [<size>...] ]"
+  echo "        [-r <num_ranks> [<num_ranks>...] ]"
+  echo "        [-n <num_nodes> [<num_nodes>...] ]"
+  echo "        [-p <ppn> [<ppn>...] ]"
+  echo "        [-v <verbose_level>]"
+  echo "        [-d <debug_level>]"
+  echo "        [-b] [-c]"
+  echo ""
+  echo "  Options:"   
+  echo "    -s <size>       Per rank run sizes t|s|m|l|x|y|z  (default s)"
+  echo "    -r <num_ranks>  Number of ranks parameters"
+  echo "    -n <num_nodes>  Number of nodes parameters."
+  echo "    -p <ppn>        PPN parameters"
+  echo "    -v <verbose_lev>   Verbosity level for xexec2, default 1"
+  echo "    -d <debug_lev>  Debug level for xexec2, default 0"
+  echo "    -b              Submit batch job with these options"
+  echo "    -c              Chain jobs - make this job dependant on previous job"
+  echo ""
+  echo "Example: run_combo -t ./run02 ./run03 -r 2 4 -s l x"
+  echo "  Will run:"
+  echo "    ./run02 -s l -r 2"
+  echo "    ./run03 -s l -r 2"
+  echo "    ./run02 -s x -r 2"
+  echo "    ./run03 -s x -r 2"
+  echo "    ./run02 -s l -r 4"
+  echo "    ./run03 -s l -r 4"
+  echo "    ./run02 -s x -r 4"
+  echo "    ./run03 -s x -r 4"
+  echo ""
+  echo "  Cornell Wright  cornell@lanl.gov"
+  
+  exit 8
+}
+
+#----------------------------------------------------------------------------
+# Functions for run_setup and test scripts to use
+#----------------------------------------------------------------------------
+cmd() {
+  echo "$host ---> $*"
+  eval "$*"
+  return $?         
+}
+
+msg() { 
+  echo "$host $*" 
+}
+
+is_not_flag() {
+  # Check if $1 is a flag; e.g. "-b"
+  [[ "$1" =~ -.* ]] && return 1 || return 0
+}
+
+#----------------------------------------------------------------------------
+# Parse arguments 
+#----------------------------------------------------------------------------
+host=`hostname -s`
+batch=0
+chain=0
+# Work around getopts limitations to support multiple arguments
+while getopts "htsrnpv:d:bc" optname; do
+  #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
+  case $optname in
+    h ) synexit;;
+    t ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          test+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
+    s ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          size+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
+    r ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          ranks+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
+    n ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          nodes+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
+    p ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          ppn+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
+    v ) verbose_lev=$OPTARG;;
+    d ) debug_lev=$OPTARG;;
+    b ) batch=1;;
+    c ) chain=1;;
+   \? ) synexit "Error: invalid option";;
+  esac
+done
+
+if [[ -z $test ]]; then synexit "Error: at least one test must be specified";fi
+if [[ -z $size ]]; then size+=(" ");fi
+if [[ -z $ranks ]]; then ranks+=(" ");fi
+if [[ -z $nodes ]]; then nodes+=(" ");fi
+if [[ -z $ppn ]]; then ppn+=(" ");fi
+
+#msg "test:  '${test[@]}'"
+#msg "size:  '${size[@]}'"
+#msg "ranks: '${ranks[@]}'"
+#msg "nodes: '${nodes[@]}'"
+#msg "ppn:    '${ppn[@]}'"
+
+shift $((OPTIND - 1 ))
+if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
+
+#----------------------------------------------------------------------------
+# Iterate through al combinations of specified parameters 
+#----------------------------------------------------------------------------
+for r in "${ranks[@]}"; do
+  for n in "${nodes[@]}"; do
+    for p in "${ppn[@]}"; do
+      for s in "${size[@]}"; do
+        for t in "${test[@]}"; do
+          #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
+          c=$t
+          if [[ $s != " " ]]; then c="$c -s $s"; fi
+          if [[ $r != " " ]]; then c="$c -r $r"; fi
+          if [[ $n != " " ]]; then c="$c -n $n"; fi
+          if [[ $p != " " ]]; then c="$c -p $p"; fi
+          if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
+          if [[ -n $debug_lev ]]; then c="$c -d $debug_lev"; fi
+          if [[ $batch -eq 1 ]]; then c="$c -b"; fi 
+          if [[ $chain -eq 1 ]]; then c="$c -c"; fi 
+          
+          cmd $c
+        done
+      done
+    done
+  done
+done
+
+# --- end of run_combo ---
