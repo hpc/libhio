@@ -1,0 +1,56 @@
+HIO README.dev.procedures
+=========================
+
+Last updated 2016-01-07
+
+This file contains notes on procedures for the HIO development team.
+
+
+Add an HIO user to LANL groups and mailing lists
+------------------------------------------------
+
+On register.lanl.gov add the user to the hiouser mailing list.
+
+On register.lanl.gov add the user to the hiouser unix group.
+
+
+Generate and publish an HIO release
+-----------------------------------
+
+Update NEWS and README, commit and push changes.
+
+git pull
+
+Test build via:
+
+  ./buildall -a local ga-gnu tt-gnu ct-gnu mu-gnu tt-intel ct-intel mu-intel
+
+Test run on one or more systems according to type of changes. Example:
+
+  ./run_combo -t ./run02 ./run03 ./run12 -s s m -n 1 2 -p 32 -b
+  grep -c "RESULT: SUCCESS" run/*.out
+
+Tag master:
+
+  git tag hio.1.2.0.1
+  git push --tags
+
+Rename and publish tarball:
+
+  mv libhio-1.2.tar.gz libhio-1.2.0.1.tar.gz
+  scp libhio-1.2.0.1.tar.gz ct-fe1:/usr/projects/hio/user/rel 
+  ssh ct-fe1 /usr/projects/hio/dev/bin/fixgp
+
+Send eMail to hiouser@lanl.gov.  Sample:
+
+  To: hiouser@lanl.gov
+  Subject: HIO Version 1.2.0.1 available
+  
+  See /usr/projects/hio/user/rel/libhio-1.2.0.1.tar.gz
+
+  File NEWS contains a description of changes.
+
+  Cornell
+
+--- end of README.dev.procedures ---
+
