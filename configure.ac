@@ -13,7 +13,7 @@ AM_SILENT_RULES([yes])
 
 hio_use_mpi=0
 
-if test -n "$XTOS_VERSION" && test ! "$CC" ; then
+if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && test ! "$CC" ; then
     # Work around Cray idiosyncrasies
     # Don't let the Cray wrapper bring in extra crap
     PE_VERSION=`echo $XTOS_VERSION | sed 's/\..*//g'`
@@ -26,6 +26,9 @@ if test -n "$XTOS_VERSION" && test ! "$CC" ; then
     LDFLAGS="$LDFLAGS -dynamic"
     # We may be cross-compiling so trick configure
     cross_compiling=yes
+    if test ! -n "$LD" ; then
+        LD=ld
+    fi
 elif test ${MPICC} = "mpicc" ; then
     CC=${MPICC}
     hio_use_mpi=1
