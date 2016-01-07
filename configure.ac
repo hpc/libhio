@@ -17,13 +17,12 @@ if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && test ! "$CC" ; then
     # Work around Cray idiosyncrasies
     # Don't let the Cray wrapper bring in extra crap
     PE_VERSION=`echo $XTOS_VERSION | sed 's/\..*//g'`
+    # force the cray wrappers to act in a predictable way
     if test x$PE_VERSION = x4 ; then
-        CC="cc -target=native"
+        CC="cc -target=native -dynamic"
     else
-        CC="cc --cray-bypass-pkgconfig"
+        CC="cc --cray-bypass-pkgconfig -dynamic"
     fi
-    # Force cray's linker to act like it should
-    LDFLAGS="$LDFLAGS -dynamic"
     # We may be cross-compiling so trick configure
     cross_compiling=yes
     if test ! -n "$LD" ; then
