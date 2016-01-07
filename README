@@ -1,7 +1,7 @@
 HIO Readme
 ==========
 
-Last updated 2015-12-17
+Last updated 2016-01-07
 
 See file NEWS for a description of changes to hio.
 
@@ -55,8 +55,7 @@ named run_setup to process options and establish the testing environment.
 They invoke hio using a program named xexec which is driven by command strings
 contained in the runxx test scripts.
 
-A typical usage to submit a test DataWarp batch job on buffy (the only system
-currently so configured) might look like:
+A typical usage to submit a test DataWarp batch job on buffy might look like:
 
 cd <tarball>/tests
 ./run02 -s m -r 32 -n 2 -b 
@@ -70,5 +69,15 @@ Options used:
 The runxx tests will use the hiobuild.modules.bash files saved by hiobuild
 (if available) to reestablish the same module environment used at build
 time.
+
+A multi-job submission script to facilitate running a large number of tests
+with one command  is available.  A typical usage for a fairly thorough test
+on a large system like Trinity might look like:
+
+run_combo -t ./run02 ./run03 ./run12 -s x y z -n 32 64 128 256 512 1024 -p 32 -b
+
+This will submit 54 jobs (3 x 3 x 6) with all combinations of the specified
+tests and parameters.  The job scripts and output will be in the tests/run
+subdirectory.
 
 --- End of README ---

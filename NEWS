@@ -1,7 +1,13 @@
 HIO NEWS
 ========
 
-Last updated 2015-12-17
+Last updated 2016-01-07
+
+Release hio.1.2.0.1:
+
+Test scripts enhanced with new, larger size options y and z. Multi-test
+script run_combo added.  Added -m <msub_args> option. Also, additional
+minor build and testcase fixes.
 
 Release hio.1.2.0.0:
 

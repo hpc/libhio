@@ -19,8 +19,6 @@
 #           msg - logs a message
 #         myrun - issues mpirun or aprun command with -n specified 
 #
-# Change History: 
-#   20150501  cgw  Initial version
 #----------------------------------------------------------------------------
 synexit() {
   echo ""
@@ -36,6 +34,7 @@ synexit() {
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
   echo "        [-b] [-c]"
+  echo "        [-m <msub args>]"
   echo ""
   echo "  Options:"   
   echo "    -s <size>       Per rank run size t|s|m|l|x|y|z  (default s)"
@@ -48,6 +47,7 @@ synexit() {
   echo "    -d <debug_lev>  Debug level for xexec2, default 0"
   echo "    -b              Submit batch job with these options"
   echo "    -c              Chain jobs - make this job dependant on previous job"
+  echo "    -m              Additional arguments for msub (use with -b)"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
   
@@ -98,14 +98,6 @@ batch_sub() {
     echo "#! /bin/bash" > $jobsh
     echo "#MSUB -l nodes=$nodes:ppn=$ppn" >> $jobsh
     echo "#MSUB -l walltime=8:00:00" >> $jobsh
-    if [[ $chain -ne 0 ]]; then
-      if [[ -r $lastjob ]]; then
-        read lastjobid < $lastjob
-        echo "#MSUB -l depend=$lastjobid" >> $jobsh
-      else
-        msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
-      fi
-    fi 
     echo "#MSUB -o $rundir/job.$jobname.out -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
     echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
@@ -119,15 +111,28 @@ batch_sub() {
     echo "$0 -s $size -v $verbose_lev -d $debug_lev" >> $jobsh
 
     echo "echo \"\`date \"+%Y-%m-%d %H:%M:%S\"\` Job $jobname   end\"" >> $jobsh
+    msg "run_setup: nodes/ranks/ppn: $nodes / $ranks / $ppn"
 
-    msub_msg=`msub -v HIO_verbose $jobsh`
+    mcmd="msub"
+    if [[ -n $HIO_verbose ]]; then mcmd="$mcmd -v HIO_verbose"; fi
+    if [[ -n $msub_arg ]]; then mcmd="$mcmd $msub_arg"; fi
+    if [[ $chain -ne 0 ]]; then
+      if [[ -r $lastjob ]]; then
+        read lastjobid < $lastjob
+        mcmd="$mcmd -l depend=$lastjobid"
+      else
+        msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
+      fi
+    fi
+    mcmd="$mcmd $jobsh" 
+    msg "run_setup: ---> $mcmd"
+    msub_msg=`$mcmd`
 
     shopt -s extglob
     #jobid=${msub_msg##*([!0-9])}
     jobid=${msub_msg:1}
 
     echo "$jobid" > $lastjob
-    msg "run_setup: nodes/ranks/ppn: $nodes / $ranks / $ppn"
     msg "run_setup: job $jobname ID: $jobid submitted"
     exit
   fi
@@ -238,7 +243,7 @@ else
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:v:d:bc" optname; do
+while getopts "hs:r:n:p:v:d:bcm:" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
@@ -249,6 +254,7 @@ while getopts "hs:r:n:p:v:d:bc" optname; do
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
     c ) chain=1;;
+    m ) msub_arg=$OPTARG;;
    \? ) synexit "Error: invalid option";;
   esac
 done
