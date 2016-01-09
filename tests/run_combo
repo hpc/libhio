@@ -17,7 +17,7 @@ synexit() {
   echo "        [-p <ppn> [<ppn>...] ]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
-  echo "        [-b] [-c]"
+  echo "        [-b] [-c] [-a]"
   echo "        [-m <msub args>]"
   echo ""
   echo "  Options:"   
@@ -29,6 +29,7 @@ synexit() {
   echo "    -d <debug_lev>  Debug level for xexec2, default 0"
   echo "    -b              Submit batch job with these options"
   echo "    -c              Chain jobs - make this job dependant on previous job"
+  echo "    -a              Clean dirs After running" 
   echo "    -m              Additional arguments for msub (use with -b)"
   echo ""
   echo "Example: run_combo -t ./run02 ./run03 -r 2 4 -s x"
@@ -68,7 +69,7 @@ host=`hostname -s`
 batch=0
 chain=0
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpv:d:bcm:" optname; do
+while getopts "htsrnpv:d:bcam:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -111,6 +112,7 @@ while getopts "htsrnpv:d:bcm:" optname; do
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
     c ) chain=1;;
+    a ) after=1;;
     m ) msub_arg=$OPTARG;;
    \? ) synexit "Error: invalid option";;
   esac
@@ -148,8 +150,9 @@ for r in "${ranks[@]}"; do
           if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
           if [[ -n $debug_lev ]]; then c="$c -d $debug_lev"; fi
           if [[ $batch -eq 1 ]]; then c="$c -b"; fi 
-          if [[ -n $msub_arg ]]; then c="$c -m \"$msub_arg\""; fi 
           if [[ $chain -eq 1 ]]; then c="$c -c"; fi 
+          if [[ $after -eq 1 ]]; then c="$c -a"; fi 
+          if [[ -n $msub_arg ]]; then c="$c -m \"$msub_arg\""; fi 
           
           cmd $c
         done

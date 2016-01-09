@@ -33,7 +33,7 @@ synexit() {
   echo "        [-p <ppn>]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
-  echo "        [-b] [-c]"
+  echo "        [-b] [-c] [-a]"
   echo "        [-m <msub args>]"
   echo ""
   echo "  Options:"   
@@ -47,6 +47,7 @@ synexit() {
   echo "    -d <debug_lev>  Debug level for xexec2, default 0"
   echo "    -b              Submit batch job with these options"
   echo "    -c              Chain jobs - make this job dependant on previous job"
+  echo "    -a              Clean dirs After running" 
   echo "    -m              Additional arguments for msub (use with -b)"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
@@ -71,8 +72,9 @@ msg() {
 check_rc(){
   if [[ $max_rc > 0 ]]; then result="FAILURE"
   else result="SUCCESS"; fi
+  jobend=`date "$datefmt"`
   echo "###############################################################################"
-  echo "`date "+%Y-%m-%d %H:%M:%S"` Test: $0 -s $size -n $nodes -r $ranks   RESULT: $result"
+  echo "Start: $jobstart  End: $jobend  Test: $0 -s $size -n $nodes -r $ranks   RESULT: $result"
   echo "###############################################################################"
 }
 
@@ -102,15 +104,17 @@ batch_sub() {
     echo "#MSUB -d $PWD" >> $jobsh
     echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
 
-    echo "echo \"\`date \"+%Y-%m-%d %H:%M:%S\"\` Job $jobname start\"" >> $jobsh
+    echo "echo \"\`date \"$datefmt\"\` Job $jobname start\"" >> $jobsh
     echo "echo \"\"" >> $jobsh
     echo "echo \"$jobsh:\"" >> $jobsh
     echo "cat $jobsh" >> $jobsh
     echo "echo \"\"" >> $jobsh
 
-    echo "$0 -s $size -v $verbose_lev -d $debug_lev" >> $jobsh
+    afterparm=""
+    if [[ $after -gt 0 ]]; then afterparm="-a"; fi
+    echo "$0 -s $size $afterparm -v $verbose_lev -d $debug_lev" >> $jobsh
 
-    echo "echo \"\`date \"+%Y-%m-%d %H:%M:%S\"\` Job $jobname   end\"" >> $jobsh
+    echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
     msg "run_setup: nodes/ranks/ppn: $nodes / $ranks / $ppn"
 
     mcmd="msub"
@@ -209,12 +213,15 @@ myrun() {
 #----------------------------------------------------------------------------
 # Parse arguments and other common setup
 #----------------------------------------------------------------------------
+datefmt="+%Y-%m-%d %H:%M:%S"
+jobstart=`date "$datefmt"`
 host=`hostname -s`
 max_rc=0
 verbose_lev=1
 debug_lev=0
 batch=0
 chain=0
+after=0
 
 size="s"
 job_dir=""
@@ -232,6 +239,16 @@ else
       set | egrep "^PBS|^DW|^HOST|^HIO"
       job_dir="/${PBS_JOBID%%.*}"
     fi
+    if [[ -n $PBS_NODEFILE ]]; then 
+      echo ""
+      cmd "cat $PBS_NODEFILE | sort | uniq | pr -t --columns 8"
+    fi
+    if [[ -n $DW_JOB_STRIPED ]]; then
+      . $MODULESHOME/init/bash
+      module load dws
+      echo ""
+      cmd "dwstat all"
+    fi
   else
     # aprun not available - use mpirun
     mympicmd="mpirun"
@@ -243,7 +260,7 @@ else
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:v:d:bcm:" optname; do
+while getopts "hs:r:n:p:v:d:bcam:" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
@@ -254,6 +271,7 @@ while getopts "hs:r:n:p:v:d:bcm:" optname; do
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
     c ) chain=1;;
+    a ) after=1;;
     m ) msub_arg=$OPTARG;;
    \? ) synexit "Error: invalid option";;
   esac
