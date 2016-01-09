@@ -1,7 +1,7 @@
 HIO Readme
 ==========
 
-Last updated 2016-01-07
+Last updated 2016-01-08
 
 See file NEWS for a description of changes to hio.
 
@@ -79,5 +79,70 @@ run_combo -t ./run02 ./run03 ./run12 -s x y z -n 32 64 128 256 512 1024 -p 32 -b
 This will submit 54 jobs (3 x 3 x 6) with all combinations of the specified
 tests and parameters.  The job scripts and output will be in the tests/run
 subdirectory.
+
+
+Step by step procedure for building and running HIO tests on Trinity
+--------------------------------------------------------------------
+
+This procedure is accurate as of 2015-01-08 with HIO.1.2.0.1.
+
+1) Get the distribution tarball libhio-1.2.0.1.tar.gz from one of the following:
+   a) tr-login1:~cornell/hio/libhio-1.2.0.1.tar.gz
+   b) yellow /usr/projects/hio/user/rel/libhio-1.2.0.1.tar.gz
+   c) By request from Cornell Wright - cornell@lanl.gov
+
+2) Untar
+
+3) cd <dir>/libhio-1.2       ( <dir> is where you untarred HIO )
+
+4) ./hiobuild -cf -s PrgEnv-cray,PrgEnv-gnu -l craype-haswell 
+
+   At the end of the build you will see:
+
+   nid00070 ====[HIOBUILD_RESULT_START]===()===========================================
+   nid00070 buildhio : Checking /cray_home/cornell/libhio/libhio-1.2/hiobuild.out for build problems
+   41:configure: WARNING: using cross tools not prefixed with host triplet
+   268:Warning:
+   nid00070 buildhio : Checking for build target files
+   nid00070 buildhio : Build errors found, see above.
+   nid00070 ====[HIOBUILD_RESULT_END]===()=============================================
+
+   Ideally, the two warning messages would not be present, but at the moment, they can be ignored.
+
+5) cd tests
+
+6) ./run_combo -t ./run02 ./run03 ./run12 -s x y z -n 1024 512 256 128 64 32 16 -p 32 -b
+
+   This will create 63 job scripts in the libhio-1.2/tests/run directory and submit the jobs.
+   job output is directed to corresponding .out files in the same directory.  The number and
+   mix of jobs is controlled by the parameters.  run_combo -h for more information.
+
+7) After the jobs complete, issue the following:
+
+   grep -c "RESULT: SUCCESS" run/*.out
+
+   If all jobs ran OK, grep should show 63 files with a count of 1.  Like this:
+
+   cornell@tr-login1:~/pgm/hio/tr-gnu/libhio-1.2/tests> grep -c "RESULT: SUCCESS" run/*.out
+   run/job.20160108.080917.out:1
+   run/job.20160108.080927.out:1
+   run/job.20160108.080936.out:1
+   run/job.20160108.081422.out:1
+     . . . .
+   run/job.20160108.082133.out:1
+   run/job.20160108.082141.out:1
+
+   Investigate any missing job output or counts of 0.
+
+8) Resources for better understanding and/or modifying these procedures:
+
+   libhio-1.2/README
+   libhio-1.2/hiobuild -h
+   libhio-1.2/tests/run_combo -h
+   libhio-1.2/tests/run_setup -h
+   libhio-1.2/tests/run02, run03, run12
+   libhio-1.2/tests/xexec -h
+   libhio-1.2/design/libhio_api.pdf
+
 
 --- End of README ---
