@@ -190,6 +190,7 @@ for v in $vers; do
 
     tr-intel ) build_r tr-fet     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-intel -l craype-haswell ;;
     tr-gnu   ) build_r tr-fet     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu   -l craype-haswell ;;
+    te-gnu   ) build_r te-fet     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu   -l craype-haswell ;;
 
     bu-gnu   ) build_r bu-fet     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu  -l craype-sandybridge ;;
     bu-cray  ) build_r bu-fet     "$rmt_dir/$v" $tarname -n $v                             -l craype-sandybridge ;;
