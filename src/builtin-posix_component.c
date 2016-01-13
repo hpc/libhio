@@ -332,14 +332,14 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
   start = hioi_gettime ();
 
   for (int i = 0 ; i < HIO_POSIX_MAX_OPEN_FILES ; ++i) {
-    if (posix_dataset->files[i].f_fh) {
+    if (posix_dataset->files[i].f_fh != NULL) {
       fclose (posix_dataset->files[i].f_fh);
       posix_dataset->files[i].f_fh = NULL;
     }
   }
 
   hioi_list_foreach(element, dataset->ds_elist, struct hio_element, e_list) {
-    if (element->e_fh) {
+    if (element->e_fh != NULL) {
       fclose (element->e_fh);
       element->e_fh = NULL;
     }
@@ -374,10 +374,7 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
   }
 #endif
 
-  if (posix_dataset->base_path) {
-    free (posix_dataset->base_path);
-    posix_dataset->base_path = NULL;
-  }
+  free (posix_dataset->base_path);
 
   pthread_mutex_destroy (&posix_dataset->lock);
 
@@ -432,9 +429,8 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
   hio_object_t hio_object = &posix_dataset->base.ds_object;
   hio_context_t context = hioi_object_context (hio_object);
   hio_fs_attr_t *fs_attr = &posix_dataset->base.fs_fsattr;
-  int open_flags;
+  int open_flags, fd;
   char *file_mode;
-  int fd;
 
   /* determine the fopen file mode to use */
   if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
@@ -496,8 +492,7 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
     return rc;
   }
 
-  fseek (element->e_fh, 0, SEEK_END);
-  element->e_size = ftell (element->e_fh);
+  element->e_size = fseek (element->e_fh, 0, SEEK_END);
   fseek (element->e_fh, 0, SEEK_SET);
 
   return HIO_SUCCESS;
@@ -590,7 +585,7 @@ static int builtin_posix_element_translate (builtin_posix_module_t *posix_module
   file = posix_dataset->files + file_index;
 
   if (block_id != file->f_bid || file->f_element != element) {
-    if (file->f_fh) {
+    if (file->f_fh != NULL) {
       fclose (file->f_fh);
       file->f_fh = NULL;
       file->f_bid = -1;
@@ -618,8 +613,8 @@ static ssize_t builtin_posix_module_element_write_strided_internal (struct hio_m
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
   size_t bytes_written = 0, ret;
-  int rc;
   FILE *fh;
+  int rc;
 
   if (!(count * size)) {
     return 0;
@@ -672,7 +667,6 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
   uint64_t stop, start;
   hio_request_t new_request;
   long file_offset;
-  FILE *fh;
 
   if (!(posix_dataset->base.ds_flags & HIO_FLAG_WRITE)) {
     return HIO_ERR_PERM;
@@ -727,8 +721,8 @@ static ssize_t builtin_posix_module_element_read_strided_internal (struct hio_mo
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
   size_t bytes_read = 0, ret;
-  int rc;
   FILE *fh;
+  int rc;
 
   if (!(count * size)) {
     return 0;
@@ -783,7 +777,6 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
   hio_request_t new_request;
   off_t file_offset;
   int rc = HIO_SUCCESS;
-  FILE *fh;
 
   if (!(posix_dataset->base.ds_flags & HIO_FLAG_READ)) {
     return HIO_ERR_PERM;
