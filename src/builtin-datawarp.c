@@ -178,6 +178,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
     if (DW_STAGE_AT_JOB_END == stage_mode) {
       builtin_datawarp_dataset_backend_data_t *ds_data;
+      int64_t last_stage_id;
 
       ds_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (dataset->ds_data, "datawarp");
       if (NULL == ds_data) {
@@ -197,15 +198,16 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         return HIO_SUCCESS;
       }
 
+      last_stage_id = ds_data->last_scheduled_stage_id;
+
       rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", posix_module->base.data_root, context->c_object.identifier,
-                     dataset->ds_object.identifier, ds_data->last_scheduled_stage_id);
+                     dataset->ds_object.identifier, last_stage_id);
       if (0 > rc) {
         return HIO_ERR_OUT_OF_RESOURCE;
       }
 
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: revoking end-of-job stage for datawarp dataset %s::%lld. "
-                "burst-buffer directory: %s",  dataset->ds_object.identifier, ds_data->last_scheduled_stage_id,
-                dataset_path);
+                "burst-buffer directory: %s",  dataset->ds_object.identifier, last_stage_id, dataset_path);
 
       /* revoke the end of job stage for the previous dataset */
       rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
@@ -213,19 +215,18 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       if (0 != rc) {
         hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error revoking prior "
                       "end-of-job stage of dataset %s::%lld. errno: %d", dataset->ds_object.identifier,
-                      ds_data->last_scheduled_stage_id, errno);
+                      last_stage_id, errno);
         return HIO_ERROR;
       }
 
       ds_data->last_scheduled_stage_id = dataset->ds_id;
 
       /* remove the last end-of-job dataset from the burst buffer */
-      (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->ds_object.identifier,
-                                                ds_data->last_scheduled_stage_id);
+      (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->ds_object.identifier, last_stage_id);
 
       /* remove created directories on pfs */
       rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->c_object.identifier,
-                     dataset->ds_object.identifier, ds_data->last_scheduled_stage_id);
+                     dataset->ds_object.identifier, last_stage_id);
       if (0 > rc) {
         free (dataset_path);
         return HIO_ERR_OUT_OF_RESOURCE;
