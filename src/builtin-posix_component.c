@@ -894,9 +894,7 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
 					  const char *next_data_root, hio_module_t **module) {
   builtin_posix_module_t *new_module;
 
-  if (0 == strncasecmp("datawarp", data_root, 8)) {
-    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: will not use module for datawarp root",
-	      data_root);
+  if (0 == strncasecmp("datawarp", data_root, 8) || 0 == strncasecmp("dw", data_root, 2)) {
     return HIO_ERR_NOT_AVAILABLE;
   }
 
