@@ -123,7 +123,8 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
         ++set_id_index;
       } else {
         /* skip dataset */
-        hio_err_push (rc, context, NULL, "error reading manifest for %s", manifest_path);
+        hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not read manifest at path: %s. rc: %d",
+                  manifest_path, rc);
       }
 
       free (manifest_path);
