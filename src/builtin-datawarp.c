@@ -197,7 +197,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
         return HIO_SUCCESS;
       }
 
-      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", module->data_root, context->c_object.identifier,
+      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", posix_module->base.data_root, context->c_object.identifier,
                      dataset->ds_object.identifier, ds_data->last_scheduled_stage_id);
       if (0 > rc) {
         return HIO_ERR_OUT_OF_RESOURCE;
@@ -222,6 +222,20 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       /* remove the last end-of-job dataset from the burst buffer */
       (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->ds_object.identifier,
                                                 ds_data->last_scheduled_stage_id);
+
+      /* remove created directories on pfs */
+      rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->c_object.identifier,
+                     dataset->ds_object.identifier, ds_data->last_scheduled_stage_id);
+      if (0 > rc) {
+        free (dataset_path);
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
+
+      /* ignore failure. if the directory is not empty then we shouldn't be removing it */
+      (void) rmdir (pfs_path);
+      errno = 0;
+
+      free (pfs_path);
     }
   }
 
