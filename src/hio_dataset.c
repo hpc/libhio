@@ -24,6 +24,16 @@ static hio_var_enum_t hioi_dataset_file_modes = {
   .values = hioi_dataset_file_mode_values,
 };
 
+static hio_var_enum_value_t hioi_dataset_fs_type_enum_values[] = {
+  {.string_value = "default", .value = HIO_FS_TYPE_DEFAULT},
+  {.string_value = "lustre", .value = HIO_FS_TYPE_LUSTRE},
+  {.string_value = "gpfs", .value = HIO_FS_TYPE_GPFS}};
+
+static hio_var_enum_t hioi_dataset_fs_type_enum = {
+  .count  = 3,
+  .values = hioi_dataset_fs_type_enum_values,
+};
+
 hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name) {
   hio_element_t element;
 
@@ -149,6 +159,11 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_bs,
                    "dataset_block_size", HIO_CONFIG_TYPE_INT64, NULL,
                    "Block size to use when writing in optimized mode (default: job size dependent)", 0);
+
+  new_dataset->fs_fsattr.fs_type = HIO_FS_TYPE_DEFAULT;
+  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->fs_fsattr.fs_type,
+                   "dataset_filesystem_type", HIO_CONFIG_TYPE_INT32, &hioi_dataset_fs_type_enum,
+                   "Type of filesystem this dataset resides on", HIO_VAR_FLAG_READONLY);
 
   /* set up performance variables */
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bread, "bytes_read",

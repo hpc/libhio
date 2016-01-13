@@ -194,7 +194,7 @@ enum {
 
 struct hio_fs_attr_t {
   /** filesystem type index */
-  int      fs_type;
+  int32_t  fs_type;
   /** flags indicating filesystem features */
   int      fs_flags;
   /** available blocks on the filesystem */
@@ -215,6 +215,9 @@ struct hio_fs_attr_t {
   uint32_t fs_scount;
   /** maximum stripe count */
   uint32_t fs_smax_count;
+
+  /** raid level */
+  uint32_t fs_raid_level;
 
   /** filesystem open function (for data) */
   hio_fs_open_fn_t fs_open;

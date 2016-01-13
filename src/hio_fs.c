@@ -90,7 +90,20 @@ static int hioi_fs_open_lustre (const char *path, hio_fs_attr_t *fs_attr, int fl
     if (flags & O_CREAT) {
       /* NTH: use the default layout/starting index for now */
       lum.lmm_magic = LOV_USER_MAGIC;
-      lum.lmm_pattern = 0;
+      switch (fs_attr->fs_raid_level) {
+      case 0:
+        lum.lmm_pattern = LOV_PATTERN_RAID0;
+        break;
+#if defined(LOV_PATTERN_RAID1)
+      case 1:
+        lum.lmm_pattern = LOV_PATTERN_RAID1;
+        break;
+#endif
+      default:
+        lum.lmm_pattern = 0;
+      }
+
+      lum.lmm_pattern = fs_attr->fs_raid_level;
       lum.lmm_stripe_size = fs_attr->fs_ssize;
       lum.lmm_stripe_count = fs_attr->fs_scount;
       lum.lmm_stripe_offset = -1;
@@ -197,9 +210,23 @@ static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {
       free (lum);
       return hioi_err_errno (errno);
     }
+  }
 
-    fs_attr->fs_scount = lum->lmm_stripe_count;
-    fs_attr->fs_ssize  = lum->lmm_stripe_size;
+  fs_attr->fs_scount = lum->lmm_stripe_count;
+  fs_attr->fs_ssize  = lum->lmm_stripe_size;
+
+  switch (lum->lmm_pattern) {
+  case LOV_PATTERN_RAID0:
+    fs_attr->fs_raid_level = 0;
+    break;
+#if defined(LOV_PATTERN_RAID1)
+  case LOV_PATTERN_RAID1:
+    fs_attr->fs_raid_level = 1;
+    break;
+#endif
+  default:
+    fs_attr->fs_raid_level = -1;
+    break;
   }
 
   free (lum);

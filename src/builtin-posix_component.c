@@ -248,6 +248,11 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
                 PRIu64 ". ", fs_attr->fs_ssize, fs_attr->fs_smax_size);
       fs_attr->fs_ssize = fs_attr->fs_smax_size;
     }
+
+    hioi_config_add (context, &posix_dataset->base.ds_object, &fs_attr->fs_raid_level,
+                     "raid_level", HIO_CONFIG_TYPE_UINT64, NULL, "RAID level for dataset "
+                     "data files. Keep in mind that some filesystems only support 1/2 RAID "
+                     "levels", 0);
   }
 
   do {
