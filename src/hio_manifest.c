@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -631,6 +631,10 @@ static int hioi_manifest_read (const char *path, json_object **object_out)
   (void)fseek (fh, 0, SEEK_END);
 
   size = ftell (fh);
+  if (0 == size) {
+    fclose (fh);
+    return HIO_ERR_NOT_AVAILABLE;
+  }
 
   buffer = malloc (size);
   if (NULL == buffer) {
