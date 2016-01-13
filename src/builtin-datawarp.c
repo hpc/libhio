@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -134,6 +134,10 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     free (dataset_path);
     return rc;
   }
+
+  /* copy statistics and status from posix dataset */
+  dataset->ds_stat = posix_dataset->base.ds_stat;
+  dataset->ds_status = posix_dataset->base.ds_status;
 
   hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
 

@@ -151,12 +151,11 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                    "Block size to use when writing in optimized mode (default: job size dependent)", 0);
 
   /* set up performance variables */
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_bread, "bytes_read",
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bread, "bytes_read",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_bwritten, "bytes_written",
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bwritten, "bytes_written",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
-
 
   hioi_list_init (new_dataset->ds_elist);
 

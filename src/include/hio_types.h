@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -248,15 +248,20 @@ struct hio_dataset {
   /** open time */
   struct timeval      ds_otime;
 
-  /** aggregate number of bytes read */
-  uint64_t            ds_bread;
-  /** aggregate read time */
-  uint64_t            ds_rtime;
+  /** relative open time (for statistics) */
+  uint64_t            ds_rotime;
 
-  /** aggregate number of bytes written */
-  uint64_t            ds_bwritten;
-  /** aggregate write time */
-  uint64_t            ds_wtime;
+  struct {
+    /** aggregate number of bytes read */
+    uint64_t            s_bread;
+    /** aggregate read time */
+    uint64_t            s_rtime;
+
+    /** aggregate number of bytes written */
+    uint64_t            s_bwritten;
+    /** aggregate write time */
+    uint64_t            s_wtime;
+  } ds_stat;
 
   /** data associated with this dataset */
   hio_dataset_data_t *ds_data;

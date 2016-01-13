@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -22,6 +22,7 @@ typedef struct hio_dataset_item_t hio_dataset_item_t;
 
 static int hio_dataset_open_internal (hio_module_t *module, hio_dataset_t *set_out, const char *name,
                                       int64_t set_id, int flags, hio_dataset_mode_t mode) {
+  uint64_t rotime = hioi_gettime ();
   int rc;
 
   hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%llu with flags 0x%x with backend module %p",
@@ -36,6 +37,8 @@ static int hio_dataset_open_internal (hio_module_t *module, hio_dataset_t *set_o
   if (HIO_SUCCESS != rc) {
     hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%llu on data root %s", name, set_id,
               module->data_root);
+  } else {
+    (*set_out)->ds_rotime = rotime;
   }
 
   return rc;

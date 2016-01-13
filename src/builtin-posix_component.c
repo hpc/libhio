@@ -203,8 +203,11 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   hio_context_t context = module->context;
   builtin_posix_module_dataset_t *posix_dataset;
   hio_fs_attr_t *fs_attr;
+  uint64_t start, stop;
   int rc = HIO_SUCCESS;
   char *path = NULL;
+
+  start = hioi_gettime ();
 
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_open: opening dataset %s:%lu mpi: %d flags: 0x%x mode: 0x%x",
 	    name, (unsigned long) set_id, hioi_context_using_mpi (context), flags, mode);
@@ -302,10 +305,13 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module,
   /* record the open time */
   gettimeofday (&posix_dataset->base.ds_otime, NULL);
 
+  stop = hioi_gettime ();
+
   *set_out = &posix_dataset->base;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully %s posix dataset %s:%llu on data root %s",
-            (flags & HIO_FLAG_CREAT) ? "created" : "opened", name, set_id, module->data_root);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully %s posix dataset %s:%llu on data root %s. "
+            "open time %lu usec", (flags & HIO_FLAG_CREAT) ? "created" : "opened", name, set_id, module->data_root,
+            stop - start);
 
   return HIO_SUCCESS;
 }
@@ -314,7 +320,10 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   hio_context_t context = module->context;
   hio_element_t element;
+  uint64_t start, stop;
   int rc = HIO_SUCCESS;
+
+  start = hioi_gettime ();
 
   for (int i = 0 ; i < HIO_POSIX_MAX_OPEN_FILES ; ++i) {
     if (posix_dataset->files[i].f_fh) {
@@ -365,6 +374,11 @@ static int builtin_posix_module_dataset_close (struct hio_module_t *module, hio_
   }
 
   pthread_mutex_destroy (&posix_dataset->lock);
+
+  stop = hioi_gettime ();
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully closed posix dataset %s:%llu on data root %s. "
+            "close time %lu usec", dataset->ds_object.identifier, dataset->ds_id, module->data_root, stop - start);
 
   return rc;
 }
@@ -671,10 +685,10 @@ static int builtin_posix_module_element_write_strided_nb (struct hio_module_t *m
   pthread_mutex_unlock (&posix_dataset->lock);
 
   stop = hioi_gettime ();
-  posix_dataset->base.ds_wtime += stop - start;
+  posix_dataset->base.ds_stat.s_wtime += stop - start;
 
-  if (0 < posix_dataset->base.ds_bwritten) {
-    posix_dataset->base.ds_bwritten += bytes_written;
+  if (0 < bytes_written) {
+    posix_dataset->base.ds_stat.s_bwritten += bytes_written;
   }
 
   posix_dataset->base.ds_status = hioi_err_errno (errno);
@@ -781,10 +795,10 @@ static int builtin_posix_module_element_read_strided_nb (struct hio_module_t *mo
   pthread_mutex_unlock (&posix_dataset->lock);
 
   stop = hioi_gettime ();
-  posix_dataset->base.ds_rtime += stop - start;
+  posix_dataset->base.ds_stat.s_rtime += stop - start;
 
   if (0 < bytes_read) {
-    posix_dataset->base.ds_bread += bytes_read;
+    posix_dataset->base.ds_stat.s_bread += bytes_read;
   } else if (0 > bytes_read) {
     rc = (int) bytes_read;
   }
