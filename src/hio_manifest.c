@@ -281,6 +281,7 @@ int hioi_manifest_save (hio_dataset_t dataset, const char *path) {
   }
 
   errno = 0;
+  data[data_size-1] = '\n';
   write (fd, data, data_size);
   close (fd);
 
