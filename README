@@ -111,7 +111,7 @@ This procedure is accurate as of 2015-01-08 with HIO.1.2.0.1.
 
 5) cd tests
 
-6) ./run_combo -t ./run02 ./run03 ./run12 -s x y z -n 1024 512 256 128 64 32 16 -p 32 -b
+6) ./run_combo -t ./run02 ./run03 ./run12 -s z y x -n 1024 512 256 128 64 32 16 -p 32 -b
 
    This will create 63 job scripts in the libhio-1.2/tests/run directory and submit the jobs.
    job output is directed to corresponding .out files in the same directory.  The number and

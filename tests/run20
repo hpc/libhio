@@ -1,0 +1,95 @@
+#! /bin/bash 
+. ./run_setup
+
+# Read and write N-N test case with read data value checking.  
+
+case $size in
+  t ) blk=1024;                nblk=5;;
+  s ) blk=20480;               nblk=8;;   
+  m ) blk=$((1 * $cons_mi));  nblk=200;;
+  l ) blk=$((2 * $cons_mi));  nblk=512;;
+  x ) blk=$((4 * $cons_mi));  nblk=1024;;
+  y ) blk=$((4 * $cons_mi));  nblk=1536;;
+  z ) blk=$((4 * $cons_mi));  nblk=2048;;
+  * ) synexit "Error: invalid size $size";;
+esac
+
+batch_sub $(( 2 * $blk * $nblk * $ranks ))
+
+msg "blk: $blk  nblk: $nblk  dw_cap: $dw_cap" 
+
+cmdw="
+  name run20w v $verbose_lev d $debug_lev mi 0
+  /@@ Read and write N-N multi DS test case @/
+  hi MY_CTX $HIO_TEST_ROOTS 
+
+  hdo NTN_DS 97 WRITE,CREAT UNIQUE
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  hvp c. .
+  lc $nblk
+    hew 0 $blk 
+  le 
+  hec hdc
+
+  hdo NTN_DS 98 WRITE,CREAT UNIQUE
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  hvp c. .
+  lc $nblk
+    hew 0 $blk 
+  le 
+  hec hdc
+
+  hdo NTN_DS 99 WRITE,CREAT UNIQUE
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  hvp c. .
+  lc $nblk
+    hew 0 $blk 
+  le 
+  hec hdc
+
+  hf mgf mf
+"
+
+cmdr="
+  name run20r v $verbose_lev d $debug_lev mi 32
+  /@@ Read and write N-N multi DS test case @/
+  hi MY_CTX $HIO_TEST_ROOTS 
+
+  hxdi 99
+  hdo NTN_DS 99 READ UNIQUE
+  heo MY_EL READ 20Mi
+  hvp c. .
+  hck on
+  lc $nblk
+    her 0 $blk 
+  le 
+  hec hdc
+
+  hxdi 99
+  hdo NTN_DS ID_NEWEST READ UNIQUE
+  heo MY_EL READ 20Mi
+  hvp c. .
+  hck on
+  lc $nblk
+    her 0 $blk 
+  le 
+  hec hdc
+
+  hxdi 99
+  hdo NTN_DS ID_HIGHEST READ UNIQUE
+  heo MY_EL READ 20Mi
+  hvp c. .
+  hck on
+  lc $nblk
+    her 0 $blk 
+  le 
+  hec hdc
+
+  hf mgf mf
+"
+
+clean_roots $HIO_TEST_ROOTS
+myrun .libs/xexec.x $cmdw
+myrun .libs/xexec.x $cmdr
+check_rc
+if [[ $max_rc -eq 0 && $after -gt 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi
