@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -492,7 +492,8 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
     return rc;
   }
 
-  element->e_size = fseek (element->e_fh, 0, SEEK_END);
+  fseek (element->e_fh, 0, SEEK_END);
+  element->e_size = ftell (element->e_fh);
   fseek (element->e_fh, 0, SEEK_SET);
 
   return HIO_SUCCESS;
