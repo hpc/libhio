@@ -71,8 +71,8 @@ int main (int argc, char *argv[]) {
 			 HIO_SET_ELEMENT_SHARED);
   if (HIO_SUCCESS != rc) {
       if (HIO_ERR_EXISTS == rc) {
-          hio_dataset_unlink (context, "restart", 100, HIO_UNLINK_MODE_FIRST);
-          rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRITE | HIO_FLAG_CREAT,
+          hio_dataset_unlink (context, "restart", 50, HIO_UNLINK_MODE_FIRST);
+          rc = hio_dataset_open (context, &dataset, "restart", 50, HIO_FLAG_WRITE | HIO_FLAG_CREAT,
                                  HIO_SET_ELEMENT_SHARED);
 
       }
