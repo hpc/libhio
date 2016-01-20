@@ -363,6 +363,9 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lscratch3/$LOGNAME"
     addifd "/lscratch4/$LOGNAME"
     addifd "/scratch1/users/$LOGNAME"
+    addifd "/scratch2/users/$LOGNAME"
+    addifd "/lustre/scratch4/users/$LOGNAME"
+    addifd "/lustre/scratch5/users/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"
     addifd "$HOME/scratch-tmp"
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
