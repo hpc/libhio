@@ -9,6 +9,7 @@ AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE([disable])
 AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
+AC_CHECK_PROG(MPICXX, [mpicxx], [mpicxx], [none])
 AM_SILENT_RULES([yes])
 
 hio_use_mpi=0
@@ -20,8 +21,10 @@ if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && test ! "$CC" ; then
     # force the cray wrappers to act in a predictable way
     if test x$PE_VERSION = x4 ; then
         CC="cc -target=native -dynamic"
+        CXX="CC -target=native -dynamic"
     else
         CC="cc --cray-bypass-pkgconfig -dynamic"
+        CXX="CC --cray-bypass-pkgconfig -dynamic"
     fi
     # We may be cross-compiling so trick configure
     cross_compiling=yes
@@ -30,6 +33,7 @@ if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && test ! "$CC" ; then
     fi
 elif test ${MPICC} = "mpicc" ; then
     CC=${MPICC}
+    CXX=${MPICXX}
     hio_use_mpi=1
 fi
 
