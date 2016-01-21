@@ -31,6 +31,7 @@ cmdw="
   le 
   hec hdc
 
+  s 1
   hdo NTN_DS 98 WRITE,CREAT UNIQUE
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
@@ -39,6 +40,7 @@ cmdw="
   le 
   hec hdc
 
+  s 1
   hdo NTN_DS 99 WRITE,CREAT UNIQUE
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
