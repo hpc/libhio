@@ -1,7 +1,7 @@
 HIO Readme
 ==========
 
-Last updated 2016-01-08
+Last updated 2016-01-21
 
 See file NEWS for a description of changes to hio.
 
@@ -84,9 +84,9 @@ subdirectory.
 Step by step procedure for building and running HIO tests on Trinity
 --------------------------------------------------------------------
 
-This procedure is accurate as of 2015-01-08 with HIO.1.2.0.1.
+This procedure is accurate as of 2016-01-21 with HIO.1.2.0.2.
 
-1) Get the distribution tarball libhio-1.2.0.1.tar.gz from one of the following:
+1) Get the distribution tarball libhio-1.2.0.1.tar.gz from oine of the following:
    a) tr-login1:~cornell/hio/libhio-1.2.0.1.tar.gz
    b) yellow /usr/projects/hio/user/rel/libhio-1.2.0.1.tar.gz
    c) By request from Cornell Wright - cornell@lanl.gov
@@ -111,9 +111,9 @@ This procedure is accurate as of 2015-01-08 with HIO.1.2.0.1.
 
 5) cd tests
 
-6) ./run_combo -t ./run02 ./run03 ./run12 -s z y x -n 1024 512 256 128 64 32 16 -p 32 -b
+6) ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s z y x -n 1024 512 256 128 64 32 16 -p 32 -b
 
-   This will create 63 job scripts in the libhio-1.2/tests/run directory and submit the jobs.
+   This will create 84 job scripts in the libhio-1.2/tests/run directory and submit the jobs.
    job output is directed to corresponding .out files in the same directory.  The number and
    mix of jobs is controlled by the parameters.  run_combo -h for more information.
 
