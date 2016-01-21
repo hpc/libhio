@@ -21,6 +21,8 @@ Update NEWS and README, commit and push changes.
 
 git pull
 
+Ensure kinit & ga & tr tunnels active
+
 Test build via:
 
   ./buildall -a local ga-gnu tt-gnu ct-gnu mu-gnu tt-intel ct-intel mu-intel

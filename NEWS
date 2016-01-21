@@ -10,10 +10,12 @@ overall (dataset open -> close) read/write speed and instantaneous
 read/write speed. The speed is now only reported by the first rank in the
 context. Removed error messages when 0-byte dataset manifests are
 encountered. Fixed bugs when using datawarp including deleting the wrong
-dataset id after staging a new dataset id. Added new variables to expose the
+dataset ID after staging a new dataset ID. Added new variables to expose the
 RAID level and filesystem type backing a dataset. New manifests are now
 written ending in a newline instead of a NULL character. This does not
-break backwards compatibility with 1.2.x.x releases.
+break backwards compatibility with 1.2.x.x releases.  Added staging test
+run20.  Added Trinity step-by-step build and run procedure to README.  
+Minor build and testr improvements.
 
 Release hio.1.2.0.1:
 

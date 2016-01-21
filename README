@@ -140,7 +140,7 @@ This procedure is accurate as of 2016-01-21 with HIO.1.2.0.2.
    libhio-1.2/hiobuild -h
    libhio-1.2/tests/run_combo -h
    libhio-1.2/tests/run_setup -h
-   libhio-1.2/tests/run02, run03, run12
+   libhio-1.2/tests/run02, run03, run12, run20
    libhio-1.2/tests/xexec -h
    libhio-1.2/design/libhio_api.pdf
 
