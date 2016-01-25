@@ -3,7 +3,7 @@ HIO NEWS
 
 Last updated 2016-01-21
 
-release hio.1.2.0.2:
+Release hio.1.2.0.2:
 
 Updated statistics reported when HIO_print_statistics is set to report the
 overall (dataset open -> close) read/write speed and instantaneous
@@ -15,7 +15,7 @@ RAID level and filesystem type backing a dataset. New manifests are now
 written ending in a newline instead of a NULL character. This does not
 break backwards compatibility with 1.2.x.x releases.  Added staging test
 run20.  Added Trinity step-by-step build and run procedure to README.  
-Minor build and testr improvements.
+Minor build and test improvements.
 
 Release hio.1.2.0.1:
 
