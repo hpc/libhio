@@ -33,7 +33,7 @@ synexit() {
   echo "        [-p <ppn>]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
-  echo "        [-b] [-c] [-a]"
+  echo "        [-b] [-c] [-z] [-a]"
   echo "        [-m <msub args>]"
   echo ""
   echo "  Options:"   
@@ -47,6 +47,7 @@ synexit() {
   echo "    -d <debug_lev>  Debug level for xexec2, default 0"
   echo "    -b              Submit batch job with these options"
   echo "    -c              Chain jobs - make this job dependant on previous job"
+  echo "    -z              Don't allocate (batch) or use DataWarp" 
   echo "    -a              Clean dirs After running" 
   echo "    -m              Additional arguments for msub (use with -b)"
   echo ""
@@ -102,8 +103,9 @@ batch_sub() {
     echo "#MSUB -l walltime=8:00:00" >> $jobsh
     echo "#MSUB -o $rundir/job.$jobname.out -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
-    echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
-
+    if [[ $nodw -eq 0 ]]; then
+      echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
+    fi
     echo "echo \"\`date \"$datefmt\"\` Job $jobname start\"" >> $jobsh
     echo "echo \"\"" >> $jobsh
     echo "echo \"$jobsh:\"" >> $jobsh
@@ -221,6 +223,7 @@ verbose_lev=1
 debug_lev=0
 batch=0
 chain=0
+nodw=0
 after=0
 
 size="s"
@@ -260,7 +263,7 @@ else
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:v:d:bcam:" optname; do
+while getopts "hs:r:n:p:v:d:bczam:" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
@@ -271,6 +274,7 @@ while getopts "hs:r:n:p:v:d:bcam:" optname; do
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
     c ) chain=1;;
+    z ) nodw=1;;
     a ) after=1;;
     m ) msub_arg=$OPTARG;;
    \? ) synexit "Error: invalid option";;
@@ -353,11 +357,13 @@ if [[ $batch -eq 0 ]]; then
 
   # If HIO_TEST_ROOTS not set, set up default
   if [[ -z $HIO_TEST_ROOTS ]]; then
-    if [[ -n $DW_JOB_STRIPED ]]; then
-      HIO_TEST_ROOTS="DataWarp"
-    elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then # Special for trinitite since Moab not integrated
-      HIO_TEST_ROOTS="DataWarp"
-    fi;
+    if [[ $nodw -eq 0 ]]; then
+      if [[ -n $DW_JOB_STRIPED ]]; then
+        HIO_TEST_ROOTS="DataWarp"
+      elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then # Special for trinitite since Moab not integrated
+        HIO_TEST_ROOTS="DataWarp"
+      fi
+    fi
     addifd "/lscratch1/$LOGNAME"
     addifd "/lscratch2/$LOGNAME"
     addifd "/lscratch3/$LOGNAME"
