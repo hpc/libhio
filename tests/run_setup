@@ -173,7 +173,7 @@ clean_cmd="
 
 # Function to clean data roots, i.e., create or empty them out 
 clean_roots() {
-  allroots=${1-HIO_TEST_ROOTS}
+  allroots=${1-$HIO_TEST_ROOTS}
   IFS=","; read -ra root <<< "$allroots"; unset IFS
   for r in "${root[@]}"; do
     shopt -s nocasematch
@@ -370,13 +370,13 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lscratch4/$LOGNAME"
     addifd "/scratch1/users/$LOGNAME"
     addifd "/scratch2/users/$LOGNAME"
-    addifd "/lustre/scratch4/users/$LOGNAME"
-    addifd "/lustre/scratch5/users/$LOGNAME"
+    addifd "/lustre/scratch4/$LOGNAME"
+    addifd "/lustre/scratch5/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"
     addifd "$HOME/scratch-tmp"
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
   fi
-  
+
   # Special hack for buffy - since no PFS, inhibit staging for sizes larger than tiny
   if [[ ${HOST:0:3} == "bu-" && $size != "t" ]]; then
     msg "Buffy with size > tiny, disabling datawarp staging"
@@ -395,6 +395,8 @@ if [[ $batch -eq 0 ]]; then
   msg "run_setup:           verbose/debug: $verbose_lev / $debug_lev"
   msg "run_setup:       HIO_datawarp_root: \"$HIO_datawarp_root\""
   msg "run_setup: HIO_datawarp_stage_mode: \"$HIO_datawarp_stage_mode\""
+ 
+  if [[ -z $HIO_TEST_ROOTS ]]; then msg "Warning: HIO_TEST_ROOTS not set or defaulted"; fi
 fi
 
 # --- end of run_setup ---
