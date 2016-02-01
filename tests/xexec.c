@@ -180,6 +180,7 @@ char * help =
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
   "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines [1]\n"
+  "                <file> = \"@ENV\" searches environment\n"
   "\n"
   "Notes:\n"
   " Numbers can be specified with suffixes %s\n"
@@ -1695,18 +1696,30 @@ ACTION_CHECK(grep_check) {
   rx_comp(0, actionp);
 }
 
+extern char * * environ;
+
 ACTION_RUN(grep_run) {
-  char line[512];
-  FILE * f = fopen(V1.s, "r");
-  if (!f) ERRX("%s: error opening \"%s\" %s", A.desc, V1.s, strerror(errno));
-  while (fgets(line, sizeof(line), f)) {
-    if (!rx_run(0, actionp, line)) {
-      char * last = line + strlen(line) - 1;
-      if ('\n' == *last) *last = '\0';
-      VERB1("grep: %s", line);
-    } 
-  }
-  fclose(f);
+  char * fname = V1.s;
+
+  if (0 == strcmp(fname, "@ENV")) {
+    for (char ** eptr = environ; *eptr; eptr++) {
+      if (!rx_run(0, actionp, *eptr)) {
+        VERB1("grep: %s", *eptr);
+      } 
+    }
+  } else {   
+    char line[512];
+    FILE * f = fopen(fname, "r");
+    if (!f) ERRX("%s: error opening \"%s\" %s", A.desc, fname, strerror(errno));
+    while (fgets(line, sizeof(line), f)) {
+      if (!rx_run(0, actionp, line)) {
+        char * last = line + strlen(line) - 1;
+        if ('\n' == *last) *last = '\0';
+        VERB1("grep: %s", line);
+      } 
+    }
+    fclose(f);
+  }     
 }
 
 //----------------------------------------------------------------------------
