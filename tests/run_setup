@@ -114,7 +114,9 @@ batch_sub() {
 
     afterparm=""
     if [[ $after -gt 0 ]]; then afterparm="-a"; fi
-    echo "$0 -s $size $afterparm -v $verbose_lev -d $debug_lev" >> $jobsh
+    nodwparm=""
+    if [[ $nodw -gt 0 ]]; then nodwparm="-z"; fi
+    echo "$0 -s $size $afterparm $nodwparm -v $verbose_lev -d $debug_lev" >> $jobsh
 
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
     msg "run_setup: nodes/ranks/ppn: $nodes / $ranks / $ppn"
@@ -206,9 +208,14 @@ clean_roots() {
 
 # function to invoke mpi on various platforms - sets max_rc
 myrun() {
+  #export LD_DEBUG=all
+  #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
+  #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
   cmd "$mympicmd -n $ranks $*"
   rc=$?
-  max_rc=$((rc > max_rc ? rc : max_rc)) 
+  #unset LD_DEBUG
+  #unset LD_DEBUG_OUTPUT
+  max_rc=$((rc > max_rc ? rc : max_rc))
   return $rc
 }
 
@@ -368,8 +375,6 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lscratch2/$LOGNAME"
     addifd "/lscratch3/$LOGNAME"
     addifd "/lscratch4/$LOGNAME"
-    addifd "/scratch1/users/$LOGNAME"
-    addifd "/scratch2/users/$LOGNAME"
     addifd "/lustre/scratch4/$LOGNAME"
     addifd "/lustre/scratch5/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"
@@ -392,7 +397,7 @@ if [[ $batch -eq 0 ]]; then
   msg "run_setup:                  mpicmd: \"$mympicmd\""
   msg "run_setup:                    size: \"$size\""
   msg "run_setup:         nodes/ranks/ppn: $nodes / $ranks / $ppn"
-  msg "run_setup:           verbose/debug: $verbose_lev / $debug_lev"
+  msg "run_setup:      verbose/debug/nodw: $verbose_lev / $debug_lev / $nodw"
   msg "run_setup:       HIO_datawarp_root: \"$HIO_datawarp_root\""
   msg "run_setup: HIO_datawarp_stage_mode: \"$HIO_datawarp_stage_mode\""
  
