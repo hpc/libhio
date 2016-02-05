@@ -1492,7 +1492,7 @@ ACTION_RUN(hf_run) {
 
 ACTION_RUN(hxrc_run) {
   hio_rc_exp = V0.i;
-  VERB1("%s; HIO expected rc now %s(%d)", A.desc, V0.s, V0.i);
+  VERB3("%s; HIO expected rc now %s(%d)", A.desc, V0.s, V0.i);
 }
 
 ACTION_CHECK(hxct_check) {
@@ -1503,13 +1503,13 @@ ACTION_CHECK(hxct_check) {
 
 ACTION_RUN(hxct_run) {
   hio_cnt_exp = V0.u;
-  VERB1("%s; HIO expected count now %lld", A.desc, V0.u);
+  VERB3("%s; HIO expected count now %lld", A.desc, V0.u);
 }
 
 ACTION_RUN(hxdi_run) {
   hio_dsid_exp = V0.u;
   hio_dsid_exp_set = 1;
-  VERB1("%s; HIO expected dataset id now %lld", A.desc, hio_dsid_exp);
+  VERB3("%s; HIO expected dataset id now %lld", A.desc, hio_dsid_exp);
 }
 
 //----------------------------------------------------------------------------
