@@ -97,11 +97,14 @@ batch_sub() {
       jobname=`date +%Y%m%d.%H%M%S`
       jobsh="$rundir/job.$jobname.sh"
     done
+    jobout="$rundir/job.$jobname.out"
+    jobidf="$rundir/job.$jobname.jobid"
+    echo "$host run_setup: `date \"$datefmt\"` Job $jobname $args" > $jobidf
 
     echo "#! /bin/bash" > $jobsh
     echo "#MSUB -l nodes=$nodes:ppn=$ppn" >> $jobsh
     echo "#MSUB -l walltime=8:00:00" >> $jobsh
-    echo "#MSUB -o $rundir/job.$jobname.out -joe" >> $jobsh
+    echo "#MSUB -o $jobout -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
     if [[ $nodw -eq 0 ]]; then
       echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
@@ -134,14 +137,20 @@ batch_sub() {
     fi
     mcmd="$mcmd $jobsh" 
     msg "run_setup: ---> $mcmd"
-    msub_msg=`$mcmd`
-
-    shopt -s extglob
-    #jobid=${msub_msg##*([!0-9])}
-    jobid=${msub_msg:1}
-
-    echo "$jobid" > $lastjob
-    msg "run_setup: job $jobname ID: $jobid submitted"
+    echo "$host run_setup: ---> $mcmd" >> $jobidf
+    msub_msg=`$mcmd 2>&1`
+        
+    shopt -s nocasematch
+    if [[ $msub_msg == *error* || $msub_msg == *warn* ]]; then
+      msg "run_setup: msub error: $msub_msg"
+      echo "$host run_setup: msub error $msub_msg:" >> $jobidf
+    else 
+      jobid=${msub_msg#$'\n'}
+      echo "$jobid" > $lastjob
+      msg "run_setup: job $jobname ID: $jobid submitted"
+      echo "$host run_setup: job $jobname ID: $jobid submitted" >> $jobidf
+    fi 
+    shopt -u nocasematch
     exit
   fi
 }
@@ -375,8 +384,9 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lscratch2/$LOGNAME"
     addifd "/lscratch3/$LOGNAME"
     addifd "/lscratch4/$LOGNAME"
-    addifd "/lustre/scratch4/$LOGNAME"
+    addifd "/lustre/scratch4/$LOGNAME"  
     addifd "/lustre/scratch5/$LOGNAME"
+    addifd "/scratch1/users/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"
     addifd "$HOME/scratch-tmp"
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
