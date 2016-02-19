@@ -65,8 +65,10 @@ cmd() {
   return $?         
 }
 
+msglog=""
 msg() { 
   echo "$host $*" 
+  if [[ -n $msglog ]]; then echo $host $* >> $msglog; fi
 }
 
 # Function to check max_rc and output a summary message
@@ -98,8 +100,8 @@ batch_sub() {
       jobsh="$rundir/job.$jobname.sh"
     done
     jobout="$rundir/job.$jobname.out"
-    jobidf="$rundir/job.$jobname.jobid"
-    echo "$host run_setup: `date \"$datefmt\"` Job $jobname $args" > $jobidf
+    msglog="$rundir/job.$jobname.jobid"
+    msg "run_setup: `date \"$datefmt\"` Job $jobname $args" 
 
     echo "#! /bin/bash" > $jobsh
     echo "#MSUB -l nodes=$nodes:ppn=$ppn" >> $jobsh
@@ -122,7 +124,6 @@ batch_sub() {
     echo "$0 -s $size $afterparm $nodwparm -v $verbose_lev -d $debug_lev" >> $jobsh
 
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
-    msg "run_setup: nodes/ranks/ppn: $nodes / $ranks / $ppn"
 
     mcmd="msub"
     if [[ -n $HIO_verbose ]]; then mcmd="$mcmd -v HIO_verbose"; fi
@@ -130,6 +131,9 @@ batch_sub() {
     if [[ $chain -ne 0 ]]; then
       if [[ -r $lastjob ]]; then
         read lastjobid < $lastjob
+        # Create array, extract last element for multi-id DataWarp jobs
+        lastjobid=($lastjobid)
+        lastjobid=${lastjobid[ ${#lastjobid[*]}-1 ]}
         mcmd="$mcmd -l depend=$lastjobid"
       else
         msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
@@ -137,20 +141,18 @@ batch_sub() {
     fi
     mcmd="$mcmd $jobsh" 
     msg "run_setup: ---> $mcmd"
-    echo "$host run_setup: ---> $mcmd" >> $jobidf
     msub_msg=`$mcmd 2>&1`
         
     shopt -s nocasematch
-    if [[ $msub_msg == *error* || $msub_msg == *warn* ]]; then
+    if [[ $msub_msg == *error* || $msub_msg == *warn* || $msub_msg = *fail* ]]; then
       msg "run_setup: msub error: $msub_msg"
-      echo "$host run_setup: msub error $msub_msg:" >> $jobidf
     else 
       jobid=${msub_msg#$'\n'}
       echo "$jobid" > $lastjob
-      msg "run_setup: job $jobname ID: $jobid submitted"
-      echo "$host run_setup: job $jobname ID: $jobid submitted" >> $jobidf
+      msg "run_setup: `date \"$datefmt\"` job $jobname ID: $jobid submitted"
     fi 
     shopt -u nocasematch
+    msglog=""
     exit
   fi
 }
