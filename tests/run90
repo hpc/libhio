@@ -1,0 +1,21 @@
+#! /bin/bash 
+. ./run_setup
+
+# Submit two secondary DataWarp job from the launched job.
+# A.K.A. "Wabbit"
+# Uses -p (PPN) to regulate depth  
+
+# CAUTION CAUTIONi CAUTION CAUTION CAUTION CAUTION CAUTION CAUTION CAUTION
+# -p should specify a SMALL number since (2**p)-2 jobs will eventually be
+# submitted ! (That's the exponential 2 to the power p !!!!!) 
+# CAUTION CAUTIONi CAUTION CAUTION CAUTION CAUTION CAUTION CAUTION CAUTION
+
+ppn=$(( $ppn - 1 ))
+
+if [[ $ppn -gt 0 ]]; then
+  echo "ppn: $ppn; resubmitting"
+  batch=2
+  batch_sub 1
+  batch_sub 1
+fi
+

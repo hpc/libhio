@@ -85,18 +85,17 @@ check_rc(){
 batch_sub() {
   # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
   dw_cap="$(( (($1 * 21 / 20) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
-  if [[ $batch -eq 1 ]]; then
+  if [[ $batch -gt 0 ]]; then
     rundir="$PWD/run"
     if [[ ! -d $rundir ]]; then cmd "mkdir -p $rundir"; fi
     lastjob="$rundir/last_jobid"
 
     # Ensure unique job name
-    jobname=`date +%Y%m%d.%H%M%S`
+    jobname=`date +%Y%m%d.%H%M%S.%N`
     jobsh="$rundir/job.$jobname.sh"
     while [[ -e $jobsh ]]; do
       msg "File $jobsh already exists, trying another"
-      sleep 1
-      jobname=`date +%Y%m%d.%H%M%S`
+      jobname=`date +%Y%m%d.%H%M%S.%N`
       jobsh="$rundir/job.$jobname.sh"
     done
     jobout="$rundir/job.$jobname.out"
@@ -153,7 +152,7 @@ batch_sub() {
     fi 
     shopt -u nocasematch
     msglog=""
-    exit
+    if [[ $batch -eq 1 ]]; then exit; fi
   fi
 }
 
