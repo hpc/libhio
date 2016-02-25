@@ -1,7 +1,13 @@
 HIO NEWS
 ========
 
-Last updated 2016-01-21
+Last updated 2016-02-24
+
+
+Release hio.1.2.0.3:
+
+Minor documentation and test fixes and enhancements.
+
 
 Release hio.1.2.0.2:
 
@@ -17,11 +23,13 @@ break backwards compatibility with 1.2.x.x releases.  Added staging test
 run20.  Added Trinity step-by-step build and run procedure to README.  
 Minor build and test improvements.
 
+
 Release hio.1.2.0.1:
 
 Test scripts enhanced with new, larger size options y and z. Multi-test
 script run_combo added.  Added -m <msub_args> option. Also, additional
 minor build and testcase fixes.
+
 
 Release hio.1.2.0.0:
 

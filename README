@@ -1,7 +1,7 @@
 HIO Readme
 ==========
 
-Last updated 2016-01-21
+Last updated 2016-02-24
 
 See file NEWS for a description of changes to hio.
 
@@ -84,7 +84,7 @@ subdirectory.
 Step by step procedure for building and running HIO tests on Trinity
 --------------------------------------------------------------------
 
-This procedure is accurate as of 2016-01-21 with HIO.1.2.0.2.
+This procedure is accurate as of 2016-02-24 with HIO.1.2.0.3.
 
 1) Get the distribution tarball libhio-1.2.0.1.tar.gz from oine of the following:
    a) tr-login1:~cornell/hio/libhio-1.2.0.1.tar.gz
@@ -114,14 +114,15 @@ This procedure is accurate as of 2016-01-21 with HIO.1.2.0.2.
 6) ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s z y x -n 1024 512 256 128 64 32 16 -p 32 -b
 
    This will create 84 job scripts in the libhio-1.2/tests/run directory and submit the jobs.
-   job output is directed to corresponding .out files in the same directory.  The number and
-   mix of jobs is controlled by the parameters.  run_combo -h for more information.
+   Msub messages are in the cooresponding .jobid files in the same directory. Job output is
+   directed to corresponding .out files.  The number and mix of jobs is controlled by the
+   parameters. Issue run_combo -h for more information.
 
 7) After the jobs complete, issue the following:
 
    grep -c "RESULT: SUCCESS" run/*.out
 
-   If all jobs ran OK, grep should show 63 files with a count of 1.  Like this:
+   If all jobs ran OK, grep should show 84 files with a count of 1.  Like this:
 
    cornell@tr-login1:~/pgm/hio/tr-gnu/libhio-1.2/tests> grep -c "RESULT: SUCCESS" run/*.out
    run/job.20160108.080917.out:1
@@ -144,5 +145,8 @@ This procedure is accurate as of 2016-01-21 with HIO.1.2.0.2.
    libhio-1.2/tests/xexec -h
    libhio-1.2/design/libhio_api.pdf
 
+9) Alternate command suitible for Gadget:
+
+   ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s t s m l -n 1 2 4 1 2 4 -p 32 -b
 
 --- End of README ---
