@@ -108,7 +108,9 @@ batch_sub() {
     echo "#MSUB -o $jobout -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
     if [[ $nodw -eq 0 ]]; then
-      echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
+      if [[ ${HOST:0:3} == "ga-" ]]; then
+        echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
+      fi
     fi
     echo "echo \"\`date \"$datefmt\"\` Job $jobname start\"" >> $jobsh
     echo "echo \"\"" >> $jobsh
@@ -367,6 +369,10 @@ if [[ $batch -eq 0 ]]; then
     # Late DW Ph 1 - location of manually allocated BB directory
     export HIO_datawarp_root="/tmp/dw_scr/$LOGNAME$job_dir"
   fi
+  if [[ ${HOST:0:3} == "tr-" ]]; then
+    # Late DW Ph 1 - location of manually allocated BB directory
+    export HIO_datawarp_root="/tmp/dw_hio/$LOGNAME$job_dir"
+  fi
 
   addifd() {
     if [[ -d $1 ]]; then HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"; fi
@@ -377,7 +383,9 @@ if [[ $batch -eq 0 ]]; then
     if [[ $nodw -eq 0 ]]; then
       if [[ -n $DW_JOB_STRIPED ]]; then
         HIO_TEST_ROOTS="DataWarp"
-      elif [[ ${HOSTNAME:0:3} == "tt-" ]]; then # Special for trinitite since Moab not integrated
+      elif [[ ${HOST:0:3} == "tt-" ]]; then # Special for trinitite since Moab not integrated
+        HIO_TEST_ROOTS="DataWarp"
+      elif [[ ${HOST:0:3} == "tr-" ]]; then # Special for trinity since Moab not integrated
         HIO_TEST_ROOTS="DataWarp"
       fi
     fi
