@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -408,7 +408,7 @@ typedef enum hio_return_t {
   /** Temporary IO error. Try the IO again later. */
   HIO_ERR_IO_TEMPORARY   = -0x00010001,
   /** Permanent IO error. IO to the current data root is no longer available. */
-  HIO_ERR_IO_PERMANENT   = -0x00010002,
+  HIO_ERR_IO_PERMANENT   = -0x00010002
 } hio_return_t;
 
 /**
@@ -428,7 +428,7 @@ typedef enum hio_flags_t {
   /** Remove all existing data associated with the dataset. */
   HIO_FLAG_TRUNC    = 512,
   /** Append to an existing dataset. Not supported at this time. */
-  HIO_FLAG_APPEND   = 1024,
+  HIO_FLAG_APPEND   = 1024
 } hio_flags_t;
 
 /**
@@ -441,7 +441,7 @@ typedef enum hio_flush_mode_t {
    * been written out to the backing store. */
   HIO_FLUSH_MODE_LOCAL    = 0,
   /** Ensure all data has been written out to the backing store. */
-  HIO_FLUSH_MODE_COMPLETE = 1,
+  HIO_FLUSH_MODE_COMPLETE = 1
 } hio_flush_mode_t;
 
 /**
@@ -464,7 +464,7 @@ typedef enum hio_config_type_t {
   /** IEEE-754 floating point number */
   HIO_CONFIG_TYPE_FLOAT,
   /** IEEE-754 double-precision floating point number */
-  HIO_CONFIG_TYPE_DOUBLE,
+  HIO_CONFIG_TYPE_DOUBLE
 } hio_config_type_t;
 
 /**
@@ -479,7 +479,7 @@ typedef enum hio_dataset_mode_t {
   /** Element(s) in the dataset have shared offset spaces. This mode
    * is equivalent to an N-1 IO pattern where N is the number of
    * ranks in the communicator used to create the hio context. */
-  HIO_SET_ELEMENT_SHARED,
+  HIO_SET_ELEMENT_SHARED
 } hio_dataset_mode_t;
 
 /**
@@ -490,7 +490,7 @@ typedef enum hio_recommendation_t {
   /** Do not attempt to checkpoint at this time */
   HIO_SCP_NOT_NOW,
   /** Checkpoint strongly recommended */
-  HIO_SCP_MUST_CHECKPOINT,
+  HIO_SCP_MUST_CHECKPOINT
 } hio_recommendation_t;
 
 /**
@@ -503,7 +503,7 @@ typedef enum hio_unlink_mode_t {
   /** Unlink first matching dataset id instance */
   HIO_UNLINK_MODE_FIRST,
   /** Unlink all matching dataset id instances */
-  HIO_UNLINK_MODE_ALL,
+  HIO_UNLINK_MODE_ALL
 } hio_unlink_mode_t;
 
 
