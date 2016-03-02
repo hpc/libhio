@@ -1,7 +1,7 @@
 HIO Readme
 ==========
 
-Last updated 2016-02-24
+Last updated 2016-03-02
 
 See file NEWS for a description of changes to hio.
 
@@ -84,7 +84,7 @@ subdirectory.
 Step by step procedure for building and running HIO tests on Trinity
 --------------------------------------------------------------------
 
-This procedure is accurate as of 2016-02-24 with HIO.1.2.0.3.
+This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
 
 1) Get the distribution tarball libhio-1.2.0.1.tar.gz from oine of the following:
    a) tr-login1:~cornell/hio/libhio-1.2.0.1.tar.gz
@@ -145,8 +145,18 @@ This procedure is accurate as of 2016-02-24 with HIO.1.2.0.3.
    libhio-1.2/tests/xexec -h
    libhio-1.2/design/libhio_api.pdf
 
-9) Alternate command suitible for Gadget:
+9) Additional test commands, check the results the same way as above. 
 
-   ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s t s m l -n 1 2 4 1 2 4 -p 32 -b
+   Very simple small single job Moab/DataWarp test: 
+
+     ./run02 -s t -n 1 -r 1 -b
+
+   Alternate multi job test suitible for Gadget:
+
+     ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s t s m l -n 1 2 4 1 2 4 -p 32 -b
+
+   Additional many job submission contention test 
+
+     ./run90 -p 5 -s t -n 1 -b
 
 --- End of README ---

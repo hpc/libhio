@@ -1,7 +1,12 @@
 HIO NEWS
 ========
 
-Last updated 2016-02-24
+Last updated 2016-03-02
+
+
+Release hio.1.2.0.4:
+
+Make hio.h C89 compliant.  Minor build and test updates.
 
 
 Release hio.1.2.0.3:
