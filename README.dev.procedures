@@ -43,15 +43,15 @@ Rename and publish tarball:
   mv libhio-1.2.tar.gz libhio-$HIOVER.tar.gz
   scp libhio-$HIOVER.tar.gz ct-fe1:/usr/projects/hio/user/rel 
   ssh ct-fe1 /usr/projects/hio/dev/bin/fixgp
-  scp libhio-$HIOVER.tar.gz tr-fe1:/usr/projects/hio/user/rel 
-  ssh tr-fe1 /usr/projects/hio/dev/bin/fixgp
+  scp libhio-$HIOVER.tar.gz wtrw:tr-fe1:/usr/projects/hio/user/rel 
+  ssh -t wtrw ssh tr-fe1 /usr/projects/hio/dev/bin/fixgp
 
 Send eMail to hiouser@lanl.gov.  Sample:
 
   To: hiouser@lanl.gov
-  Subject: HIO Version $HIOVER available
+  Subject: HIO Version 1.2.0.4 available
   
-  See /usr/projects/hio/user/rel/libhio-$HIOVER.tar.gz
+  See /usr/projects/hio/user/rel/libhio-1.2.0.4.tar.gz
 
   File NEWS contains a description of changes.
 

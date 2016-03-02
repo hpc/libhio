@@ -151,12 +151,21 @@ This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
 
      ./run02 -s t -n 1 -r 1 -b
 
-   Alternate multi job test suitible for Gadget:
+   Alternate multi job test suitable for Gadget:
 
      ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s t s m l -n 1 2 4 1 2 4 -p 32 -b
 
    Additional many job submission contention test 
 
      ./run90 -p 5 -s t -n 1 -b
+
+     This test submits two jobs that each submit two additional jobs.  Job
+     submission continues until the -p parameter is exhausted.  So, the 
+     total number of jobs is given by (p^2) - 2.  Be cautious about increasing
+     the -p parameter.  Since this is only a job submission test, the normal
+     scan for RESULT: SUCCESS is not applicable.  Simply wait for the queue to
+     empty and look for the expected number of .sh and .out files in the run
+     directory.  If there are any .sh files without corresponding .out files,
+     look for errors via checkjob -v on the job IDs in the .jobid file. 
 
 --- End of README ---
