@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -229,10 +229,23 @@ int hioi_context_create_modules (hio_context_t context) {
   return rc;
 }
 
+static int hioi_context_set_default_droot (hio_context_t context) {
+  char cwd_buffer[MAXPATHLEN] = "";
+  int rc;
+
+  /* default data root is the current working directory */
+  getcwd (cwd_buffer, MAXPATHLEN);
+
+  rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
+  if (0 > rc) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  return HIO_SUCCESS;
+}
+
 static int hio_init_common (hio_context_t context, const char *config_file, const char *config_file_prefix,
                             const char *context_name) {
-
-  char cwd_buffer[MAXPATHLEN] = "";
   int rc;
 
   pthread_mutex_init (&context->c_lock, NULL);
@@ -248,14 +261,6 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
     return rc;
   }
 
-  /* default data root is the current working directory */
-  getcwd (cwd_buffer, MAXPATHLEN);
-
-  rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
-  if (0 > rc) {
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
   hioi_config_add (context, &context->c_object, &context->c_verbose,
                    "verbose", HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
 
@@ -265,6 +270,14 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
                    "data_roots", HIO_CONFIG_TYPE_STRING, NULL,
                    "Comma-separated list of data roots to use with this context "
                    "(default: posix:$PWD)", 0);
+
+  /* if the data root string is empty set it to the default */
+  if (NULL == context->c_droots || 0 == strlen (context->c_droots)) {
+    rc = hioi_context_set_default_droot (context);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+  }
 
   hioi_config_add (context, &context->c_object, &context->c_print_stats,
                    "print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
