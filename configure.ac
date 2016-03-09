@@ -1,13 +1,19 @@
 # -*- mode: shell-script-mode -*-
-# Copyright 2014-2015 Los Alamos National Security, LLC. All rights
-#                     reserved.
+#
+# Copyright (c) 2014-2016 Los Alamos National Security, LLC. All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
 
 AC_PREREQ([2.69])
-AC_INIT([libhio], [1.2], [hjelmn@lanl.gov])
+AC_INIT([libhio], [1.3], [hjelmn@lanl.gov])
 AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
-AM_MAINTAINER_MODE([disable])
 AC_CHECK_PROG(MPICC, [mpicc], [mpicc], [none])
 AC_CHECK_PROG(MPICXX, [mpicxx], [mpicxx], [none])
 AM_SILENT_RULES([yes])
@@ -118,7 +124,7 @@ AM_CONDITIONAL([HAVE_PDFLATEX], [test $HAVE_PDFLATEX = yes])
 
 AC_SUBST([HIO_PKGCONFIG_REQUIRES], [$hio_pkgconfig_requires])
 
-AC_SUBST(HIO_BUILD_TIMESTAMP,[`date "+%A %B %d, %Y at %l:%M %p %Z"]`)
+AC_SUBST(HIO_BUILD_TIMESTAMP,[$(date "+%A %B %d, %Y at %l:%M %p %Z")])
 
 # Checks for library functions.
 
