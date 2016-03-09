@@ -28,12 +28,7 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio
   }
 
   if (HIO_UNLINK_MODE_CURRENT == mode) {
-    module = hioi_context_select_module (ctx);
-    if (NULL == module) {
-      hio_err_push (HIO_ERROR, ctx, NULL, "Could not select hio module");
-      return HIO_ERR_NOT_FOUND;
-    }
-
+    module = ctx->c_modules[ctx->c_cur_module];
     return module->dataset_unlink (module, name, set_id);
   }
 

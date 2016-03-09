@@ -1298,7 +1298,9 @@ ACTION_RUN(hdo_run) {
   MPI_CK(MPI_Barrier(mpi_comm));
   ETIMER_START(&hio_tmr);
   DBG2("hdo hio_ds_id_req: %ld", hio_ds_id_req);
-  hrc = hio_dataset_open (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
+  hrc = hio_dataset_alloc (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
+  HRC_TEST(hio_dataset_alloc);
+  hrc = hio_dataset_open (dataset);
   HRC_TEST(hio_dataset_open);
   if (HIO_SUCCESS == hrc) {
     hrc = hio_dataset_get_id(dataset, &hio_ds_id_act);
@@ -1460,10 +1462,11 @@ ACTION_RUN(hec_run) {
 
 ACTION_RUN(hdc_run) {
   hio_return_t hrc;
-  hrc = hio_dataset_close(&dataset);
+  hrc = hio_dataset_close(dataset);
   MPI_CK(MPI_Barrier(mpi_comm));
   double time = ETIMER_ELAPSED(&hio_tmr);
   HRC_TEST(hio_dataset_close)
+  hio_dataset_free(&dataset);
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   if (myrank == 0) {

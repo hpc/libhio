@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -217,10 +217,12 @@ static int hioi_config_set_value_internal (hio_context_t context, hio_var_t *var
  * file. In the future this should be replaced with a hash table or
  * similar structure.
  */
-static int hioi_config_set_from_file (hio_context_t context, hio_object_t object,
-				      hio_var_t *var) {
-  for (int i = 0 ; i < context->c_fconfig_count ; ++i) {
-    hio_config_kv_t *kv = context->c_fconfig + i;
+static int hioi_config_set_from_kv_list (hio_config_kv_list_t *list, hio_object_t object,
+                                         hio_var_t *var) {
+  hio_context_t context = hioi_object_context (object);
+
+  for (int i = 0 ; i < list->kv_list_count ; ++i) {
+    hio_config_kv_t *kv = list->kv_list + i;
     if ((HIO_OBJECT_TYPE_ANY == kv->object_type || object->type == kv->object_type) &&
         (NULL == kv->object_identifier || !strcmp (object->identifier, kv->object_identifier)) &&
         !strcmp (var->var_name, kv->key)) {
@@ -324,20 +326,32 @@ int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, con
   new_var->var_storage     = (hio_var_value_t *) addr;
   new_var->var_enum        = var_enum;
 
-  hioi_config_set_from_file (context, object, new_var);
+  hioi_config_set_from_kv_list (&context->c_fconfig, object, new_var);
   hioi_config_set_from_env (context, object, new_var);
+  /* check if any variables were set by hio_config_set_value */
+  hioi_config_set_from_kv_list (&object->config_set, object, new_var);
 
   return HIO_SUCCESS;
 }
 
-static int hioi_config_kv_push (hio_context_t context, const char *identifier,
-                                hio_object_type_t type, const char *key, const char *value) {
+void hioi_config_list_init (hio_config_kv_list_t *list) {
+  list->kv_list = NULL;
+  list->kv_list_count = list->kv_list_size = 0;
+}
+
+void hioi_config_list_release (hio_config_kv_list_t *list) {
+  free (list->kv_list);
+  hioi_config_list_init (list);
+}
+
+static int hioi_config_list_kv_push (hio_config_kv_list_t *list, const char *identifier,
+                                     hio_object_type_t type, const char *key, const char *value) {
   int new_index, value_length;
   hio_config_kv_t *kv = NULL;
   void *tmp;
 
-  for (int i = 0 ; i < context->c_fconfig_count ; ++i) {
-    kv = context->c_fconfig + i;
+  for (int i = 0 ; i < list->kv_list_count ; ++i) {
+    kv = list->kv_list + i;
 
     if (!strcmp (kv->key, key) && (kv->object_type == type ||
                                    HIO_OBJECT_TYPE_ANY == kv->object_type)) {
@@ -348,19 +362,19 @@ static int hioi_config_kv_push (hio_context_t context, const char *identifier,
   }
 
   if (NULL == kv) {
-    if (context->c_fconfig_count == context->c_fconfig_size) {
-      int new_size = context->c_fconfig_size + 16;
+    if (list->kv_list_count == list->kv_list_size) {
+      int new_size = list->kv_list_size + 16;
 
-      tmp = realloc (context->c_fconfig, new_size * sizeof (hio_config_kv_t));
+      tmp = realloc (list->kv_list, new_size * sizeof (hio_config_kv_t));
       if (NULL == tmp) {
         return HIO_ERR_OUT_OF_RESOURCE;
       }
 
-      context->c_fconfig = tmp;
+      list->kv_list = tmp;
     }
 
-    new_index = context->c_fconfig_count++;
-    kv = context->c_fconfig + new_index;
+    new_index = list->kv_list_count++;
+    kv = list->kv_list + new_index;
 
     kv->key = strdup (key);
   } else {
@@ -485,7 +499,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
         continue;
       }
 
-      hioi_config_kv_push (context, identifier, type, key, value);
+      hioi_config_list_kv_push (&context->c_fconfig, identifier, type, key, value);
     }
     rc = HIO_SUCCESS;
   } while (NULL != (line = strtok_r (NULL, "\n", &lastl)));
@@ -498,6 +512,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
 int hioi_var_init (hio_object_t object) {
   hioi_var_array_init (&object->configuration);
   hioi_var_array_init (&object->performance);
+  hioi_config_list_init (&object->config_set);
 
   return HIO_SUCCESS;
 }
@@ -515,9 +530,12 @@ int hio_config_set_value (hio_object_t object, const char *variable, const char 
     return HIO_ERR_BAD_PARAM;
   }
 
+  hioi_config_list_kv_push (&object->config_set, hioi_object_identifier (object),
+                            object->type, variable, value);
+
   config_index = hioi_var_lookup (&object->configuration, variable);
   if (0 > config_index) {
-    return HIO_ERR_NOT_FOUND;
+    return HIO_SUCCESS;
   }
 
   var = object->configuration.vars + config_index;

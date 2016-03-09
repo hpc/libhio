@@ -1,3 +1,14 @@
+# -*- Makefile.am -*-
+#
+# Copyright (c) 2014-2016 Los Alamos National Security, LLC. All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
 all: libhio.la
 
 AUTOMAKE_OPTIONS = subdir-objects
@@ -22,7 +33,8 @@ libhio_la_SOURCES = hio_context.c hio_component.c hio_var.c hio_crc.c \
 	hio_manifest.c hio_fs.c api/dataset_open.c api/dataset_close.c \
 	api/element_open.c api/element_close.c api/element_write.c \
 	api/element_read.c api/dataset_unlink.c api/dataset_get_id.c \
-	api/element_size.c libconfig_parser_a-config_parser.c
+	api/element_size.c api/dataset_alloc.c api/object_name.c \
+	libconfig_parser_a-config_parser.c
 if INTERNAL_JSON_C
 # just link in the json objects directly
 json_objects = $(top_builddir)/extra/json/build/arraylist.lo $(top_builddir)/extra/json/build/debug.lo \
@@ -31,7 +43,8 @@ json_objects = $(top_builddir)/extra/json/build/arraylist.lo $(top_builddir)/ext
 	$(top_builddir)/extra/json/build/json_util.lo $(top_builddir)/extra/json/build/linkhash.lo \
 	$(top_builddir)/extra/json/build/printbuf.lo $(top_builddir)/extra/json/build/random_seed.lo
 # include both the archive (for the dynamic library) and the object files (for the static library)
-libhio_la_LDFLAGS += --whole-archive -L$(top_builddir)/extra/json/build/.libs -ljson-c --no-whole-archive
+libhio_la_LDFLAGS += --whole-archive $(top_builddir)/extra/json/build/.libs/libjson-c.la --no-whole-archive \
+	-version-info 1:0:0
 libhio_la_LIBADD = $(json_objects)
 libhio_la_CPPFLAGS += -I$(top_builddir)/extra/json/json-c-0.12 -I$(top_builddir)/extra/json/build
 $(top_builddir)/extra/json/build/arraylist.lo: json

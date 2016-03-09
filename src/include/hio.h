@@ -298,8 +298,23 @@ extern "C" {
 /**
  * @ingroup API
  * @brief HIO API version
+ *
+ * HIO API version history:
+ *   1.0 - 1.2: Version 1
+ *   1.3: Version 2
+ *     Changes from API version 1:
+ *       - Added functions to allocate and free hio dataset handles. This change
+ *         was made in order to correctly handle hio_config_set_value() before
+ *         a dataset is opened. Calls to hio_dataset_open() from v1.0 can be
+ *         replaced by hio_dataset_alloc() followed by hio_dataset_open(). Calls
+ *         to hio_dataset_close() should be replaced by hio_dataset_close()
+ *         followed by hio_dataset_free().
+ *       - Added a function (hio_object_get_name()) to fetch the name of an
+ *         hio object. For example it returns the name passed to
+ *         hio_init()/hio_init_mpi() for contexts and hio_dataset_alloc() for
+ *         datasets.
  */
-#define HIO_API_VERSION 1
+#define HIO_API_VERSION 2
 
 /**
  * @ingroup API
@@ -636,7 +651,7 @@ hio_return_t hio_err_print_all (hio_context_t context, FILE *output, char *forma
 
 /**
  * @ingroup API
- * @brief Open/create an hio dataset
+ * @brief Allocate an hio dataset object
  *
  * @param[in]  context  hio context
  * @param[out] set_out  hio dataset handle
@@ -648,24 +663,26 @@ hio_return_t hio_err_print_all (hio_context_t context, FILE *output, char *forma
  * @returns HIO_SUCCESS on success
  * @returns HIO_ERROR_PARAM if a bad parameter is supplied. This can happen if
  *          an existing dataset is opened with the incorrect mode.
- * @returns HIO_ERR_EXISTS if HIO_FLAG_CREAT is specified and the dataset id already
- *          exists in the current data root.
+ * @returns HIO_ERR_OUT_OF_RESOURCE if insufficient resources are available
  *
- * This function attempts to open/create an hio dataset. A dataset represents a
- * collection of one or more related elements. For example, a set of elements associated
- * with an n-n IO pattern. In the case of n-n the caller must specify different element
- * names on all ranks when calling to hio_element_open(). This call is collective and must
- * be made by all ranks in the context. There is no restriction on the number
- * of elements opened by any rank. This number is only limited by the resources
- * available. If the special value HIO_DATASET_ID_HIGHEST is specified in {set_id} libhio
- * will attempt to open an existing dataset with the maximum id. If the special value
- * HIO_DATASET_ID_NEWEST is specified in {set_id} libhio will attempt to open an
- * an existing dataset with the newest modification time.
+ * This function is a non-collective call that allocates an hio dataset object and initializes
+ * its configuration. An allocated dataset can be configured by hio_config_set_value() and
+ * opened with hio_dataset_open(). Once opened a dataset can no longer be configured and must
+ * be closed by calling hio_dataset_close(). Dataset objects must be released with a call to
+ * hio_dataset_free().
+ *
+ * A dataset represents a collection of one or more related elements. For example, all the
+ * files associated with an n-n IO pattern.
+ *
+ * If the special value HIO_DATASET_ID_HIGHEST is specified in {set_id} libhio will allocate
+ * a dataset that when opened will attempt to find and open an existing dataset in all data
+ * roots that has the highest dataset id. Likewise, if the special value HIO_DATASET_ID_NEWEST
+ * is specified the dataset with the most recent modification time will be used.
  *
  * The flags should be an or'ed value consisting of any or none of the following:
  *
- *    HIO_FLAG_READ          Open the file for read-only
- *    HIO_FLAG_WRITE          Open the file for write-only
+ *    HIO_FLAG_READ            Open the file for read-only
+ *    HIO_FLAG_WRITE           Open the file for write-only
  *    HIO_FLAG_CREAT           Create the dataset if it does not already exist
  *    HIO_FLAG_TRUNC           If the dataset exists unlink it and create an empty
  *                             dataset
@@ -675,25 +692,59 @@ hio_return_t hio_err_print_all (hio_context_t context, FILE *output, char *forma
  *       write without specifying HIO_FLAG_TRUNC an error will be returned. Future
  *       releases of libhio may not have these restrictions.
  *
- * libhio does not currently support opening an existing dataset, id pair with
+ * libhio does not currently support opening an existing dataset,id pair with
  * a different mode than it was created with.
  */
-hio_return_t hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                               int64_t set_id, int flags, hio_dataset_mode_t mode);
+hio_return_t hio_dataset_alloc (hio_context_t context, hio_dataset_t *set_out, const char *name,
+                                int64_t set_id, int flags, hio_dataset_mode_t mode);
+
+/**
+ * @ingroup API
+ * @brief Open/create an hio dataset
+ *
+ * @param[in]  dataset  hio dataset allocated with hio_dataset_alloc()
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERROR_PARAM if a bad parameter or configuration is supplied This can
+ *          happen if an existing dataset is opened with the incorrect mode or number
+ *          of processes.
+ * @returns HIO_ERR_EXISTS if HIO_FLAG_CREAT is specified and the dataset id already
+ *          exists in the current data root.
+ *
+ * This function attempts to open/create an hio dataset.
+ */
+hio_return_t hio_dataset_open (hio_dataset_t dataset);
 
 /**
  * @ingroup API
  * @brief Close an hio dataset
  *
- * @param[in,out] set  hio dataset handle
+ * @param[in]     dataset  hio dataset handle
  *
  * @returns hio_return_t
  *
- * This function closes and releases all resources associated with the dataset.
- * It is erroneous to call this function on a dataset while there are outstanding
- * elements open locally in the dataset.
+ * This function closes an hio dataset handle. The handle can continue to be used
+ * with @ref performance calls until it is freed with hio_dataset_free(). It is
+ * erroneous to call this function on a dataset while there are outstanding elements
+ * open locally in the dataset.
  */
-hio_return_t hio_dataset_close (hio_dataset_t *set);
+hio_return_t hio_dataset_close (hio_dataset_t dataset);
+
+/**
+ * @ingroup API
+ * @brief Release an hio dataset object
+ *
+ * @param[in,out] dataset  hio dataset handle
+ *
+ * @returns hio_return_t
+ *
+ * This function schedules the release of the dataset object and all associated
+ * resources. If the dataset is currently open it can be used normally until
+ * it is closed by hio_dataset_close(). Once a dataset handle is closed and freed
+ * it can no longer be used. Before returning this function set the value
+ * pointed to by {dataset} to HIO_OBJECT_NULL.
+ */
+hio_return_t hio_dataset_free (hio_dataset_t *dataset);
 
 /**
  * @ingroup API
@@ -1275,6 +1326,18 @@ hio_return_t hio_perf_get_info (hio_object_t object, int index, char **name, hio
  * to it's type.
  */
 hio_return_t hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
+
+/**
+ * @ingroup API
+ * @brief Get the name of an hio object
+ *
+ * @param[in]  object hio object handle
+ * @param[out] name   name of the hio object
+ *
+ * This function returns the name associated with an hio object. This function
+ * returns a copy of the name and it must be freed with free().
+ */
+hio_return_t hio_object_get_name (hio_object_t object, char **name_out);
 
 #if __cplusplus
 }

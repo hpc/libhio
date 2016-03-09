@@ -64,9 +64,149 @@ typedef struct hio_list_t {
     (head).next = &(item)->member;                            \
   } while (0)
 
+
 static inline bool hioi_list_empty (hio_list_t *list) {
   return list->prev == list->next;
 }
+
+/* dataset function types */
+
+/**
+ * Close a dataset and release any internal state
+ *
+ * @param[in] dataset dataset object
+ *
+ * @returns HIO_SUCCESS if the dataset was successfully closed
+ * @returns hio error code on failure
+ *
+ * This function closes the dataset and releases any internal data
+ * stored on the dataset. The function is not allowed to release
+ * the dataset itself. If the dataset has been modified the module
+ * should ensure that either the data is committed to the data root
+ * or the appropriate error code is returned.
+ *
+ * @note The module should not attempt to unlink/delete the data
+ *       set if an error occurs. Instead, the module should be able
+ *       to detect the failure on a subsequent open call. It is up
+ *       to the hio user to unlink failed datsets.
+ */
+typedef int (*hio_dataset_close_fn_t) (hio_dataset_t dataset);
+
+/**
+ * Open an element of the dataset
+ *
+ * @param[in]  dataset      hio dataset object
+ * @param[out] element_out  new hio element object
+ * @param[in]  element_name name of the hio dataset element
+ * @param[in]  flags        element open flags
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_NOT_FOUND if the element does not exist (read-only datasets)
+ * @returns HIO_ERR_OUT_OF_RESOURCE on resource exhaustion
+ * @returns hio error on other failure
+ *
+ * This function opens a named element on an hio dataset.
+ */
+typedef int (*hio_dataset_element_open_fn_t) (hio_dataset_t dataset,
+                                              hio_element_t *element_out,
+                                              const char *element_name,
+                                              int flags);
+
+/**
+ * Write to an hio dataset element
+ *
+ * @param[in]  element      hio dataset element object
+ * @param[out] request      new request object if requested (can be NULL)
+ * @param[in]  offset       element offset to write to
+ * @param[in]  ptr          data to write
+ * @param[in]  count        number of blocks to write
+ * @param[in]  size         size of blocks
+ * @param[in]  stride       number of bytes between blocks
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_PERM if the element can not be written to
+ * @returns hio error on other error
+ *
+ * This function schedules data to be written to a dataset element. Modules are free
+ * to delay any updates to the dataset element until hio_element_close() or
+ * hio_element_flush() at the latest.
+ */
+typedef int (*hio_element_write_strided_nb_fn_t) (hio_element_t element,
+                                                  hio_request_t *request,
+                                                  off_t offset, const void *ptr,
+                                                  size_t count, size_t size,
+                                                  size_t stride);
+
+/**
+ * Read from an hio dataset element
+ *
+ * @param[in]  element      hio dataset element object
+ * @param[out] request      new request object if requested (can be NULL)
+ * @param[in]  offset       element offset to read from
+ * @param[in]  ptr          data to write
+ * @param[in]  count        number of blocks to read
+ * @param[in]  size         size of blocks
+ * @param[in]  stride       number of bytes between blocks
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_PERM if the element can not be written to
+ * @returns hio error on other error
+ *
+ * This function schedules data to be read from a dataset element. Modules are free
+ * to delay any reads from the dataset element until hio_element_complete().
+ */
+typedef int (*hio_element_read_strided_nb_fn_t) (hio_element_t element, hio_request_t *request,
+                                                 off_t offset, void *ptr, size_t count,
+                                                 size_t size, size_t stride);
+
+/**
+ * Flush writes to a dataset element
+ *
+ * @param[in]  module       hio module associated with the dataset element
+ * @param[in]  element      hio dataset element object
+ * @param[in]  module       hio flush mode
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_PERM if the element can not be written to
+ * @returns hio error on other error
+ *
+ * This function flushes all outstanding writes to a dataset element. When this
+ * call returns the user should be free to update any buffers associated with
+ * writes on the dataset element.
+ */
+typedef int (*hio_element_flush_fn_t) (hio_element_t element, hio_flush_mode_t mode);
+
+/**
+ * Complete all reads from a dataset element
+ *
+ * @param[in]  module       hio module associated with the dataset element
+ * @param[in]  element      hio dataset element object
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_PERM if the element can not be read from
+ * @returns hio error on other error
+ *
+ * This function completes all outstanding reads from a dataset element. When this
+ * call returns all requested data (if available) should be available in the
+ * user's buffers.
+ */
+typedef int (*hio_element_complete_fn_t) (hio_element_t element);
+
+/**
+ * Close a dataset element
+ *
+ * @param[in] module       hio module associated with the dataset element
+ * @param[in] element      element to close
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns hio error code if any error occurred on the element that has not
+ *          already been returned
+ *
+ * This function closes and hio dataset element and frees any internal data
+ * allocated by the backend module. hio modules are allowed to defer reporting
+ * any errors until hio_element_close() or hio_dataset_close().
+ */
+typedef int (*hio_element_close_fn_t) (hio_element_t element);
 
 struct hio_config_t;
 
@@ -88,6 +228,9 @@ struct hio_object {
    * this part of the object stores all the registered peformance
    * variables */
   hio_var_array_t   performance;
+
+  /** econfigurations variables set by hio_set_config */
+  hio_config_kv_list_t config_set;
 
   /** parent object */
   hio_object_t      parent;
@@ -122,9 +265,7 @@ struct hio_context {
   /** context verbosity */
   int32_t           c_verbose; // Signed to prevent Cray compiler error when comparing with 0
   /** file configuration for the context */
-  hio_config_kv_t  *c_fconfig;
-  int               c_fconfig_count;
-  int               c_fconfig_size;
+  hio_config_kv_list_t c_fconfig;
 
   /** io modules (one for each data root) */
   hio_module_t      *c_modules[HIO_MAX_DATA_ROOTS];
@@ -139,6 +280,9 @@ struct hio_context {
 #endif
 
   hio_list_t         c_ds_data;
+
+  /** size of a dataset object */
+  size_t             c_ds_size;
 };
 
 struct hio_dataset_data_t {
@@ -231,6 +375,8 @@ struct hio_dataset {
 
   /** dataset identifier */
   uint64_t            ds_id;
+  /** dataset identifier requested */
+  uint64_t            ds_id_requested;
   /** flags used during creation of this dataset */
   int                 ds_flags;
   /** open mode */
@@ -273,7 +419,13 @@ struct hio_dataset {
   int                 ds_status;
 
   /** dataset open function (data) */
-  hio_fs_attr_t       fs_fsattr;
+  hio_fs_attr_t       ds_fsattr;
+
+  /** close the dataset and free any internal resources */
+  hio_dataset_close_fn_t ds_close;
+
+  /** open an element in the dataset */
+  hio_dataset_element_open_fn_t ds_element_open;
 };
 
 struct hio_request {
@@ -319,6 +471,12 @@ struct hio_element {
 
   /** element file handle (not used by all backends) */
   FILE             *e_fh;
+
+  hio_element_write_strided_nb_fn_t e_write_strided_nb;
+  hio_element_read_strided_nb_fn_t e_read_strided_nb;
+  hio_element_flush_fn_t e_flush;
+  hio_element_complete_fn_t e_complete;
+  hio_element_close_fn_t e_close;
 };
 
 struct hio_dataset_header_t {
@@ -355,6 +513,8 @@ typedef int (*hioi_dataset_header_compare_t) (hio_dataset_header_t *, hio_datase
  */
 hio_context_t hioi_object_context (hio_object_t object);
 
+#define hioi_object_identifier(object) ((hio_object_t) object)->identifier
+
 /**
  * Macro to get the dataset for an hio element
  */
@@ -367,14 +527,13 @@ hio_context_t hioi_object_context (hio_object_t object);
  * @param[in] id           id of this dataset instance
  * @param[in] flags        flags for this dataset instance
  * @param[in] mode         offset mode of this dataset
- * @param[in] dataset_size size of the dataset object to allocate
  *
  * @returns hio dataset object on success
  * @returns NULL on failure
  *
  * This function generates a generic dataset object and populates
- * the shared fields. The module should populate the private data
- * if needed.
+ * the shared fields. The module should populate private data if
+ * needed.
  *
  * This function may or may not appear in the final release of
  * libhio. It may become the responsibility of the hio module to
@@ -382,8 +541,7 @@ hio_context_t hioi_object_context (hio_object_t object);
  * the shared bit above).
  */
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
-                                  int flags, hio_dataset_mode_t mode,
-                                  size_t dataset_size);
+                                  int flags, hio_dataset_mode_t mode);
 
 /**
  * @brief scatter dataset configuration to all processes
@@ -514,8 +672,6 @@ static inline bool hioi_context_using_mpi (hio_context_t context) {
 
   return false;
 }
-
-hio_module_t *hioi_context_select_module (hio_context_t context);
 
 /**
  * @brief Query filesystem attributes
