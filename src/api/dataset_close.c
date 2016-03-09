@@ -11,25 +11,21 @@
 
 #include "hio_types.h"
 
-int hio_dataset_close (hio_dataset_t *set) {
+int hio_dataset_close (hio_dataset_t dataset) {
   uint64_t tmp[4] = {0, 0, 0, 0};
   double aggregate_time;
-  hio_module_t *module;
   hio_context_t context;
-  hio_dataset_t dataset;
   uint64_t rctime;
   int rc;
 
-  if (NULL == set || NULL == *set) {
+  if (HIO_OBJECT_NULL == dataset) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  dataset = *set;
-  module = dataset->ds_module;
   context = hioi_object_context (&dataset->ds_object);
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%llu",
-            (*set)->ds_object.identifier, (*set)->ds_id);
+            hioi_object_identifier (dataset), dataset->ds_id);
 
   tmp[0] = dataset->ds_stat.s_bread;
   tmp[1] = dataset->ds_stat.s_bwritten;
@@ -47,21 +43,21 @@ int hio_dataset_close (hio_dataset_t *set) {
   context->c_bread = dataset->ds_stat.s_bread;
   context->c_bwritten = dataset->ds_stat.s_bwritten;
 
-  rc = module->dataset_close (module, dataset);
+  rc = dataset->ds_close (dataset);
 
   rctime = hioi_gettime ();
 
   if (HIO_SUCCESS == rc && (HIO_FLAG_WRITE & dataset->ds_flags)) {
     hio_dataset_data_t *ds_data = dataset->ds_data;
     /* update dataset data */
-    ds_data->dd_last_id = (*set)->ds_id;
+    ds_data->dd_last_id = dataset->ds_id;
     ds_data->dd_last_write_completion = time (NULL);
 
     if (0 == ds_data->dd_average_write_time) {
-      ds_data->dd_average_write_time = (*set)->ds_stat.s_wtime;
+      ds_data->dd_average_write_time = dataset->ds_stat.s_wtime;
     } else {
       ds_data->dd_average_write_time = (uint64_t) ((float) ds_data->dd_average_write_time * 0.8);
-      ds_data->dd_average_write_time += (uint64_t) ((float) (*set)->ds_stat.s_wtime * 0.2);
+      ds_data->dd_average_write_time += (uint64_t) ((float) dataset->ds_stat.s_wtime * 0.2);
     }
   }
 #if HIO_USE_MPI
@@ -80,7 +76,8 @@ int hio_dataset_close (hio_dataset_t *set) {
             tmp[1], rctime - dataset->ds_rotime, (double) tmp[3] / 1000.0, (double) tmp[1] / (double) (rctime - dataset->ds_rotime));
   }
 
-  hioi_dataset_release (set);
+  /* reset the id to the id originally requested */
+  dataset->ds_id = dataset->ds_id_requested;
 
   return rc;
 }

@@ -20,25 +20,25 @@ struct hio_dataset_item_t {
 };
 typedef struct hio_dataset_item_t hio_dataset_item_t;
 
-static int hio_dataset_open_internal (hio_module_t *module, hio_dataset_t *set_out, const char *name,
-                                      int64_t set_id, int flags, hio_dataset_mode_t mode) {
+static int hio_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
+  /* get timestamp before open call */
   uint64_t rotime = hioi_gettime ();
   int rc;
 
   hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%llu with flags 0x%x with backend module %p",
-            name, set_id, flags, module);
+            dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags, module);
 
   /* Several things need to be done here:
    * 1) check if the user is requesting a specific dataset or the newest available,
    * 2) check if the dataset specified already exists in any module,
    * 3) if the dataset does not exist and we are creating then use the current
    *    module to open (create) the dataset. */
-  rc = module->dataset_open (module, set_out, name, set_id, flags, mode);
+  rc = module->dataset_open (module, dataset);
   if (HIO_SUCCESS != rc) {
-    hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%llu on data root %s", name, set_id,
-              module->data_root);
+    hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%llu on data root %s",
+              dataset->ds_object.identifier, dataset->ds_id, module->data_root);
   } else {
-    (*set_out)->ds_rotime = rotime;
+    dataset->ds_rotime = rotime;
   }
 
   return rc;
@@ -149,22 +149,18 @@ static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio
   return HIO_SUCCESS;
 }
 
-static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                                  int flags, hio_dataset_mode_t mode, hioi_dataset_header_compare_t compare) {
+static int hio_dataset_open_last (hio_dataset_t dataset, hioi_dataset_header_compare_t compare) {
+  hio_context_t context = hioi_object_context ((hio_object_t) dataset);
   int item_count = 0, rc, count;
   hio_dataset_item_t *items = NULL;
   hio_dataset_header_t *headers, header;
   hio_module_t *module;
   void *tmp;
 
-  if ((flags & (HIO_FLAG_CREAT | HIO_FLAG_TRUNC)) == HIO_FLAG_CREAT) {
-    return HIO_ERR_BAD_PARAM;
-  }
-
   for (int i = 0 ; i < context->c_mcount ; ++i) {
     module = context->c_modules[i];
 
-    rc = module->dataset_list (module, name, &headers, &count);
+    rc = module->dataset_list (module, hioi_object_identifier (dataset), &headers, &count);
     if (!(HIO_SUCCESS == rc && count)) {
       continue;
     }
@@ -195,33 +191,35 @@ static int hio_dataset_open_last (hio_context_t context, hio_dataset_t *set_out,
   }
 
   while (HIO_SUCCESS == (rc = hio_dataset_item_pop (items, &item_count, &header, &module, compare))) {
-    rc = hio_dataset_open_internal (module, set_out, name, header.ds_id, flags, mode);
+    /* set the current dataset id to the one we are attempting to open */
+    dataset->ds_id = header.ds_id;
+    rc = hio_dataset_open_internal (module, dataset);
     if (HIO_SUCCESS == rc) {
       break;
     }
   }
+
+  /* reset the id to the id originally requested */
+  dataset->ds_id = dataset->ds_id_requested;
 
   free (items);
 
   return rc;
 }
 
-static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                                      int64_t set_id, int flags, hio_dataset_mode_t mode) {
-  hio_module_t *module = hioi_context_select_module (context);
+static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t dataset) {
   int rc = HIO_ERR_NOT_FOUND;
-
-  if (NULL == module) {
-    hio_err_push (HIO_ERROR, context, NULL, "Could not select hio module");
-    return HIO_ERR_NOT_FOUND;
-  }
 
   for (int i = 0 ; i <= context->c_mcount ; ++i) {
     int module_index = (context->c_cur_module + i) % context->c_mcount;
 
-    module = context->c_modules[module_index];
+    hio_module_t *module = context->c_modules[module_index];
+    if (NULL == module) {
+      /* internal error */
+      return HIO_ERROR;
+    }
 
-    rc = hio_dataset_open_internal (module, set_out, name, set_id, flags, mode);
+    rc = hio_dataset_open_internal (module, dataset);
     if (HIO_SUCCESS == rc) {
       break;
     }
@@ -230,27 +228,21 @@ static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t *set_
   return rc;
 }
 
-int hio_dataset_open (hio_context_t context, hio_dataset_t *set_out, const char *name,
-                      int64_t set_id, int flags, hio_dataset_mode_t mode) {
+int hio_dataset_open (hio_dataset_t dataset) {
+  hio_context_t context;
   int rc;
 
-  if (NULL == context || NULL == set_out || NULL == name) {
+  if (HIO_OBJECT_NULL == dataset) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  if (0 == context->c_mcount) {
-    /* create hio modules for each item in the specified data roots */
-    rc = hioi_context_create_modules (context);
-    if (HIO_SUCCESS != rc) {
-      return rc;
-    }
+  context = hioi_object_context ((hio_object_t) dataset);
+
+  if (HIO_DATASET_ID_HIGHEST == dataset->ds_id) {
+    return hio_dataset_open_last (dataset, hioi_dataset_header_highest_setid);
+  } else if (HIO_DATASET_ID_NEWEST == dataset->ds_id) {
+    return hio_dataset_open_last (dataset, hioi_dataset_header_newest);
   }
 
-  if (HIO_DATASET_ID_HIGHEST == set_id) {
-    return hio_dataset_open_last (context, set_out, name, flags, mode, hioi_dataset_header_highest_setid);
-  } else if (HIO_DATASET_ID_NEWEST == set_id) {
-    return hio_dataset_open_last (context, set_out, name, flags, mode, hioi_dataset_header_newest);
-  }
-
-  return hio_dataset_open_specific (context, set_out, name, set_id, flags, mode);
+  return hio_dataset_open_specific (context, dataset);
 }

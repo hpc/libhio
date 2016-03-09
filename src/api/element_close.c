@@ -12,15 +12,13 @@
 #include "hio_types.h"
 
 int hio_element_close (hio_element_t *element) {
-  hio_dataset_t dataset = hioi_element_dataset (*element);
-  hio_module_t *module = dataset->ds_module;
   int rc;
 
-  if (NULL == element || NULL == *element) {
+  if (NULL == element || HIO_OBJECT_NULL == *element) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  rc = module->element_close (module, *element);
+  rc = (*element)->e_close (*element);
 
   *element = HIO_OBJECT_NULL;
 

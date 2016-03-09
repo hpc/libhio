@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -107,8 +107,18 @@ static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hi
   return HIO_SUCCESS;
 }
 
+static hio_return_t hioi_dataset_element_open_stub (hio_dataset_t dataset, hio_element_t *element_out,
+                                                    const char *element_name, int flags) {
+  return HIO_ERR_BAD_PARAM;
+}
+
+static hio_return_t hioi_dataset_close_stub (hio_dataset_t dataset) {
+  return HIO_ERR_BAD_PARAM;
+}
+
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
-                                  int flags, hio_dataset_mode_t mode, size_t dataset_size) {
+                                  int flags, hio_dataset_mode_t mode) {
+  size_t dataset_size = context->c_ds_size;
   hio_dataset_t new_dataset;
   int rc;
 
@@ -139,8 +149,11 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   new_dataset->ds_object.type = HIO_OBJECT_TYPE_DATASET;
   new_dataset->ds_object.parent = &context->c_object;
   new_dataset->ds_id = id;
+  new_dataset->ds_id_requested = id;
   new_dataset->ds_flags = flags;
   new_dataset->ds_mode = mode;
+  new_dataset->ds_close = hioi_dataset_close_stub;
+  new_dataset->ds_element_open = hioi_dataset_element_open_stub;
 
   new_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_fmode,
@@ -160,8 +173,8 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                    "dataset_block_size", HIO_CONFIG_TYPE_INT64, NULL,
                    "Block size to use when writing in optimized mode (default: job size dependent)", 0);
 
-  new_dataset->fs_fsattr.fs_type = HIO_FS_TYPE_DEFAULT;
-  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->fs_fsattr.fs_type,
+  new_dataset->ds_fsattr.fs_type = HIO_FS_TYPE_DEFAULT;
+  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_fsattr.fs_type,
                    "dataset_filesystem_type", HIO_CONFIG_TYPE_INT32, &hioi_dataset_fs_type_enum,
                    "Type of filesystem this dataset resides on", HIO_VAR_FLAG_READONLY);
 
@@ -182,7 +195,7 @@ void hioi_dataset_release (hio_dataset_t *set) {
   hio_context_t context;
   hio_module_t *module;
 
-  if (!set || !*set) {
+  if (!set || HIO_OBJECT_NULL != *set) {
     return;
   }
 
@@ -192,7 +205,7 @@ void hioi_dataset_release (hio_dataset_t *set) {
   hioi_list_foreach_safe(element, next, (*set)->ds_elist, struct hio_element, e_list) {
     if (element->e_is_open) {
       hioi_log (context, HIO_VERBOSE_WARN, "element still open at dataset close");
-      module->element_close (module, element);
+      element->e_close (element);
     }
 
     hioi_list_remove(element, e_list);
@@ -204,7 +217,7 @@ void hioi_dataset_release (hio_dataset_t *set) {
   }
 
   free (*set);
-  *set = NULL;
+  *set = HIO_OBJECT_NULL;
 }
 
 void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element) {
@@ -402,8 +415,8 @@ int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {
   ar_data[0] = rc;
   ar_data[1] = (long) data_size;
   ar_data[2] = dataset->ds_flags;
-  ar_data[3] = dataset->fs_fsattr.fs_scount;
-  ar_data[4] = dataset->fs_fsattr.fs_ssize;
+  ar_data[3] = dataset->ds_fsattr.fs_scount;
+  ar_data[4] = dataset->ds_fsattr.fs_ssize;
 
   rc = MPI_Bcast (ar_data, 5, MPI_LONG, 0, context->c_comm);
   if (MPI_SUCCESS != rc) {
@@ -432,8 +445,8 @@ int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {
 
   /* copy flags determined by rank 0 */
   dataset->ds_flags = ar_data[2];
-  dataset->fs_fsattr.fs_scount = ar_data[3];
-  dataset->fs_fsattr.fs_ssize = ar_data[4];
+  dataset->ds_fsattr.fs_scount = ar_data[3];
+  dataset->ds_fsattr.fs_ssize = ar_data[4];
 
   free (data);
 #endif

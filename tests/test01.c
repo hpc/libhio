@@ -18,14 +18,18 @@ int main (int argc, char *argv[]) {
     exit (EXIT_FAILURE);
   }
 
-  rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRITE | HIO_FLAG_CREAT | HIO_FLAG_TRUNC,
+  rc = hio_dataset_alloc (context, &dataset, "restart", 100, HIO_FLAG_WRITE | HIO_FLAG_CREAT | HIO_FLAG_TRUNC,
 			 HIO_SET_ELEMENT_SHARED);
+  if (HIO_SUCCESS != rc) {
+    fprintf (stderr, "Could no allocate a dataset handle");
+    exit (EXIT_FAILURE);
+  }
+
+  rc = hio_dataset_open (dataset);
   if (HIO_SUCCESS != rc) {
       if (HIO_ERR_EXISTS == rc) {
           hio_dataset_unlink (context, "restart", 100, HIO_UNLINK_MODE_FIRST);
-          rc = hio_dataset_open (context, &dataset, "restart", 100, HIO_FLAG_WRITE | HIO_FLAG_CREAT,
-                                 HIO_SET_ELEMENT_SHARED);
-
+          rc = hio_dataset_open (dataset);
       }
 
       if (HIO_SUCCESS != rc) {
@@ -60,21 +64,25 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "Could not create dataset element. reason: %d\n", rc);
   }
 
-  rc = hio_dataset_close (&dataset);
+  rc = hio_dataset_close (dataset);
   if (HIO_SUCCESS != rc) {
       fprintf (stderr, "Error closing dataset. reason: %d\n", rc);
   }
 
+  hio_dataset_free (&dataset);
 
+  rc = hio_dataset_alloc (context, &dataset, "restart", 50, HIO_FLAG_WRITE | HIO_FLAG_CREAT | HIO_FLAG_TRUNC,
+                          HIO_SET_ELEMENT_SHARED);
+  if (HIO_SUCCESS != rc) {
+    fprintf (stderr, "Could no allocate a dataset handle");
+    exit (EXIT_FAILURE);
+  }
 
-  rc = hio_dataset_open (context, &dataset, "restart", 50, HIO_FLAG_WRITE | HIO_FLAG_CREAT | HIO_FLAG_TRUNC,
-			 HIO_SET_ELEMENT_SHARED);
+  rc = hio_dataset_open (dataset);
   if (HIO_SUCCESS != rc) {
       if (HIO_ERR_EXISTS == rc) {
           hio_dataset_unlink (context, "restart", 50, HIO_UNLINK_MODE_FIRST);
-          rc = hio_dataset_open (context, &dataset, "restart", 50, HIO_FLAG_WRITE | HIO_FLAG_CREAT,
-                                 HIO_SET_ELEMENT_SHARED);
-
+          rc = hio_dataset_open (dataset);
       }
 
       if (HIO_SUCCESS != rc) {
@@ -109,15 +117,21 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "Could not create dataset element. reason: %d\n", rc);
   }
 
-  rc = hio_dataset_close (&dataset);
+  rc = hio_dataset_close (dataset);
   if (HIO_SUCCESS != rc) {
       fprintf (stderr, "Error closing dataset. reason: %d\n", rc);
   }
 
+  hio_dataset_free (&dataset);
 
+  rc = hio_dataset_alloc (context, &dataset, "restart", HIO_DATASET_ID_NEWEST, HIO_FLAG_READ,
+                          HIO_SET_ELEMENT_SHARED);
+  if (HIO_SUCCESS != rc) {
+    fprintf (stderr, "Could no allocate a dataset handle");
+    exit (EXIT_FAILURE);
+  }
 
-  rc = hio_dataset_open (context, &dataset, "restart", HIO_DATASET_ID_NEWEST, HIO_FLAG_READ,
-			 HIO_SET_ELEMENT_SHARED);
+  rc = hio_dataset_open (dataset);
   if (HIO_SUCCESS != rc) {
       fprintf (stderr, "Could not load restart dataset. reason: %d\n", rc);
       hio_fini (&context);
@@ -143,10 +157,12 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "Could not create dataset element. reason: %d\n", rc);
   }
 
-  rc = hio_dataset_close (&dataset);
+  rc = hio_dataset_close (dataset);
   if (HIO_SUCCESS != rc) {
       fprintf (stderr, "Error closing dataset. reason: %d\n", rc);
   }
+
+  hio_dataset_free (&dataset);
 
   (void) hio_fini (&context);
 

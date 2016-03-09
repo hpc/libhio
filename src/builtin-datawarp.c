@@ -31,10 +31,11 @@ typedef struct builtin_datawarp_module_t {
 } builtin_datawarp_module_t;
 
 typedef struct builtin_datawarp_module_dataset_t {
-  struct hio_dataset base;
+  builtin_posix_module_dataset_t posix_dataset;
   char *pfs_path;
   int stage_mode;
-  builtin_posix_module_dataset_t *posix_dataset;
+
+  hio_dataset_close_fn_t posix_ds_close;
 } builtin_datawarp_module_dataset_t;
 
 typedef struct builtin_datawarp_dataset_backend_data_t {
@@ -56,6 +57,8 @@ static hio_var_enum_t builtin_datawarp_stage_modes = {
   .values = builtin_datawarp_stage_mode_values,
 };
 
+static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset);
+
 static int builtin_datawarp_module_dataset_list (struct hio_module_t *module, const char *name,
                                                  hio_dataset_header_t **headers, int *count) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
@@ -64,10 +67,7 @@ static int builtin_datawarp_module_dataset_list (struct hio_module_t *module, co
                                                            count);
 }
 
-static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
-                                                 hio_dataset_t *set_out, const char *name,
-                                                 int64_t set_id, int flags,
-                                                 hio_dataset_mode_t mode) {
+static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hio_dataset_t dataset) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
   builtin_datawarp_module_dataset_t *datawarp_dataset;
@@ -76,47 +76,38 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module,
   int rc = HIO_SUCCESS;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp/dataset_open: opening dataset %s:%lu",
-	    name, (unsigned long) set_id);
-
-  datawarp_dataset = (builtin_datawarp_module_dataset_t *)
-    hioi_dataset_alloc (context, name, set_id, flags, mode,
-			sizeof (builtin_datawarp_module_dataset_t));
-  if (NULL == datawarp_dataset) {
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
+            hioi_object_identifier (dataset), (unsigned long) dataset->ds_id);
 
   /* open the posix dataset */
-  rc = posix_module->base.dataset_open (&posix_module->base, (hio_dataset_t *) &posix_dataset, name, set_id,
-                                        flags, mode);
+  rc = posix_module->base.dataset_open (&posix_module->base, dataset);
   if (HIO_SUCCESS != rc) {
-    free (datawarp_dataset);
     return rc;
   }
 
-  /* NTH -- TODO -- Need a way to expose the variable associated with the posix dataset up to the user */
-  datawarp_dataset->posix_dataset = posix_dataset;
-  datawarp_dataset->base.ds_module = module;
+  dataset->ds_module = module;
 
-  if (flags & HIO_FLAG_WRITE) {
+  if (dataset->ds_flags & HIO_FLAG_WRITE) {
     /* default to auto mode */
     datawarp_dataset->stage_mode = -1;
-    hioi_config_add (context, &datawarp_dataset->base.ds_object, &datawarp_dataset->stage_mode,
+    hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->stage_mode,
                      "datawarp_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
                      "Datawarp stage mode to use with this dataset instance", 0);
   }
 
-  *set_out = &datawarp_dataset->base;
+  /* override posix dataset functions (keep copies) */
+  datawarp_dataset->posix_ds_close = dataset->ds_close;
+  dataset->ds_close = builtin_datawarp_module_dataset_close;
 
   return HIO_SUCCESS;
 }
 
-static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, hio_dataset_t dataset) {
+static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
   builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) dataset;
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
+  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) dataset->ds_module;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
-  builtin_posix_module_dataset_t *posix_dataset = datawarp_dataset->posix_dataset;
+  builtin_posix_module_dataset_t *posix_dataset = &datawarp_dataset->posix_dataset;
   mode_t pfs_mode = posix_module->access_mode;
-  hio_context_t context = module->context;
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
   char *dataset_path = NULL;
   int rc, stage_mode;
 
@@ -129,30 +120,24 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     }
   }
 
-  rc = posix_module->base.dataset_close (&posix_module->base, (hio_dataset_t) posix_dataset);
+  rc = datawarp_dataset->posix_ds_close (dataset);
   if (HIO_SUCCESS != rc) {
     free (dataset_path);
     return rc;
   }
 
-  /* copy statistics and status from posix dataset */
-  dataset->ds_stat = posix_dataset->base.ds_stat;
-  dataset->ds_status = posix_dataset->base.ds_status;
-
-  hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
-
   if (datawarp_module->pfs_path && 0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE) && -2 != datawarp_dataset->stage_mode) {
     char *pfs_path;
 
-    rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->c_object.identifier,
-                   dataset->ds_object.identifier, dataset->ds_id);
+    rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, hioi_object_identifier(context),
+                   hioi_object_identifier(dataset), dataset->ds_id);
     if (0 > rc) {
       free (dataset_path);
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: staging datawarp dataset %s::%lld. "
-              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  dataset->ds_object.identifier,
+              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  hioi_object_identifier(dataset),
               dataset->ds_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
     if (-1 == datawarp_dataset->stage_mode) {
@@ -171,7 +156,7 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
     free (dataset_path);
     if (0 != rc) {
       hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
-                    "data stage on dataset %s::%lld. DWRC: %d", dataset->ds_object.identifier, dataset->ds_id, rc);
+                    "data stage on dataset %s::%lld. DWRC: %d", hioi_object_identifier (dataset), dataset->ds_id, rc);
       return HIO_ERROR;
     }
 
@@ -200,21 +185,21 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
 
       last_stage_id = ds_data->last_scheduled_stage_id;
 
-      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", posix_module->base.data_root, context->c_object.identifier,
-                     dataset->ds_object.identifier, last_stage_id);
+      rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", posix_module->base.data_root, hioi_object_identifier (context),
+                     hioi_object_identifier (dataset), last_stage_id);
       if (0 > rc) {
         return HIO_ERR_OUT_OF_RESOURCE;
       }
 
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: revoking end-of-job stage for datawarp dataset %s::%lld. "
-                "burst-buffer directory: %s",  dataset->ds_object.identifier, last_stage_id, dataset_path);
+                "burst-buffer directory: %s", hioi_object_identifier( dataset), last_stage_id, dataset_path);
 
       /* revoke the end of job stage for the previous dataset */
       rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
       free (dataset_path);
       if (0 != rc) {
         hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error revoking prior "
-                      "end-of-job stage of dataset %s::%lld. errno: %d", dataset->ds_object.identifier,
+                      "end-of-job stage of dataset %s::%lld. errno: %d", hioi_object_identifier (dataset),
                       last_stage_id, errno);
         return HIO_ERROR;
       }
@@ -222,11 +207,11 @@ static int builtin_datawarp_module_dataset_close (struct hio_module_t *module, h
       ds_data->last_scheduled_stage_id = dataset->ds_id;
 
       /* remove the last end-of-job dataset from the burst buffer */
-      (void) posix_module->base.dataset_unlink (&posix_module->base, dataset->ds_object.identifier, last_stage_id);
+      (void) posix_module->base.dataset_unlink (&posix_module->base, hioi_object_identifier (dataset), last_stage_id);
 
       /* remove created directories on pfs */
-      rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, context->c_object.identifier,
-                     dataset->ds_object.identifier, last_stage_id);
+      rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, hioi_object_identifier (context),
+                     hioi_object_identifier (dataset), last_stage_id);
       if (0 > rc) {
         free (dataset_path);
         return HIO_ERR_OUT_OF_RESOURCE;
@@ -248,53 +233,6 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
   return datawarp_module->posix_module->base.dataset_unlink (&datawarp_module->posix_module->base, name, set_id);
 }
 
-static int builtin_datawarp_module_element_open (struct hio_module_t *module, hio_dataset_t dataset,
-                                                 hio_element_t *element_out, const char *element_name,
-                                                 int flags) {
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) dataset;
-  builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
-  builtin_posix_module_dataset_t *posix_dataset = datawarp_dataset->posix_dataset;
-
-  return posix_module->base.element_open (&posix_module->base, &posix_dataset->base, element_out,
-                                          element_name, flags);
-}
-
-static int builtin_datawarp_module_element_close (struct hio_module_t *module, hio_element_t element) {
-
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  return datawarp_module->posix_module->base.element_close (&datawarp_module->posix_module->base, element);
-}
-
-static int builtin_datawarp_module_element_write_strided_nb (struct hio_module_t *module, hio_element_t element,
-                                                          hio_request_t *request, off_t offset, const void *ptr,
-                                                          size_t count, size_t size, size_t stride) {
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  return datawarp_module->posix_module->base.element_write_strided_nb (&datawarp_module->posix_module->base,
-                                                                       element, request, offset, ptr, count,
-                                                                       size, stride);
-}
-
-static int builtin_datawarp_module_element_read_strided_nb (struct hio_module_t *module, hio_element_t element,
-                                                         hio_request_t *request, off_t offset, void *ptr,
-                                                         size_t count, size_t size, size_t stride) {
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  return datawarp_module->posix_module->base.element_read_strided_nb (&datawarp_module->posix_module->base,
-                                                                      element, request, offset, ptr, count,
-                                                                      size, stride);
-}
-
-static int builtin_datawarp_module_element_flush (struct hio_module_t *module, hio_element_t element,
-                                               hio_flush_mode_t mode) {
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  return datawarp_module->posix_module->base.element_flush (&datawarp_module->posix_module->base, element, mode);
-}
-
-static int builtin_datawarp_module_element_complete (struct hio_module_t *module, hio_element_t element) {
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  return datawarp_module->posix_module->base.element_complete (&datawarp_module->posix_module->base, element);
-}
-
 static int builtin_datawarp_module_fini (struct hio_module_t *module) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
 
@@ -314,22 +252,13 @@ static int builtin_datawarp_module_fini (struct hio_module_t *module) {
 }
 
 hio_module_t builtin_datawarp_module_template = {
-  .dataset_open     = builtin_datawarp_module_dataset_open,
-  .dataset_close    = builtin_datawarp_module_dataset_close,
-  .dataset_unlink   = builtin_datawarp_module_dataset_unlink,
+  .dataset_open   = builtin_datawarp_module_dataset_open,
+  .dataset_unlink = builtin_datawarp_module_dataset_unlink,
 
-  .element_open     = builtin_datawarp_module_element_open,
-  .element_close    = builtin_datawarp_module_element_close,
+  .ds_object_size = sizeof (builtin_datawarp_module_dataset_t),
+  .dataset_list   = builtin_datawarp_module_dataset_list,
 
-  .element_write_strided_nb = builtin_datawarp_module_element_write_strided_nb,
-  .element_read_strided_nb  = builtin_datawarp_module_element_read_strided_nb,
-
-  .element_flush    = builtin_datawarp_module_element_flush,
-  .element_complete = builtin_datawarp_module_element_complete,
-
-  .dataset_list     = builtin_datawarp_module_dataset_list,
-
-  .fini             = builtin_datawarp_module_fini,
+  .fini           = builtin_datawarp_module_fini,
 };
 
 static int builtin_datawarp_component_init (hio_context_t context) {

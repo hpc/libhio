@@ -54,9 +54,7 @@ static hio_context_t hio_context_alloc (const char *identifier) {
   new_context->c_rank = 0;
   new_context->c_size = 1;
 
-  new_context->c_fconfig = NULL;
-  new_context->c_fconfig_size = 0;
-  new_context->c_fconfig_count = 0;
+  hioi_config_list_init (&new_context->c_fconfig);
 
   pthread_mutex_init (&new_context->c_lock, NULL);
 
@@ -100,21 +98,7 @@ static void hio_context_release (hio_context_t *contextp) {
     context->c_modules[i]->fini (context->c_modules[i]);
   }
 
-  if (context->c_fconfig) {
-    for (int i = 0 ; i < context->c_fconfig_count ; ++i) {
-      hio_config_kv_t *kv = context->c_fconfig + i;
-      if (kv->key) {
-        free (kv->key);
-      }
-      if (kv->value) {
-        free (kv->value);
-      }
-      if (kv->object_identifier) {
-        free (kv->object_identifier);
-      }
-    }
-    free (context->c_fconfig);
-  }
+  hioi_config_list_release (&context->c_fconfig);
 
   /* clean up any mpi resources */
 #if HIO_USE_MPI
@@ -211,6 +195,12 @@ int hioi_context_create_modules (hio_context_t context) {
       hio_err_push (rc, context, NULL, "Could not find an hio io module for data root %s",
                     data_root);
       break;
+    }
+
+    /* the module may be used in this context. see if the dataset size needs to
+     * be increased for this module */
+    if (context->c_ds_size < module->ds_object_size) {
+      context->c_ds_size = module->ds_object_size;
     }
 
     context->c_modules[num_modules++] = module;

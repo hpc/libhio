@@ -49,6 +49,12 @@ typedef struct hio_config_kv_t {
   char *value;
 } hio_config_kv_t;
 
+typedef struct hio_config_kv_list_t {
+  hio_config_kv_t *kv_list;
+  size_t kv_list_count;
+  size_t kv_list_size;
+} hio_config_kv_list_t;
+
 typedef struct hio_var_enum_value_t {
     /** string to match */
     char *string_value;
@@ -119,6 +125,9 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
 
 int hioi_perf_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
                    hio_config_type_t type, void *reserved0, const char *description, int flags);
+
+void hioi_config_list_init (hio_config_kv_list_t *list);
+void hioi_config_list_release (hio_config_kv_list_t *list);
 
 /**
  * Initialize the configuration component of an hio object
