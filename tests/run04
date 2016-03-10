@@ -4,6 +4,8 @@
 # Invalid parameter test cases 
 # Much more needed 
 
+batch_sub $(( $ranks * $blksz * $nblk ))
+
 ro_dir="$PWD/non-writable-test-directory"
 
 cmd mkdir $ro_dir

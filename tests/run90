@@ -17,5 +17,6 @@ if [[ $ppn -gt 0 ]]; then
   batch=2
   batch_sub 1
   batch_sub 1
+else
+  echo "ppn: $ppn; doing nothing"
 fi
-

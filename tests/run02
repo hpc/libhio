@@ -3,20 +3,7 @@
 
 # Read and write N-N test case with read data value checking.  
 
-case $size in
-  t ) blk=1024;                nblk=5;;
-  s ) blk=20480;               nblk=8;;   
-  m ) blk=$((1 * $cons_mi));  nblk=200;;
-  l ) blk=$((2 * $cons_mi));  nblk=512;;
-  x ) blk=$((4 * $cons_mi));  nblk=1024;;
-  y ) blk=$((4 * $cons_mi));  nblk=1536;;
-  z ) blk=$((4 * $cons_mi));  nblk=2048;;
-  * ) synexit "Error: invalid size $size";;
-esac
-
-batch_sub $(( $blk * $nblk * $ranks ))
-
-msg "blk: $blk  nblk: $nblk  dw_cap: $dw_cap" 
+batch_sub $(( $ranks * $blksz * $nblk ))
 
 cmdw="
   name run02w v $verbose_lev d $debug_lev mi 0
@@ -26,7 +13,7 @@ cmdw="
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
-    hew 0 $blk 
+    hew 0 $blksz 
   le 
   hec hdc hf mgf mf
 "
@@ -40,7 +27,7 @@ cmdr="
   hvp c. .
   hck on
   lc $nblk
-    her 0 $blk 
+    her 0 $blksz 
   le 
   hec hdc hf mgf mf
 "
