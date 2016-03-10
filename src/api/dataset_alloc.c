@@ -13,7 +13,7 @@
 
 hio_return_t hio_dataset_alloc (hio_context_t context, hio_dataset_t *set_out, const char *name,
                                 int64_t set_id, int flags, hio_dataset_mode_t mode) {
-  if (NULL == set_out || NULL == name || (flags & (HIO_FLAG_CREAT | HIO_FLAG_TRUNC)) == HIO_FLAG_CREAT) {
+  if (NULL == set_out || NULL == name) {
     return HIO_ERR_BAD_PARAM;
   }
 
