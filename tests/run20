@@ -11,31 +11,31 @@ cmdw="
   /@@ Read and write N-N multi DS test case @/
   hi MY_CTX $HIO_TEST_ROOTS 
 
-  hdo NTN_DS 97 WRITE,CREAT UNIQUE
+  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
-    hew 0 $blksz 
+    hew 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   s 1
-  hdo NTN_DS 98 WRITE,CREAT UNIQUE
+  hda NTN_DS 98 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
-    hew 0 $blksz 
+    hew 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   s 1
   hdo NTN_DS 99 WRITE,CREAT UNIQUE
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
-    hew 0 $blksz 
+    hew 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   hf mgf mf
 "
@@ -46,34 +46,34 @@ cmdr="
   hi MY_CTX $HIO_TEST_ROOTS 
 
   hxdi 99
-  hdo NTN_DS 99 READ UNIQUE
+  hda NTN_DS 99 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
-    her 0 $blksz 
+    her 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   hxdi 99
-  hdo NTN_DS ID_NEWEST READ UNIQUE
+  hda NTN_DS ID_NEWEST READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
-    her 0 $blksz 
+    her 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   hxdi 99
-  hdo NTN_DS ID_HIGHEST READ UNIQUE
+  hda NTN_DS ID_HIGHEST READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
-    her 0 $blksz 
+    her 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   hf mgf mf
 "

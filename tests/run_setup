@@ -41,7 +41,7 @@ synexit() {
   echo "    -s <size>       Per rank run size t|s|m|l|x|y|z  (default s)"
   echo "       <totsz>[,<blksz>][,<nseg>]  where:"
   echo "                    totsz - total size per rank in MiB"
-  echo "                    blksz - size of each write/read in KiB" 
+  echo "                    blksz - size of each write/read in KiB"
   echo "                    nseg - number of segments (not used by all tests)"
   echo "    -r <num_ranks>  Number of MPI ranks.  Default is all allocated"
   echo "                    PEs or 2 on Mac OS"
@@ -115,7 +115,7 @@ batch_sub() {
     done
     jobout="$rundir/job.$jobname.out"
     msglog="$rundir/job.$jobname.jobid"
-    msg "run_setup: `date \"$datefmt\"` Job $jobname $args" 
+    msg "run_setup: `date \"$datefmt\"` Job $jobname $args"
 
     echo "#! /bin/bash" > $jobsh
     echo "#MSUB -l nodes=$nodes:ppn=$ppn" >> $jobsh
@@ -154,15 +154,15 @@ batch_sub() {
     mcmd="$mcmd $jobsh" 
     msg "run_setup: ---> $mcmd"
     msub_msg=`$mcmd 2>&1`
-        
+
     shopt -s nocasematch
     if [[ $msub_msg == *error* || $msub_msg == *warn* || $msub_msg = *fail* ]]; then
       msg "run_setup: msub error: $msub_msg"
-    else 
+    else
       jobid=${msub_msg#$'\n'}
       echo "$jobid" > $lastjob
       msg "run_setup: `date \"$datefmt\"` job $jobname ID: $jobid submitted"
-    fi 
+    fi
     shopt -u nocasematch
     msglog=""
     if [[ $batch -eq 1 ]]; then exit; fi
@@ -297,7 +297,7 @@ else
     warpalloc=1
   else
     warpalloc=0
-  fi 
+  fi
 fi
 
 args="$0 $*"
@@ -439,7 +439,7 @@ if [[ $batch -eq 0 ]]; then
           export HIO_datawarp_root="/tmp/dw_scr/$LOGNAME$job_dir"
         else
           synexit "warpalloc=1 and HIO_datawarp_root not set"
-        fi  
+        fi
       fi
     fi
 
@@ -449,7 +449,7 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lscratch2/$LOGNAME"
     addifd "/lscratch3/$LOGNAME"
     addifd "/lscratch4/$LOGNAME"
-    addifd "/lustre/scratch4/$LOGNAME"  
+    addifd "/lustre/scratch4/$LOGNAME"
     addifd "/lustre/scratch5/$LOGNAME"
     addifd "/scratch1/users/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"

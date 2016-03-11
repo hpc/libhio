@@ -10,33 +10,33 @@ cmdw="
   /@@ Write N-1 test case @/  
   hi MY_CTX $HIO_TEST_ROOTS
   hdu NT1_DS 98 ALL 
-  hdo NT1_DS 98 WRITE,CREAT SHARED
+  hda NT1_DS 98 WRITE,CREAT SHARED hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nseg
     hsegr 0 $segsz 0
     lc $nblkpseg
-      hew 0 $blksz 
+      hew 0 $blksz
     le 
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 cmdr="
   name run03r v $verbose_lev d $debug_lev mi 32
   /@@ Read N-1 test case with data checking @/  
   hi MY_CTX $HIO_TEST_ROOTS 
-  hdo NT1_DS 98 READ SHARED
+  hda NT1_DS 98 READ SHARED hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nseg
     hsegr 0 $segsz 17
     lc $nblkpseg
-      her 0 $blksz 
+      her 0 $blksz
     le 
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 #set -x

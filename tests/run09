@@ -13,36 +13,36 @@ cmdw="
   /@@ Read and write N-N test case with read data value checking @/
   hi MYCTX $HIO_TEST_ROOTS
 
-  hdo NTNDS 98 WRITE,CREAT UNIQUE
+  hda NTNDS 98 WRITE,CREAT UNIQUE hdo
   hvsd datawarp_stage_mode immediate
   hvp c. .
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
-    hew 0 $blksz 
+    hew 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   s 1
 
-  hdo NTNDS 97 WRITE,CREAT UNIQUE
+  hda NTNDS 97 WRITE,CREAT UNIQUE hdo
   hvsd datawarp_stage_mode immediate
   hvp c. .
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
-    hew 0 $blksz 
+    hew 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   s 1
 
-  hdo NTNDS 96 WRITE,CREAT UNIQUE
+  hda NTNDS 96 WRITE,CREAT UNIQUE hdo
   hvsd datawarp_stage_mode immediate
   hvp c. .
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
-    hew 0 $blksz 
+    hew 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   hf mgf mf
 "
@@ -53,35 +53,35 @@ cmdr="
   hi MYCTX $HIO_TEST_ROOTS 
 
   hxdi 97
-  hvp c. .     
-  hdo NTNDS 97 READ UNIQUE
+  hvp c. .
+  hda NTNDS 97 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .     
   hck on
   lc $nblk
-    her 0 $blksz 
+    her 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   hxdi 98
-  hdo NTNDS ID_HIGHEST READ UNIQUE
+  hda NTNDS ID_HIGHEST READ UNIQUE
   heo MY_EL READ 20Mi
   hvp c. .     
   hck on
   lc $nblk
-    her 0 $blksz 
+    her 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   qof 2 hxdi 96
-  hdo NTNDS ID_NEWEST READ UNIQUE
+  hda NTNDS ID_NEWEST READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .     
   hck on
   lc $nblk
-    her 0 $blksz 
+    her 0 $blksz
   le 
-  hec hdc
+  hec hdc hdf
 
   hf mgf mf
 "

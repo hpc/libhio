@@ -153,12 +153,12 @@ for r in "${ranks[@]}"; do
           if [[ $p != " " ]]; then c="$c -p $p"; fi
           if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
           if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
-          if [[ $batch -eq 1 ]];    then c="$c -b"; fi 
-          if [[ $chain -eq 1 ]];    then c="$c -c"; fi 
-          if [[ $nodw -eq 1 ]];     then c="$c -z"; fi 
-          if [[ $after -eq 1 ]];    then c="$c -a"; fi 
-          if [[ -n $warpalloc ]];   then c="$c -w $warpalloc"; fi 
-          if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi 
+          if [[ $batch -eq 1 ]];    then c="$c -b"; fi
+          if [[ $chain -eq 1 ]];    then c="$c -c"; fi
+          if [[ $nodw -eq 1 ]];     then c="$c -z"; fi
+          if [[ $after -eq 1 ]];    then c="$c -a"; fi
+          if [[ -n $warpalloc ]];   then c="$c -w $warpalloc"; fi
+          if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi
           
           cmd $c
         done

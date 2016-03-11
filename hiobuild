@@ -127,9 +127,9 @@ fi
 
 cmd make
 if [[ ${OSTYPE:0:6} == "darwin" ]]; then
-  files="src/.libs/libhio.0.dylib"
+  files="src/.libs/libhio.1.dylib"
 else
-  files="src/.libs/libhio.so.0.0.0"
+  files="src/.libs/libhio.so.1.0.0"
 fi
 files="$files tests/.libs/error_test.x tests/.libs/test01.x tests/.libs/xexec.x"
 

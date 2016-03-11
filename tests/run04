@@ -13,47 +13,53 @@ cmd chmod 555 $ro_dir
 
 fails="
   name run04w v $verbose_lev d $debug_lev mi 0
-  /@@ Basic successful function @/
+  /@@ 1. Basic successful function @/
     hi MY_CTX $HIO_TEST_ROOTS
-    hdo NTN_DS 97 WRITE,CREAT UNIQUE
+    hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
     heo MY_EL WRITE,CREAT,TRUNC 20Mi
     hvp c. .
-    hec hdc hf
+    hec hdc hdf hf
 
-  /@@ HDO without prior init @/
+  /@@ 2. HDA and HDO without prior init @/
+    hxrc ERR_BAD_PARAM
+    hda NT1_DS 98 WRITE,CREAT SHARED
     hxrc ERR_BAD_PARAM 
-    hdo NT1_DS 98 WRITE,CREAT SHARED
+    hdo
 
-  /@@ HI, HDO CREAT in non-writable data root directory @/
+  /@@ 3. HI, HDA CREAT HDO in non-writable data root directory @/
     hi MY_CTX posix:$ro_dir 
     hvp c. .
+    hda NTN_DS 97 WRITE,CREAT UNIQUE
     hxrc ERR_PERM 
-    hdo NTN_DS 97 WRITE,CREAT UNIQUE
+    hdo hdf
     hf
 
-  /@@ HI, HDO READ in non-existent data root directory @/
+  /@@ 4. HI, HDO READ in non-existent data root directory @/
     hi MY_CTX posix:/does_not_exist 
     hvp c. .
     hxrc ERR_NOT_FOUND
-    hdo NTN_DS 97 READ UNIQUE
+    hda NTN_DS 97 READ UNIQUE
+    hdo
     hf
 
-  /@@ HI, HDO invalid data root prefix @/
+  /@@ 5. HI, HDO invalid data root prefix @/
     hi MY_CTX WIERD:$PWD 
     hvp c. .
     hxrc ERR_NOT_FOUND 
-    hdo NTN_DS 97 WRITE,CREAT UNIQUE
+    hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
     hf
 
-  /@@ HEO without HDO @/
+  /@@ 6. HEO without HDO @/
     hxrc ERR_BAD_PARAM 
     heo MY_EL WRITE,CREAT,TRUNC 20Mi
 
-  /@@ HI, HDO READ non-existent DS ID  @/
+  /@@ 7. HI, HDA READ HDO non-existent DS ID  @/
     hi MY_CTX $HIO_TEST_ROOTS
     hvp c. .
     hxrc ERR_NOT_FOUND 
-    hdo NTN_DS 29 READ UNIQUE
+    hda NTN_DS 29 READ UNIQUE
+    hxrc ERR_NOT_FOUND
+    hdo
     hf
 
   mgf mf

@@ -88,7 +88,7 @@ build_r() {
     dest_scp=$dest
     gw_rsync=""
     dest_rsync=$dest
-  else 
+  else
     dest_ssh="-t $gateway ssh $dest"
     dest_scp="$gateway:$dest"
     gw_rsync="--rsync-path=\"ssh $dest /usr/bin/rsync\""
@@ -109,7 +109,7 @@ build_r() {
 
     files=`tar -tvf $tarname.tar.gz | awk "$awkpgm"`
     cmd "rsync -RlptgPv $gw_rsync $files $dest_rsync:$dir/$tarname";
-    cmd "ssh $dest_ssh \"cd $dir/$tarname; ./hiobuild $options\"" 
+    cmd "ssh $dest_ssh \"cd $dir/$tarname; ./hiobuild $options\""
   else
     options="-c $options"
     if [[ $gotdist -eq 0 ]]; then
@@ -119,7 +119,7 @@ build_r() {
     cmd "ssh $dest_ssh \"mkdir -p $dir; rm -fR $dir/*\""
     cmd "ssh $dest_ssh \"ls -altr $dir\""
     cmd "scp $tarname.tar.gz \"$dest_scp:$dir\""
-    cmd "ssh $dest_ssh \"cd $dir; tar -xf $tarname.tar.gz; cd $dir/$tarname; ./hiobuild $options\"" 
+    cmd "ssh $dest_ssh \"cd $dir; tar -xf $tarname.tar.gz; cd $dir/$tarname; ./hiobuild $options\""
   fi
 }
 
@@ -192,8 +192,8 @@ for v in $vers; do
     ct-pgi   ) build_r none    ct-fe1     "$rmt_dir/$v" $tarname -n $v                             ;;
 
     ga-gnu   ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    ga-cray  ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-cray ;;                           
-    ga-intel ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v                              ;; 
+    ga-cray  ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-cray ;;
+    ga-intel ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v                              ;;
     ga-pgi   ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
     tt-gnu   ) build_r none    tt-fey     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-gnu  ;;

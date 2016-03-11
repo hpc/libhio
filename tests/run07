@@ -16,29 +16,29 @@ cmdw="
   name run07w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write N-N test case with read data value checking @/
   hi MYCTX $HIO_TEST_ROOTS
-  hdo NTNDS 97 WRITE,CREAT UNIQUE
+  hda NTNDS 97 WRITE,CREAT UNIQUE hdo
   hvsd datawarp_stage_mode immediate
   hvp c. .
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
-    hew 0 $blksz 
+    hew 0 $blksz
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 cmdr="
   name run07r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N test case with read data value checking @/
   hi MYCTX $HIO_TEST_ROOTS 
-  hvp c. .     
-  hdo NTNDS 97 READ UNIQUE
+  hvp c. .
+  hda NTNDS 97 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .     
   hck on
   lc $nblk
-    her 0 $blksz 
+    her 0 $blksz
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 clean_roots $HIO_TEST_ROOTS
