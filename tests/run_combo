@@ -6,8 +6,8 @@ synexit() {
   if [[ -n $* ]]; then echo $*; echo ""; fi
   echo "run_combo - run tests with multiple parameter combinations"
   echo ""
-  echo "Iterates through all combinations of specified tests and paramters"
-  echo ""
+  echo "Iterates through all combinations of specified tests and parameters"
+  echo "(-t, -s, -r, -n, -p are iterated, other options are not.)"
   echo "  Syntax:"
   echo "    $0"
   echo "        [-t <test> [<test>...] ]"
@@ -18,6 +18,7 @@ synexit() {
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
   echo "        [-b] [-c] [-a]"
+  echo "        [-w <dw_alloc>]"
   echo "        [-m <msub args>]"
   echo ""
   echo "  Options:"   
@@ -30,6 +31,7 @@ synexit() {
   echo "    -b              Submit batch job with these options"
   echo "    -c              Chain jobs - make this job dependant on previous job"
   echo "    -a              Clean dirs After running" 
+  echo "    -w <dw_alloc>   DataWarp allocation policy 0=never, 1=static, 2=Moab"
   echo "    -m              Additional arguments for msub (use with -b)"
   echo ""
   echo "Example: run_combo -t ./run02 ./run03 -r 2 4 -s x"
@@ -68,8 +70,9 @@ is_not_flag() {
 host=`hostname -s`
 batch=0
 chain=0
+nodw=0
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpv:d:bcam:" optname; do
+while getopts "htsrnpv:d:bcaw:m:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -113,6 +116,7 @@ while getopts "htsrnpv:d:bcam:" optname; do
     b ) batch=1;;
     c ) chain=1;;
     a ) after=1;;
+    w ) warpalloc=$OPTARG;;
     m ) msub_arg=$OPTARG;;
    \? ) synexit "Error: invalid option";;
   esac
@@ -148,11 +152,13 @@ for r in "${ranks[@]}"; do
           if [[ $n != " " ]]; then c="$c -n $n"; fi
           if [[ $p != " " ]]; then c="$c -p $p"; fi
           if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
-          if [[ -n $debug_lev ]]; then c="$c -d $debug_lev"; fi
-          if [[ $batch -eq 1 ]]; then c="$c -b"; fi 
-          if [[ $chain -eq 1 ]]; then c="$c -c"; fi 
-          if [[ $after -eq 1 ]]; then c="$c -a"; fi 
-          if [[ -n $msub_arg ]]; then c="$c -m \"$msub_arg\""; fi 
+          if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
+          if [[ $batch -eq 1 ]];    then c="$c -b"; fi 
+          if [[ $chain -eq 1 ]];    then c="$c -c"; fi 
+          if [[ $nodw -eq 1 ]];     then c="$c -z"; fi 
+          if [[ $after -eq 1 ]];    then c="$c -a"; fi 
+          if [[ -n $warpalloc ]];   then c="$c -w $warpalloc"; fi 
+          if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi 
           
           cmd $c
         done

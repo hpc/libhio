@@ -143,7 +143,8 @@ char * help =
   #endif // DLFCN
   #ifdef HIO
   "  hi  <name> <data_root>  Init hio context\n"
-  "  hdo <name> <id> <flags> <mode> Dataset open\n"
+  "  hda <name> <id> <flags> <mode> Dataset allocate\n"
+  "  hdo           Dataset open\n"
   "  heo <name> <flags> Element open\n"
   "  hso <offset> Set element offset.  Also set to 0 by heo, incremented by hew, her\n"
   "  hew <offset> <size> Element write, offset relative to current element offset\n"
@@ -156,6 +157,7 @@ char * help =
   "                addressing. Start is relative to end of previous segment\n"
   "  hec <name>    Element close\n"
   "  hdc           Dataset close\n"
+  "  hdf           Dataset free\n"
   "  hdu <name> <id> CURRENT|FIRST|ALL  Dataset unlink\n"
   "  hf            Fini\n"
   "  hck <ON|OFF>  Enable read data checking [2]\n"
@@ -180,6 +182,7 @@ char * help =
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
   "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines [1]\n"
+  "                <file> = \"@ENV\" searches environment\n"
   "\n"
   "Notes:\n"
   " Numbers can be specified with suffixes %s\n"
@@ -1145,7 +1148,7 @@ int rx_run(int n, struct action * actionp, char * line) {
 }
 
 //----------------------------------------------------------------------------
-// hi, hdo, heo, hew, her, hec, hdc, hf (HIO) action handlers
+// hi, hda, hdo, heo, hew, her, hec, hdc, hdf, hf (HIO) action handlers
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
 // Enum conversion tables
@@ -1287,8 +1290,8 @@ ACTION_RUN(hi_run) {
   } 
 }
 
-ACTION_RUN(hdo_run) {
-  hio_return_t hrc;
+ACTION_RUN(hda_run) {
+  hio_return_t hrc = 0;
   hio_dataset_name = V0.s;
   hio_ds_id_req = V1.u;
   hio_dataset_flags = V2.i;
@@ -1296,9 +1299,17 @@ ACTION_RUN(hdo_run) {
   rw_count[0] = rw_count[1] = 0;
   MPI_CK(MPI_Barrier(mpi_comm));
   ETIMER_START(&hio_tmr);
-  DBG2("hdo hio_ds_id_req: %ld", hio_ds_id_req);
+  DBG2("hda_run: dataset: %p", dataset);
+  DBG2("Calling hio_datset_alloc(context, &dataset, %s, %lld, %d(%s), %d(%s))", hio_dataset_name, hio_ds_id_req, 
+        hio_dataset_flags, V2.s, hio_dataset_mode, V3.s);
   hrc = hio_dataset_alloc (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
+  DBG2("hda_run: dataset: %p", dataset);
   HRC_TEST(hio_dataset_alloc);
+}
+
+ACTION_RUN(hdo_run) {
+  hio_return_t hrc;
+  DBG2("calling hio_dataset_open(%p)", dataset);
   hrc = hio_dataset_open (dataset);
   HRC_TEST(hio_dataset_open);
   if (HIO_SUCCESS == hrc) {
@@ -1465,7 +1476,6 @@ ACTION_RUN(hdc_run) {
   MPI_CK(MPI_Barrier(mpi_comm));
   double time = ETIMER_ELAPSED(&hio_tmr);
   HRC_TEST(hio_dataset_close)
-  hio_dataset_free(&dataset);
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   if (myrank == 0) {
@@ -1475,6 +1485,15 @@ ACTION_RUN(hdc_run) {
     printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / time / GIGBIN ); 
     printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / time / GIGBIN ); 
   }
+}
+
+ACTION_RUN(hdf_run) {
+  hio_return_t hrc;
+  DBG3("Calling hio_dataset_free(%p); dataset: %p", &dataset, dataset);
+  hrc = hio_dataset_free(&dataset);
+  DBG3("After hio_dataset_free(); dataset: %p", dataset);
+  IFDBG3( hex_dump(&dataset, sizeof(dataset)) );
+  HRC_TEST(hio_dataset_close)
 }
 
 ACTION_RUN(hdu_run) {
@@ -1494,7 +1513,7 @@ ACTION_RUN(hf_run) {
 
 ACTION_RUN(hxrc_run) {
   hio_rc_exp = V0.i;
-  VERB1("%s; HIO expected rc now %s(%d)", A.desc, V0.s, V0.i);
+  VERB3("%s; HIO expected rc now %s(%d)", A.desc, V0.s, V0.i);
 }
 
 ACTION_CHECK(hxct_check) {
@@ -1505,13 +1524,13 @@ ACTION_CHECK(hxct_check) {
 
 ACTION_RUN(hxct_run) {
   hio_cnt_exp = V0.u;
-  VERB1("%s; HIO expected count now %lld", A.desc, V0.u);
+  VERB3("%s; HIO expected count now %lld", A.desc, V0.u);
 }
 
 ACTION_RUN(hxdi_run) {
   hio_dsid_exp = V0.u;
   hio_dsid_exp_set = 1;
-  VERB1("%s; HIO expected dataset id now %lld", A.desc, hio_dsid_exp);
+  VERB3("%s; HIO expected dataset id now %lld", A.desc, hio_dsid_exp);
 }
 
 //----------------------------------------------------------------------------
@@ -1698,18 +1717,30 @@ ACTION_CHECK(grep_check) {
   rx_comp(0, actionp);
 }
 
+extern char * * environ;
+
 ACTION_RUN(grep_run) {
-  char line[512];
-  FILE * f = fopen(V1.s, "r");
-  if (!f) ERRX("%s: error opening \"%s\" %s", A.desc, V1.s, strerror(errno));
-  while (fgets(line, sizeof(line), f)) {
-    if (!rx_run(0, actionp, line)) {
-      char * last = line + strlen(line) - 1;
-      if ('\n' == *last) *last = '\0';
-      VERB1("grep: %s", line);
-    } 
-  }
-  fclose(f);
+  char * fname = V1.s;
+
+  if (0 == strcmp(fname, "@ENV")) {
+    for (char ** eptr = environ; *eptr; eptr++) {
+      if (!rx_run(0, actionp, *eptr)) {
+        VERB1("grep: %s", *eptr);
+      } 
+    }
+  } else {   
+    char line[512];
+    FILE * f = fopen(fname, "r");
+    if (!f) ERRX("%s: error opening \"%s\" %s", A.desc, fname, strerror(errno));
+    while (fgets(line, sizeof(line), f)) {
+      if (!rx_run(0, actionp, line)) {
+        char * last = line + strlen(line) - 1;
+        if ('\n' == *last) *last = '\0';
+        VERB1("grep: %s", line);
+      } 
+    }
+    fclose(f);
+  }     
 }
 
 //----------------------------------------------------------------------------
@@ -1770,7 +1801,8 @@ struct parse {
   #endif
   #ifdef HIO
   {"hi",    {STR,  STR,  NONE, NONE, NONE}, NULL,          hi_run      },
-  {"hdo",   {STR,  HDSI, HFLG, HDSM, NONE}, NULL,          hdo_run     },
+  {"hda",   {STR,  HDSI, HFLG, HDSM, NONE}, NULL,          hda_run     },
+  {"hdo",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdo_run     },
   {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
   {"heo",   {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
   {"hso",   {UINT, NONE, NONE, NONE, NONE}, NULL,          hso_run      },
@@ -1782,6 +1814,7 @@ struct parse {
   {"herr",  {SINT, UINT, UINT, UINT, NONE}, her_check,     herr_run    },
   {"hec",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
   {"hdc",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
+  {"hdf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdf_run     },
   {"hdu",   {STR,  UINT, HULM, NONE, NONE}, NULL,          hdu_run     },
   {"hf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
   {"hxrc",  {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },

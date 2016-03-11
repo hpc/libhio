@@ -23,54 +23,54 @@ cmdwc="
   /@@ Write cache @/
   name run10wc v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$cache 
-  hdo NTN_DS 97 WRITE,CREAT UNIQUE
+  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
     hew -$blk $blk 
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 cmdrc="
   /@@ Read cache @/
   name run102rc v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$cache 
-  hdo NTN_DS 97 READ UNIQUE
+  hda NTN_DS 97 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
     her -$blk $blk 
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 cmdwp="
   /@@ Write backing FS @/
   name run10wp v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$pfs 
-  hdo NTN_DS 97 WRITE,CREAT UNIQUE
+  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
     hew -$blk $blk 
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 cmdrp="
   /@@ Read backing FS @/
   name run102rp v $verbose_lev d $debug_lev mi 0
   hi MY_CTX posix:$pfs 
-  hdo NTN_DS 97 READ UNIQUE
+  hda NTN_DS 97 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
     her -$blk $blk 
   le 
-  hec hdc hf mgf mf
+  hec hdc hdf hf mgf mf
 "
 
 #clean_roots $HIO_TEST_ROOTS

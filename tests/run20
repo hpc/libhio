@@ -2,50 +2,40 @@
 . ./run_setup
 
 # Read and write N-N test case with read data value checking.  
+# Check for correct DS ID for ID_HIGHEST and ID_NEWEST
 
-case $size in
-  t ) blk=1024;                nblk=5;;
-  s ) blk=20480;               nblk=8;;   
-  m ) blk=$((1 * $cons_mi));  nblk=200;;
-  l ) blk=$((2 * $cons_mi));  nblk=512;;
-  x ) blk=$((4 * $cons_mi));  nblk=1024;;
-  y ) blk=$((4 * $cons_mi));  nblk=1536;;
-  z ) blk=$((4 * $cons_mi));  nblk=2048;;
-  * ) synexit "Error: invalid size $size";;
-esac
-
-batch_sub $(( 2 * $blk * $nblk * $ranks ))
-
-msg "blk: $blk  nblk: $nblk  dw_cap: $dw_cap" 
+batch_sub $(( 3 * $ranks * $blksz * $nblk ))
 
 cmdw="
   name run20w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write N-N multi DS test case @/
   hi MY_CTX $HIO_TEST_ROOTS 
 
-  hdo NTN_DS 97 WRITE,CREAT UNIQUE
+  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
-    hew 0 $blk 
+    hew 0 $blksz 
   le 
-  hec hdc
+  hec hdc hdf
 
-  hdo NTN_DS 98 WRITE,CREAT UNIQUE
+  s 1
+  hda NTN_DS 98 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
-    hew 0 $blk 
+    hew 0 $blksz 
   le 
-  hec hdc
+  hec hdc hdf
 
-  hdo NTN_DS 99 WRITE,CREAT UNIQUE
+  s 1
+  hda NTN_DS 99 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
-    hew 0 $blk 
+    hew 0 $blksz 
   le 
-  hec hdc
+  hec hdc hdf
 
   hf mgf mf
 "
@@ -56,34 +46,34 @@ cmdr="
   hi MY_CTX $HIO_TEST_ROOTS 
 
   hxdi 99
-  hdo NTN_DS 99 READ UNIQUE
+  hda NTN_DS 99 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
-    her 0 $blk 
+    her 0 $blksz 
   le 
-  hec hdc
+  hec hdc hdf
 
   hxdi 99
-  hdo NTN_DS ID_NEWEST READ UNIQUE
+  hda NTN_DS ID_NEWEST READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
-    her 0 $blk 
+    her 0 $blksz 
   le 
-  hec hdc
+  hec hdc hdf
 
   hxdi 99
-  hdo NTN_DS ID_HIGHEST READ UNIQUE
+  hda NTN_DS ID_HIGHEST READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
-    her 0 $blk 
+    her 0 $blksz 
   le 
-  hec hdc
+  hec hdc hdf
 
   hf mgf mf
 "
