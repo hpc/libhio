@@ -70,7 +70,7 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset);
 static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hio_dataset_t dataset) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_posix_module_t *posix_module = &datawarp_module->posix_module;
-  builtin_datawarp_module_dataset_t *datawarp_dataset;
+  builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) dataset;
   hio_context_t context = module->context;
   builtin_posix_module_dataset_t *posix_dataset;
   int rc = HIO_SUCCESS;
