@@ -208,6 +208,8 @@ typedef int (*hio_element_complete_fn_t) (hio_element_t element);
  */
 typedef int (*hio_element_close_fn_t) (hio_element_t element);
 
+typedef void (*hio_object_release_fn_t) (hio_object_t object);
+
 struct hio_config_t;
 
 /**
@@ -234,6 +236,12 @@ struct hio_object {
 
   /** parent object */
   hio_object_t      parent;
+
+  /** object thread protection */
+  pthread_mutex_t   lock;
+
+  /** object release function */
+  hio_object_release_fn_t release_fn;
 };
 
 struct hio_context {
@@ -252,8 +260,6 @@ struct hio_context {
 
   /** unreported errors on this context */
   void             *c_estack;
-  /** threading lock */
-  pthread_mutex_t   c_lock;
   /** comma-separated list of data roots available */
   char             *c_droots;
   /** print statistics on close */
@@ -472,10 +478,19 @@ struct hio_element {
   /** element file handle (not used by all backends) */
   FILE             *e_fh;
 
+  /** function to write strided data */
   hio_element_write_strided_nb_fn_t e_write_strided_nb;
+
+  /** function to read strided data */
   hio_element_read_strided_nb_fn_t e_read_strided_nb;
+
+  /** function to flush pending element writes */
   hio_element_flush_fn_t e_flush;
+
+  /** function to complete pending element reads */
   hio_element_complete_fn_t e_complete;
+
+  /** function to close the element */
   hio_element_close_fn_t e_close;
 };
 
@@ -520,6 +535,20 @@ hio_context_t hioi_object_context (hio_object_t object);
  */
 #define hioi_element_dataset(e) (hio_dataset_t) (e)->e_object.parent
 
+
+static inline void hioi_object_lock (hio_object_t object) {
+  pthread_mutex_lock (&object->lock);
+}
+
+static inline void hioi_object_unlock (hio_object_t object) {
+  pthread_mutex_unlock (&object->lock);
+}
+
+hio_object_t hioi_object_alloc (const char *name, hio_object_type_t type, hio_object_t parent,
+                                size_t object_size, hio_object_release_fn_t);
+
+void hioi_object_release (hio_object_t object);
+
 /**
  * Allocate a new dataset object and populate it with common data (internal)
  *
@@ -559,11 +588,6 @@ int hioi_dataset_scatter (hio_dataset_t dataset, int rc);
 int hioi_dataset_gather (hio_dataset_t dataset);
 
 /**
- * Release a dataset object (internal)
- */
-void hioi_dataset_release (hio_dataset_t *set);
-
-/**
  * Add an element to a dataset
  *
  * @param[in] dataset   dataset to modify
@@ -599,14 +623,6 @@ hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *da
  * @param[in] name      element identifier
  */
 hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name);
-
-
-/**
- * Release an hio element
- *
- * @param[in] element  element to release
- */
-void hioi_element_release (hio_element_t element);
 
 hio_request_t hioi_request_alloc (hio_context_t context);
 

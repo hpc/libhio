@@ -39,7 +39,8 @@ hio_return_t hio_dataset_free (hio_dataset_t *dataset) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  hioi_dataset_release (dataset);
+  hioi_object_release (&(*dataset)->ds_object);
+  *dataset = HIO_OBJECT_NULL;
 
   return HIO_SUCCESS;
 }

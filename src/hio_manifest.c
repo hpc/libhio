@@ -368,7 +368,7 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset,  json_object 
   rc = hioi_manifest_get_number (element_object, HIO_MANIFEST_PROP_SIZE, &value);
 
   if (HIO_SUCCESS != rc) {
-    hioi_element_release (element);
+    hioi_object_release (&element->e_object);
     return HIO_ERR_BAD_PARAM;
   }
 
@@ -381,7 +381,7 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset,  json_object 
     if (HIO_SUCCESS != rc) {
       element->e_bfile = strdup ((char *) tmp_string);
       if (NULL == element->e_bfile) {
-        hioi_element_release (element);
+        hioi_object_release (&element->e_object);
         return  HIO_ERR_OUT_OF_RESOURCE;
       }
     }
@@ -392,7 +392,7 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset,  json_object 
   if (NULL != segments_object) {
     rc = hioi_manifest_parse_segments_2_0 (element, segments_object);
     if (HIO_SUCCESS != rc) {
-      hioi_element_release (element);
+      hioi_object_release (&element->e_object);
       return rc;
     }
   }

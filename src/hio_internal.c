@@ -109,11 +109,11 @@ void hio_err_push (int hrc, hio_context_t context, hio_object_t object, char *fo
     hio_error_stack_head = new_item;
     pthread_mutex_unlock (&hio_error_stack_mutex);
   } else {
-    pthread_mutex_lock (&context->c_lock);
+    hioi_object_lock (&context->c_object);
     new_item->next = (hio_error_stack_item_t *) context->c_estack;
     context->c_estack = (void *) new_item;
-    pthread_mutex_unlock (&context->c_lock);
-  }
+    hioi_object_unlock (&context->c_object);
+   }
 }
 
 #if HIO_USE_MPI
@@ -170,10 +170,10 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
     hio_error_stack_head = new_item;
     pthread_mutex_unlock (&hio_error_stack_mutex);
   } else {
-    pthread_mutex_lock (&context->c_lock);
+    hioi_object_lock (&context->c_object);
     new_item->next = (hio_error_stack_item_t *) context->c_estack;
     context->c_estack = (void *) new_item;
-    pthread_mutex_unlock (&context->c_lock);
+    hioi_object_unlock (&context->c_object);
   }
 }
 
@@ -199,12 +199,12 @@ int hio_err_get_last (hio_context_t context, char **error) {
     }
     pthread_mutex_unlock (&hio_error_stack_mutex);
   } else {
-    pthread_mutex_lock (&context->c_lock);
+    hioi_object_lock (&context->c_object);
     stack_error = (hio_error_stack_item_t *) context->c_estack;
     if (NULL != stack_error) {
       context->c_estack = (void *) stack_error->next;
     }
-    pthread_mutex_unlock (&context->c_lock);
+    hioi_object_unlock (&context->c_object);
   }
 
   if (NULL == stack_error) {
@@ -342,6 +342,51 @@ int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode) {
   rc = mkdir (tmp, access_mode);
   free (tmp);
   return (rc && errno != EEXIST) ? HIO_ERROR : HIO_SUCCESS;
+}
+
+hio_object_t hioi_object_alloc (const char *name, hio_object_type_t type, hio_object_t parent,
+                                size_t object_size, hio_object_release_fn_t release_fn) {
+  hio_object_t new_object;
+  int rc;
+
+  new_object = calloc (1, object_size);
+  if (NULL == new_object) {
+    return NULL;
+  }
+
+  new_object->identifier = strdup (name);
+  if (NULL == new_object->identifier) {
+    free (new_object);
+    return NULL;
+  }
+
+  rc = hioi_var_init (new_object);
+  if (HIO_SUCCESS != rc) {
+    free (new_object->identifier);
+    free (new_object);
+
+    return NULL;
+  }
+
+  new_object->type = type;
+  new_object->parent = parent;
+  new_object->release_fn = release_fn;
+  pthread_mutex_init (&new_object->lock, NULL);
+
+  return new_object;
+}
+
+void hioi_object_release (hio_object_t object) {
+  if (HIO_OBJECT_NULL == object) {
+    return;
+  }
+
+  if (NULL != object->release_fn) {
+    object->release_fn (object);
+  }
+
+  free (object->identifier);
+  free (object);
 }
 
 hio_context_t hioi_object_context (hio_object_t object) {
