@@ -22,7 +22,7 @@
 #----------------------------------------------------------------------------
 synexit() {
   echo ""
-  if [[ -n $* ]]; then echo $*; echo ""; fi
+  if [[ -n $* ]]; then echo "Error: $*"; echo ""; fi
   echo "run_setup - common setup for hio tests"
   echo ""
   echo "  Syntax:"
@@ -73,7 +73,12 @@ cmd() {
 msglog=""
 msg() { 
   echo "$host $*" 
-  if [[ -n $msglog ]]; then echo $host $* >> $msglog; fi
+  if [[ -n $msglog ]]; then echo "$host $*" >> $msglog; fi
+}
+
+errx() {
+  msg "Error: $*; Exitting"
+  exit 12
 }
 
 cvt() {
@@ -207,23 +212,22 @@ clean_roots() {
       if [[ -n $DW_JOB_STRIPED    ]]; then clean=$DW_JOB_STRIPED; fi
       if [[ -n $HIO_datawarp_root ]]; then clean=$HIO_datawarp_root; fi
       if [[ -n $clean ]]; then
-        echo "Cleaning: \"$r\""
-        echo "===> aprun bash -c \$clean_cmd $clean"
+        msg "Cleaning: \"$r\""
+        msg "===> aprun bash -c \$clean_cmd $clean"
         aprun -n 1 -b bash -c "$clean_cmd" $clean
       fi
     elif [[ ${r:0:6} == "posix:" ]]; then
-      echo "Cleaning: \"$r\""
+      msg "Cleaning: \"$r\""
       r=${r:6}
       # r=${r%"/"}
       # last=${r##*/}
       if [[ $r == ${r/test} ]]; then
-        echo "Warning: skipping clean of non-test directory \"$r\""
+        msg "Warning: skipping clean of non-test directory \"$r\""
       else
         bash -c "$clean_cmd" $r
       fi
-    else 
-      echo "Error: data root \"$r\" type not recognized."
-      exit
+    else
+      errx "data root \"$r\" type not recognized."
     fi 
     shopt -u nocasematch
   done
@@ -315,11 +319,11 @@ while getopts "hs:r:n:p:v:d:bcw:am:" optname; do
     w ) warpalloc=$OPTARG;;
     a ) after=1;;
     m ) msub_arg=$OPTARG;;
-   \? ) synexit "Error: invalid option";;
+   \? ) synexit "invalid option";;
   esac
 done
 shift $((OPTIND - 1 ))
-if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
+if [[ -n $1 ]]; then synexit "extra parameters"; fi
 
 # Figure out nodes, ranks and ppn
 until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
@@ -358,10 +362,7 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
 done  
 
 
-if [[ $ranks -ne $(($nodes * $ppn)) ]]; then
-  msg "ranks ($ranks) != nodes ($nodes) x ppn ($ppn)"
-  exit
-fi
+if [[ $ranks -ne $(($nodes * $ppn)) ]]; then errx "ranks ($ranks) != nodes ($nodes) x ppn ($ppn)"; fi
 
 # set some convenient constants
 cons_ki=1024
@@ -395,7 +396,7 @@ else
     x ) blksz=$((  4 * $cons_mi)); totsz=$((   4 * $cons_gi)); nseg=24;;
     y ) blksz=$((  4 * $cons_mi)); totsz=$((   6 * $cons_gi)); nseg=28;;
     z ) blksz=$((  4 * $cons_mi)); totsz=$((   8 * $cons_gi)); nseg=32;;
-    * ) synexit "Error: invalid size $size";;
+    * ) synexit "invalid size $size";;
   esac
 fi
 nblk=$(($totsz / $blksz))
@@ -407,7 +408,7 @@ case $warpalloc in
   0 ) ;;
   1 ) ;;
   2 ) ;;
-  * ) synexit "Error: invalid -w option $warpalloc";;
+  * ) synexit "invalid -w option $warpalloc";;
 esac
 
 
@@ -419,7 +420,7 @@ if [[ $batch -eq 0 ]]; then
 
   if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
   elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
-  else echo "run_setup: OSTYPE \"$OSTYPE\" not recognized"; exit; fi
+  else errx "run_setup: OSTYPE \"$OSTYPE\" not recognized"; fi
 
   # Load module environment recorded at build
   mod_script="hiobuild.modules.bash"
@@ -436,11 +437,20 @@ if [[ $batch -eq 0 ]]; then
       if [[ -z $HIO_datawarp_root ]]; then
         if [[ $hostpre == "tt-" ]]; then
           # Late DW Ph 1 - location of manually allocated BB directory
-          export HIO_datawarp_root="/tmp/dw_scr/$LOGNAME$job_dir"
+          export HIO_datawarp_root="/tmp/dw_scr"
         else
           synexit "warpalloc=1 and HIO_datawarp_root not set"
         fi  
       fi
+      # HIO_datawarp_root set, add LOGNAME and job_dir if needed
+      set -x
+      if [[ ${HIO_datawarp_root/$LOGNAME} == $HIO_datawarp_root ]]; then
+        HIO_datawarp_root="$HIO_datawarp_root/$LOGNAME" 
+      fi
+      if [[ -n $job_dir && ${HIO_datawarp_root/$job_dir} == $HIO_datawarp_root ]]; then
+        HIO_datawarp_root="$HIO_datawarp_root$job_dir" 
+      fi
+      set +x
     fi
 
     if [[ $warpalloc -eq 1 || $warpalloc -eq 2 ]]; then HIO_TEST_ROOTS="DataWarp"; fi
@@ -451,7 +461,7 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lscratch4/$LOGNAME"
     addifd "/lustre/scratch4/$LOGNAME"  
     addifd "/lustre/scratch5/$LOGNAME"
-    addifd "/scratch1/users/$LOGNAME"
+    addifd "/scratch1/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"
     addifd "$HOME/scratch-tmp"
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
