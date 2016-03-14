@@ -23,76 +23,12 @@
 #include <sys/param.h>
 #include <assert.h>
 
-static hio_context_t hio_context_alloc (const char *identifier) {
-  hio_context_t new_context;
-  int rc;
-
-  new_context = (hio_context_t) calloc (1, sizeof (*new_context));
-  if (NULL == new_context) {
-    return NULL;
-  }
-
-  new_context->c_object.identifier = strdup (identifier);
-  if (NULL == new_context->c_object.identifier) {
-    free (new_context);
-    return NULL;
-  }
-
-  rc = hioi_var_init (&new_context->c_object);
-  if (HIO_SUCCESS != rc) {
-    free (new_context->c_object.identifier);
-    free (new_context);
-
-    return NULL;
-  }
-
-  new_context->c_object.type = HIO_OBJECT_TYPE_CONTEXT;
-
-  /* default context configuration */
-  new_context->c_verbose          = HIO_VERBOSE_ERROR;
-  new_context->c_print_stats = false;
-  new_context->c_rank = 0;
-  new_context->c_size = 1;
-
-  hioi_config_list_init (&new_context->c_fconfig);
-
-  pthread_mutex_init (&new_context->c_lock, NULL);
-
-  // If env set, pick up verbose value from context or global env name
-  char buf[256];
-  snprintf (buf, sizeof(buf), "HIO_context_%s_verbose", new_context->c_object.identifier);
-  char *env_name = buf;
-  char *verbose_env = getenv (env_name);
-  if (!verbose_env) {
-    env_name = "HIO_verbose";
-    verbose_env = getenv (env_name);
-  }
-
-  if (verbose_env) {
-    char * endptr; 
-    int verbose_val = strtol (verbose_env, &endptr, 0);
-    if (*endptr) {
-      hioi_log (new_context, HIO_VERBOSE_ERROR, "Environment variable %s value \"%s\" not valid",
-                env_name, verbose_env);
-    } else {
-      new_context->c_verbose = verbose_val;
-    }
-  }
-
-  hioi_list_init (new_context->c_ds_data);
-
-  return new_context;
-}
-
 /**
  * Release all resources associated with a context
  */
-static void hio_context_release (hio_context_t *contextp) {
+static void hioi_context_release (hio_object_t object) {
   hio_dataset_data_t *ds_data, *next;
-  hio_context_t context = *contextp;
-
-  /* clean up the context mutex */
-  pthread_mutex_destroy (&context->c_lock);
+  hio_context_t context = (hio_context_t) object;
 
   for (int i = 0 ; i < context->c_mcount ; ++i) {
     context->c_modules[i]->fini (context->c_modules[i]);
@@ -113,22 +49,13 @@ static void hio_context_release (hio_context_t *contextp) {
 #endif
 
 #if HIO_USE_DATAWARP
-  if (context->c_dw_root) {
-    free (context->c_dw_root);
-    context->c_dw_root = NULL;
-  }
+  free (context->c_dw_root);
 #endif
 
   /* finalize object variables */
   hioi_var_fini (&context->c_object);
 
-  if (context->c_object.identifier) {
-    free (context->c_object.identifier);
-  }
-
-  if (context->c_droots) {
-    free (context->c_droots);
-  }
+  free (context->c_droots);
 
   /* clean up dataset data structures */
   hioi_list_foreach_safe(ds_data, next, context->c_ds_data, hio_dataset_data_t, dd_list) {
@@ -146,9 +73,50 @@ static void hio_context_release (hio_context_t *contextp) {
     free ((void *) ds_data->dd_name);
     free (ds_data);
   }
+}
 
-  free (context);
-  *contextp = HIO_OBJECT_NULL;
+static hio_context_t hio_context_alloc (const char *identifier) {
+  hio_context_t new_context;
+
+  new_context = (hio_context_t) hioi_object_alloc (identifier, HIO_OBJECT_TYPE_CONTEXT,
+                                                   NULL, sizeof (*new_context),
+                                                   hioi_context_release);
+  if (NULL == new_context) {
+    return NULL;
+  }
+
+  /* default context configuration */
+  new_context->c_verbose = HIO_VERBOSE_ERROR;
+  new_context->c_print_stats = false;
+  new_context->c_rank = 0;
+  new_context->c_size = 1;
+
+  hioi_config_list_init (&new_context->c_fconfig);
+
+  // If env set, pick up verbose value from context or global env name
+  char buf[256];
+  snprintf (buf, sizeof(buf), "HIO_context_%s_verbose", new_context->c_object.identifier);
+  char *env_name = buf;
+  char *verbose_env = getenv (env_name);
+  if (!verbose_env) {
+    env_name = "HIO_verbose";
+    verbose_env = getenv (env_name);
+  }
+
+  if (verbose_env) {
+    char * endptr;
+    int verbose_val = strtol (verbose_env, &endptr, 0);
+    if (*endptr) {
+      hioi_log (new_context, HIO_VERBOSE_ERROR, "Environment variable %s value \"%s\" not valid",
+                env_name, verbose_env);
+    } else {
+      new_context->c_verbose = verbose_val;
+    }
+  }
+
+  hioi_list_init (new_context->c_ds_data);
+
+  return new_context;
 }
 
 static int hioi_context_scatter (hio_context_t context) {
@@ -238,8 +206,6 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
                             const char *context_name) {
   int rc;
 
-  pthread_mutex_init (&context->c_lock, NULL);
-
   rc = hioi_component_init (context);
   if (HIO_SUCCESS != rc) {
     hio_err_push (rc, NULL, NULL, "Could not initialize the hio component interface");
@@ -308,7 +274,7 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
 
   rc = hio_init_common (context, config_file, config_file_prefix, context_name);
   if (HIO_SUCCESS != rc) {
-    hio_context_release (&context);
+    hioi_object_release (&context->c_object);
     return rc;
   }
 
@@ -350,7 +316,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
   rc = MPI_Comm_dup (comm_in, &context->c_comm);
   if (MPI_COMM_NULL == context->c_comm) {
     hio_err_push_mpi (rc, context, NULL, "Error duplicating MPI communicator");
-    hio_context_release(&context);
+    hioi_object_release (&context->c_object);
     return hio_err_mpi (rc);
   }
 
@@ -361,7 +327,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 
   rc = hio_init_common (context, config_file, config_file_prefix, context_name);
   if (HIO_SUCCESS != rc) {
-    hio_context_release(&context);
+    hioi_object_release (&context->c_object);
     return rc;
   }
 
@@ -388,7 +354,9 @@ int hio_fini (hio_context_t *context) {
   hioi_log (*context, HIO_VERBOSE_DEBUG_LOW, "Destroying context with identifier %s",
             (*context)->c_object.identifier);
 
-  hio_context_release (context);
+  hioi_object_release (&(*context)->c_object);
+  *context = HIO_OBJECT_NULL;
+
   return hioi_component_fini ();
 }
 

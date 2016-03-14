@@ -225,7 +225,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   }
 
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_STRIPING) {
-    hioi_config_add (context, &posix_dataset->base.ds_object, &fs_attr->fs_scount,
+    hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_scount,
                      "stripe_count", HIO_CONFIG_TYPE_UINT32, NULL, "Stripe count for all dataset "
                      "data files", 0);
 
@@ -235,7 +235,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       fs_attr->fs_scount = fs_attr->fs_smax_count;
     }
 
-    hioi_config_add (context, &posix_dataset->base.ds_object, &fs_attr->fs_ssize,
+    hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_ssize,
                      "stripe_size", HIO_CONFIG_TYPE_UINT64, NULL, "Stripe size for all dataset "
                      "data files", 0);
 
@@ -247,7 +247,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       fs_attr->fs_ssize = fs_attr->fs_smax_size;
     }
 
-    hioi_config_add (context, &posix_dataset->base.ds_object, &fs_attr->fs_raid_level,
+    hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_raid_level,
                      "raid_level", HIO_CONFIG_TYPE_UINT64, NULL, "RAID level for dataset "
                      "data files. Keep in mind that some filesystems only support 1/2 RAID "
                      "levels", 0);
@@ -278,7 +278,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
         break;
       }
 
-      rc = hioi_manifest_load (&posix_dataset->base, path);
+      rc = hioi_manifest_load (dataset, path);
       free (path);
     } else {
       rc = builtin_posix_create_dataset_dirs (posix_module, posix_dataset);
@@ -286,11 +286,9 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   } while (0);
 
   /* share dataset information will all processes in the communication domain */
-  rc = hioi_dataset_scatter (&posix_dataset->base, rc);
+  rc = hioi_dataset_scatter (dataset, rc);
   if (HIO_SUCCESS != rc) {
     free (posix_dataset->base_path);
-
-    hioi_dataset_release ((hio_dataset_t *) &posix_dataset);
     return rc;
   }
 
@@ -308,7 +306,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   pthread_mutex_init (&posix_dataset->lock, NULL);
 
   /* record the open time */
-  gettimeofday (&posix_dataset->base.ds_otime, NULL);
+  gettimeofday (&dataset->ds_otime, NULL);
 
   stop = hioi_gettime ();
 
@@ -522,7 +520,7 @@ static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element
   if (HIO_FILE_MODE_BASIC == dataset->ds_fmode) {
     rc = builtin_posix_module_element_open_basic (posix_module, posix_dataset, element, flags);
     if (HIO_SUCCESS != rc) {
-      hioi_element_release (element);
+      hioi_object_release (&element->e_object);
       return rc;
     }
   }

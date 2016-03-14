@@ -34,50 +34,34 @@ static hio_var_enum_t hioi_dataset_fs_type_enum = {
   .values = hioi_dataset_fs_type_enum_values,
 };
 
+static void hioi_element_release (hio_object_t object) {
+  hio_element_t element = (hio_element_t) object;
+  free (element->e_bfile);
+}
+
 hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name) {
   hio_element_t element;
+  int rc;
 
-  element = (hio_element_t) calloc (1, sizeof (*element));
+  element = (hio_element_t) hioi_object_alloc (name, HIO_OBJECT_TYPE_ELEMENT, &dataset->ds_object,
+                                               sizeof (*element), hioi_element_release);
   if (NULL == element) {
     return NULL;
   }
-
-  element->e_object.identifier = strdup (name);
-  if (NULL == element->e_object.identifier) {
-    free (element);
-    return NULL;
-  }
-
-  element->e_object.type = HIO_OBJECT_TYPE_ELEMENT;
-  element->e_object.parent = &dataset->ds_object;
 
   hioi_list_init (element->e_slist);
 
   return element;
 }
 
-void hioi_element_release (hio_element_t element) {
-  if (NULL != element) {
-    if (NULL != element->e_object.identifier) {
-      free (element->e_object.identifier);
-    }
-
-    if (NULL != element->e_bfile) {
-      free (element->e_bfile);
-    }
-
-    free (element);
-  }
-}
-
 static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data) {
   hio_dataset_data_t *ds_data;
 
   /* look for existing persistent data */
-  pthread_mutex_lock (&context->c_lock);
+  hioi_object_lock (&context->c_object);
   hioi_list_foreach (ds_data, context->c_ds_data, hio_dataset_data_t, dd_list) {
     if (0 == strcmp (ds_data->dd_name, name)) {
-      pthread_mutex_unlock (&context->c_lock);
+      hioi_object_unlock (&context->c_object);
       *data = ds_data;
       return HIO_SUCCESS;
     }
@@ -86,11 +70,13 @@ static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hi
   /* allocate new persistent dataset data and add it to the context */
   ds_data = (hio_dataset_data_t *) calloc (1, sizeof (*ds_data));
   if (NULL == ds_data) {
+    hioi_object_unlock (&context->c_object);
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
   ds_data->dd_name = strdup (name);
   if (NULL == ds_data->dd_name) {
+    hioi_object_unlock (&context->c_object);
     free (ds_data);
     return HIO_ERR_OUT_OF_RESOURCE;
   }
@@ -100,9 +86,9 @@ static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hi
   hioi_list_init (ds_data->dd_backend_data);
 
   hioi_list_append (ds_data, context->c_ds_data, dd_list);
+  hioi_object_unlock (&context->c_object);
 
   *data = ds_data;
-  pthread_mutex_unlock (&context->c_lock);
 
   return HIO_SUCCESS;
 }
@@ -116,6 +102,23 @@ static hio_return_t hioi_dataset_close_stub (hio_dataset_t dataset) {
   return HIO_ERR_BAD_PARAM;
 }
 
+static void hioi_dataset_release (hio_object_t object) {
+  hio_context_t context = hioi_object_context (object);
+  hio_dataset_t dataset = (hio_dataset_t) object;
+  hio_module_t *module = dataset->ds_module;
+  hio_element_t element, next;
+
+  hioi_list_foreach_safe(element, next, dataset->ds_elist, struct hio_element, e_list) {
+    if (element->e_is_open) {
+      hioi_log (context, HIO_VERBOSE_WARN, "element still open at dataset close");
+      element->e_close (element);
+    }
+
+    hioi_list_remove(element, e_list);
+    hioi_object_release (&element->e_object);
+  }
+}
+
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
                                   int flags, hio_dataset_mode_t mode) {
   size_t dataset_size = context->c_ds_size;
@@ -126,7 +129,8 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   assert (dataset_size >= sizeof (*new_dataset));
 
   /* allocate new dataset object */
-  new_dataset = calloc (1, dataset_size);
+  new_dataset = (hio_dataset_t) hioi_object_alloc (name, HIO_OBJECT_TYPE_DATASET,&context->c_object,
+                                                   dataset_size, hioi_dataset_release);
   if (NULL == new_dataset) {
     return NULL;
   }
@@ -135,19 +139,10 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
    * statistics (average write time, last successful checkpoint, etc) */
   rc = hioi_dataset_data_lookup (context, name, &new_dataset->ds_data);
   if (HIO_SUCCESS != rc) {
-    free (new_dataset);
+    hioi_object_release (&new_dataset->ds_object);
     return NULL;
   }
 
-  /* initialize new dataset object */
-  new_dataset->ds_object.identifier = strdup (name);
-  if (NULL == new_dataset->ds_object.identifier) {
-    free (new_dataset);
-    return NULL;
-  }
-
-  new_dataset->ds_object.type = HIO_OBJECT_TYPE_DATASET;
-  new_dataset->ds_object.parent = &context->c_object;
   new_dataset->ds_id = id;
   new_dataset->ds_id_requested = id;
   new_dataset->ds_flags = flags;
@@ -188,36 +183,6 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_list_init (new_dataset->ds_elist);
 
   return new_dataset;
-}
-
-void hioi_dataset_release (hio_dataset_t *set) {
-  hio_element_t element, next;
-  hio_context_t context;
-  hio_module_t *module;
-
-  if (!set || HIO_OBJECT_NULL != *set) {
-    return;
-  }
-
-  module = (*set)->ds_module;
-  context = hioi_object_context (&(*set)->ds_object);
-
-  hioi_list_foreach_safe(element, next, (*set)->ds_elist, struct hio_element, e_list) {
-    if (element->e_is_open) {
-      hioi_log (context, HIO_VERBOSE_WARN, "element still open at dataset close");
-      element->e_close (element);
-    }
-
-    hioi_list_remove(element, e_list);
-    hioi_element_release (element);
-  }
-
-  if ((*set)->ds_object.identifier) {
-    free ((*set)->ds_object.identifier);
-  }
-
-  free (*set);
-  *set = HIO_OBJECT_NULL;
 }
 
 void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element) {
