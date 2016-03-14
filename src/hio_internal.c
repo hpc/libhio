@@ -322,7 +322,7 @@ int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode) {
     errno = 0;
 
     if (access (tmp, F_OK)) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "creating directory %s", tmp);
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "creating directory %s with permissions 0%o", tmp, access_mode);
 
       rc = mkdir (tmp, access_mode);
       if (0 != rc && (EEXIST != errno)) {
@@ -338,6 +338,7 @@ int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode) {
   }
 
   errno = 0;
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "creating directory %s with permissions 0%o", tmp, access_mode);
   rc = mkdir (tmp, access_mode);
   free (tmp);
   return (rc && errno != EEXIST) ? HIO_ERROR : HIO_SUCCESS;
