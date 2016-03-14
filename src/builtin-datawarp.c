@@ -24,10 +24,18 @@
 
 #include <datawarp.h>
 
+/**
+ * builtin datawarp module
+ *
+ * This module is a thin wrapper around the posix module. In addition to the
+ * posix module members it keeps track of the original open/fini functions
+ * and the parallel file system path that we will be staging data to.
+ */
 typedef struct builtin_datawarp_module_t {
-  hio_module_t base;
+  builtin_posix_module_t posix_module;
+  hio_module_dataset_open_fn_t posix_open;
+  hio_module_fini_fn_t posix_fini;
   char *pfs_path;
-  builtin_posix_module_t *posix_module;
 } builtin_datawarp_module_t;
 
 typedef struct builtin_datawarp_module_dataset_t {
@@ -59,17 +67,9 @@ static hio_var_enum_t builtin_datawarp_stage_modes = {
 
 static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset);
 
-static int builtin_datawarp_module_dataset_list (struct hio_module_t *module, const char *name,
-                                                 hio_dataset_header_t **headers, int *count) {
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-
-  return datawarp_module->posix_module->base.dataset_list (&datawarp_module->posix_module->base, name, headers,
-                                                           count);
-}
-
 static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hio_dataset_t dataset) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
+  builtin_posix_module_t *posix_module = &datawarp_module->posix_module;
   builtin_datawarp_module_dataset_t *datawarp_dataset;
   hio_context_t context = module->context;
   builtin_posix_module_dataset_t *posix_dataset;
@@ -79,7 +79,7 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
             hioi_object_identifier (dataset), (unsigned long) dataset->ds_id);
 
   /* open the posix dataset */
-  rc = posix_module->base.dataset_open (&posix_module->base, dataset);
+  rc = datawarp_module->posix_open (&posix_module->base, dataset);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
@@ -104,7 +104,7 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
 static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
   builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) dataset;
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) dataset->ds_module;
-  builtin_posix_module_t *posix_module = (builtin_posix_module_t *) datawarp_module->posix_module;
+  builtin_posix_module_t *posix_module = &datawarp_module->posix_module;
   builtin_posix_module_dataset_t *posix_dataset = &datawarp_dataset->posix_dataset;
   mode_t pfs_mode = posix_module->access_mode;
   hio_context_t context = hioi_object_context (&dataset->ds_object);
@@ -228,38 +228,24 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
   return HIO_SUCCESS;
 }
 
-static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
-  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
-  return datawarp_module->posix_module->base.dataset_unlink (&datawarp_module->posix_module->base, name, set_id);
-}
-
 static int builtin_datawarp_module_fini (struct hio_module_t *module) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
 
   hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Finalizing datawarp filesystem module for data root %s",
 	    module->data_root);
 
-  if (datawarp_module->posix_module) {
-    datawarp_module->posix_module->base.fini (&datawarp_module->posix_module->base);
-    datawarp_module->posix_module = NULL;
-  }
-
   free (datawarp_module->pfs_path);
-  free (module->data_root);
-  free (module);
+
+  if (datawarp_module->posix_fini) {
+    /* posix fini will free the module so call this last */
+    datawarp_module->posix_fini (&datawarp_module->posix_module.base);
+  } else {
+    free (module->data_root);
+    free (module);
+  }
 
   return HIO_SUCCESS;
 }
-
-hio_module_t builtin_datawarp_module_template = {
-  .dataset_open   = builtin_datawarp_module_dataset_open,
-  .dataset_unlink = builtin_datawarp_module_dataset_unlink,
-
-  .ds_object_size = sizeof (builtin_datawarp_module_dataset_t),
-  .dataset_list   = builtin_datawarp_module_dataset_list,
-
-  .fini           = builtin_datawarp_module_fini,
-};
 
 static int builtin_datawarp_component_init (hio_context_t context) {
   /* nothing to do */
@@ -338,32 +324,28 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  memcpy (new_module, &builtin_datawarp_module_template, sizeof (builtin_datawarp_module_template));
+  memcpy (&new_module->posix_module, posix_module, sizeof (new_module->posix_module));
 
-  new_module->posix_module = (builtin_posix_module_t *) posix_module;
+  new_module->posix_open = posix_module->dataset_open;
+  new_module->posix_fini = posix_module->fini;
+  new_module->posix_module.base.dataset_open = builtin_datawarp_module_dataset_open;
+  new_module->posix_module.base.ds_object_size = sizeof (builtin_datawarp_module_dataset_t);
+  new_module->posix_module.base.fini = builtin_datawarp_module_fini;
+
+  free (posix_module);
 
   if (next_data_root) {
     new_module->pfs_path = strdup (next_data_root + 6);
     if (NULL == new_module->pfs_path) {
-      posix_module->fini (posix_module);
-      free (new_module);
+      new_module->posix_module.base.fini ((hio_module_t *) new_module);
       return HIO_ERR_OUT_OF_RESOURCE;
     }
-  }
-
-  rc = asprintf (&new_module->base.data_root, "datawarp:%s", context->c_dw_root);
-  if (0 > rc) {
-    posix_module->fini (posix_module);
-    free (new_module);
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
-  new_module->base.context = context;
+ }
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: created datawarp filesystem module "
-            "for data root %s", new_module->base.data_root);
+            "for data root %s", new_module->posix_module.base.data_root);
 
-  *module = &new_module->base;
+  *module = &new_module->posix_module.base;
 
   return HIO_SUCCESS;
 }
