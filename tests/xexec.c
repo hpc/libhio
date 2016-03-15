@@ -1396,7 +1396,7 @@ ACTION_RUN(hew_run) {
   ssize_t hcnt;
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
-  U64 ofs_segrel, ofs_abs;
+  U64 ofs_abs;
 
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
@@ -1422,7 +1422,7 @@ ACTION_RUN(her_run) {
   ssize_t hcnt;
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
-  U64 ofs_segrel, ofs_abs;
+  U64 ofs_abs;
 
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("her el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
