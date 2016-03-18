@@ -197,10 +197,12 @@ static int hio_dataset_open_last (hio_dataset_t dataset, hioi_dataset_header_com
     if (HIO_SUCCESS == rc) {
       break;
     }
-  }
 
-  /* reset the id to the id originally requested */
-  dataset->ds_id = dataset->ds_id_requested;
+    if (HIO_SUCCESS != rc) {
+      /* reset the id to the id originally requested */
+      dataset->ds_id = dataset->ds_id_requested;
+    }
+  }
 
   free (items);
 
