@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -9,7 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 int hio_element_close (hio_element_t *element) {
   int rc;
@@ -18,7 +18,7 @@ int hio_element_close (hio_element_t *element) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  rc = (*element)->e_close (*element);
+  rc = hioi_element_close_internal (*element);
 
   *element = HIO_OBJECT_NULL;
 

@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2015      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -14,7 +14,7 @@
  * @brief hio filesystem query functions
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 #include <stdlib.h>
 #include <stdio.h>

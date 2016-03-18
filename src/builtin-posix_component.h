@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -12,7 +12,7 @@
 #if !defined(BUILTIN_POSIX_COMPONENT_H)
 #define BUILTIN_POSIX_COMPONENT_H
 
-#include "hio_types.h"
+#include "hio_internal.h"
 #include "hio_component.h"
 
 #define HIO_POSIX_MAX_OPEN_FILES  32

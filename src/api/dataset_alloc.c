@@ -9,7 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 hio_return_t hio_dataset_alloc (hio_context_t context, hio_dataset_t *set_out, const char *name,
                                 int64_t set_id, int flags, hio_dataset_mode_t mode) {

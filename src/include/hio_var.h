@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -16,6 +16,14 @@
 
 #if !defined(HIO_VAR_H)
 #define HIO_VAR_H
+
+#include "hio_config.h"
+
+#if HIO_USE_MPI
+#include <mpi.h>
+#endif
+
+#include "hio.h"
 
 #if defined(HAVE_STDINT_H)
 #include <stdint.h>

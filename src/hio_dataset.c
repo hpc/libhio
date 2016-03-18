@@ -9,7 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -33,26 +33,6 @@ static hio_var_enum_t hioi_dataset_fs_type_enum = {
   .count  = 3,
   .values = hioi_dataset_fs_type_enum_values,
 };
-
-static void hioi_element_release (hio_object_t object) {
-  hio_element_t element = (hio_element_t) object;
-  free (element->e_bfile);
-}
-
-hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name) {
-  hio_element_t element;
-  int rc;
-
-  element = (hio_element_t) hioi_object_alloc (name, HIO_OBJECT_TYPE_ELEMENT, &dataset->ds_object,
-                                               sizeof (*element), hioi_element_release);
-  if (NULL == element) {
-    return NULL;
-  }
-
-  hioi_list_init (element->e_slist);
-
-  return element;
-}
 
 static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data) {
   hio_dataset_data_t *ds_data;
@@ -93,8 +73,7 @@ static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hi
   return HIO_SUCCESS;
 }
 
-static hio_return_t hioi_dataset_element_open_stub (hio_dataset_t dataset, hio_element_t *element_out,
-                                                    const char *element_name, int flags) {
+static hio_return_t hioi_dataset_element_open_stub (hio_dataset_t dataset, hio_element_t element) {
   return HIO_ERR_BAD_PARAM;
 }
 
@@ -109,11 +88,6 @@ static void hioi_dataset_release (hio_object_t object) {
   hio_element_t element, next;
 
   hioi_list_foreach_safe(element, next, dataset->ds_elist, struct hio_element, e_list) {
-    if (element->e_is_open) {
-      hioi_log (context, HIO_VERBOSE_WARN, "element still open at dataset close");
-      element->e_close (element);
-    }
-
     hioi_list_remove(element, e_list);
     hioi_object_release (&element->e_object);
   }
@@ -181,6 +155,7 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
 
   hioi_list_init (new_dataset->ds_elist);
+  hioi_list_init (new_dataset->ds_flist);
 
   return new_dataset;
 }
@@ -189,62 +164,29 @@ void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element) {
   hioi_list_append (element, dataset->ds_elist, e_list);
 }
 
-int hioi_element_add_segment (hio_element_t element, off_t file_offset, uint64_t app_offset,
-                              int rank, size_t seg_length) {
-  hio_manifest_segment_t *segment = NULL;
+int hioi_dataset_add_file (hio_dataset_t dataset, const char *filename) {
+  hio_manifest_file_t *file;
+  int file_index = 0;
 
-  if (element->e_slist.prev != &element->e_slist) {
-    unsigned long last_offset;
-
-    segment = hioi_list_item(element->e_slist.prev, hio_manifest_segment_t, seg_list);
-
-    last_offset = segment->seg_offset + segment->seg_length;
-
-    if (last_offset == app_offset) {
-      segment->seg_length += seg_length;
-      return HIO_SUCCESS;
+  hioi_list_foreach (file, dataset->ds_flist, hio_manifest_file_t, f_list) {
+    if (0 == strcmp (filename, file->f_name)) {
+      return file_index;
     }
+    ++file_index;
   }
 
-  segment = (hio_manifest_segment_t *) malloc (sizeof (*segment));
-  if (NULL == segment) {
+  file = calloc (1, sizeof (*file));
+  if (NULL == file) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  segment->seg_foffset = (uint64_t) file_offset;
-  segment->seg_offset = app_offset;
-  segment->seg_rank = rank;
-  segment->seg_length = seg_length;
-
-  hioi_list_append (segment, element->e_slist, seg_list);
-
-  return HIO_SUCCESS;
-}
-
-int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int rank,
-                              off_t *offset, size_t *length) {
-  hio_manifest_segment_t *segment;
-
-  hioi_list_foreach(segment, element->e_slist, hio_manifest_segment_t, seg_list) {
-    uint64_t base, bound, remaining;
-
-    base = (uint64_t) segment->seg_offset;
-    bound = base + segment->seg_length;
-
-    if (app_offset >= base && app_offset <= bound) {
-      *offset = segment->seg_foffset + (app_offset - base);
-
-      remaining = segment->seg_length - (app_offset - base);
-
-      if (remaining < *length) {
-        *length = remaining;
-      }
-
-      return HIO_SUCCESS;
-    }
+  file->f_name = strdup (filename);
+  if (NULL == file->f_name) {
+    free (file);
+    return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  return HIO_ERR_NOT_FOUND;
+  return file_index;
 }
 
 hio_dataset_backend_data_t *hioi_dbd_alloc (hio_dataset_data_t *data, const char *backend_name, size_t size) {
@@ -385,7 +327,7 @@ int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {
 
   rc = MPI_Bcast (ar_data, 5, MPI_LONG, 0, context->c_comm);
   if (MPI_SUCCESS != rc) {
-    return hio_err_mpi (rc);
+    return hioi_err_mpi (rc);
   }
 
   if (HIO_SUCCESS != ar_data[0]) {
@@ -401,7 +343,7 @@ int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {
 
   rc = MPI_Bcast (data, data_size, MPI_BYTE, 0, context->c_comm);
   if (MPI_SUCCESS != rc) {
-    return hio_err_mpi (rc);
+    return hioi_err_mpi (rc);
   }
 
   if (0 != context->c_rank) {
@@ -417,4 +359,47 @@ int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {
 #endif
 
   return rc;
+}
+
+int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
+  /* get timestamp before open call */
+  uint64_t rotime = hioi_gettime ();
+  int rc;
+
+  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%llu with flags 0x%x with backend module %p",
+            dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags, module);
+
+  /* Several things need to be done here:
+   * 1) check if the user is requesting a specific dataset or the newest available,
+   * 2) check if the dataset specified already exists in any module,
+   * 3) if the dataset does not exist and we are creating then use the current
+   *    module to open (create) the dataset. */
+  rc = module->dataset_open (module, dataset);
+  if (HIO_SUCCESS != rc) {
+    hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%llu on data root %s",
+              dataset->ds_object.identifier, dataset->ds_id, module->data_root);
+    return rc;
+  }
+
+  dataset->ds_rotime = rotime;
+
+  return HIO_SUCCESS;
+}
+
+int hioi_dataset_close_internal (hio_dataset_t dataset) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
+  hio_element_t element;
+
+  /* close any open elements */
+  hioi_list_foreach(element, dataset->ds_elist, struct hio_element, e_list) {
+    if (element->e_open_count) {
+      hioi_log (context, HIO_VERBOSE_WARN, "element %s still open at dataset close",
+                hioi_object_identifier (&element->e_object));
+      /* ensure the element is actually closed */
+      element->e_open_count = 1;
+      hioi_element_close_internal (element);
+    }
+  }
+
+  return dataset->ds_close (dataset);
 }

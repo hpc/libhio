@@ -14,7 +14,7 @@ int main (int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  hio_err_push (HIO_ERROR, NULL, NULL, "This is test error 1");
+  hioi_err_push (HIO_ERROR, NULL, "This is test error 1");
   rc = hio_err_print_last (NULL, stderr, "APP MESSAGE 1");
   if (0 >= rc) {
     fprintf (stderr, "Error printing last error message\n");
@@ -23,10 +23,10 @@ int main (int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  hio_err_push (HIO_ERROR, NULL, NULL, "This is another error");
-  hio_err_push (HIO_ERROR, NULL, NULL, "This is test error 2");
-  hio_err_push (HIO_ERROR, context, NULL, "This is a context specific error");
-  hio_err_push (HIO_ERROR, NULL, NULL, "Last error");
+  hioi_err_push (HIO_ERROR, NULL, "This is another error");
+  hioi_err_push (HIO_ERROR, NULL, "This is test error 2");
+  hioi_err_push (HIO_ERROR, &context->c_object, "This is a context specific error");
+  hioi_err_push (HIO_ERROR, NULL, "Last error");
   rc = hio_err_print_all (NULL, stderr, "APP MESSAGE");
   if (HIO_SUCCESS != rc) {
     fprintf (stderr, "Error printing all error messages\n");

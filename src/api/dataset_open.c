@@ -9,7 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 #include <stdlib.h>
 
@@ -19,30 +19,6 @@ struct hio_dataset_item_t {
   int                  ordering;
 };
 typedef struct hio_dataset_item_t hio_dataset_item_t;
-
-static int hio_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
-  /* get timestamp before open call */
-  uint64_t rotime = hioi_gettime ();
-  int rc;
-
-  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%llu with flags 0x%x with backend module %p",
-            dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags, module);
-
-  /* Several things need to be done here:
-   * 1) check if the user is requesting a specific dataset or the newest available,
-   * 2) check if the dataset specified already exists in any module,
-   * 3) if the dataset does not exist and we are creating then use the current
-   *    module to open (create) the dataset. */
-  rc = module->dataset_open (module, dataset);
-  if (HIO_SUCCESS != rc) {
-    hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%llu on data root %s",
-              dataset->ds_object.identifier, dataset->ds_id, module->data_root);
-  } else {
-    dataset->ds_rotime = rotime;
-  }
-
-  return rc;
-}
 
 static void hio_dataset_item_swap (hio_dataset_item_t *itema, hio_dataset_item_t *itemb) {
   hio_dataset_item_t tmp = *itema;
@@ -193,7 +169,7 @@ static int hio_dataset_open_last (hio_dataset_t dataset, hioi_dataset_header_com
   while (HIO_SUCCESS == (rc = hio_dataset_item_pop (items, &item_count, &header, &module, compare))) {
     /* set the current dataset id to the one we are attempting to open */
     dataset->ds_id = header.ds_id;
-    rc = hio_dataset_open_internal (module, dataset);
+    rc = hioi_dataset_open_internal (module, dataset);
     if (HIO_SUCCESS == rc) {
       break;
     }
@@ -221,7 +197,7 @@ static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t datas
       return HIO_ERROR;
     }
 
-    rc = hio_dataset_open_internal (module, dataset);
+    rc = hioi_dataset_open_internal (module, dataset);
     if (HIO_SUCCESS == rc) {
       break;
     }

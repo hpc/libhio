@@ -14,7 +14,7 @@
  * @brief hio context implementation
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -43,7 +43,7 @@ static void hioi_context_release (hio_object_t object) {
 
     rc = MPI_Comm_free (&context->c_comm);
     if (MPI_SUCCESS != rc) {
-      hio_err_push_mpi (rc, NULL, NULL, "Error freeing MPI communicator");
+      hioi_err_push_mpi (rc, NULL, "Error freeing MPI communicator");
     }
   }
 #endif
@@ -160,7 +160,7 @@ int hioi_context_create_modules (hio_context_t context) {
 
     rc = hioi_component_query (context, data_root, next_data_root, &module);
     if (HIO_SUCCESS != rc) {
-      hio_err_push (rc, context, NULL, "Could not find an hio io module for data root %s",
+      hioi_err_push (rc, &context->c_object, "Could not find an hio io module for data root %s",
                     data_root);
       break;
     }
@@ -208,7 +208,7 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
 
   rc = hioi_component_init (context);
   if (HIO_SUCCESS != rc) {
-    hio_err_push (rc, NULL, NULL, "Could not initialize the hio component interface");
+    hioi_err_push (rc, NULL, "Could not initialize the hio component interface");
     return rc;
   }
 
@@ -268,7 +268,7 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
 
   context = hio_context_alloc (context_name);
   if (NULL == context) {
-    hio_err_push (HIO_ERR_OUT_OF_RESOURCE, NULL, NULL, "Could not allocate space for new hio context");
+    hioi_err_push (HIO_ERR_OUT_OF_RESOURCE, NULL, "Could not allocate space for new hio context");
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
@@ -295,19 +295,19 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 
   (void) MPI_Initialized (&flag);
   if (!flag) {
-    hio_err_push (HIO_ERROR, NULL, NULL, "Attempted to initialize hio before MPI");
+    hioi_err_push (HIO_ERROR, NULL, "Attempted to initialize hio before MPI");
     return HIO_ERROR;
   }
 
   (void) MPI_Finalized (&flag);
   if (flag) {
-    hio_err_push (HIO_ERROR, NULL, NULL, "Attempted to initialize hio after MPI was finalized");
+    hioi_err_push (HIO_ERROR, NULL, "Attempted to initialize hio after MPI was finalized");
     return HIO_ERROR;
   }
 
   context = hio_context_alloc (context_name);
   if (NULL == context) {
-    hio_err_push (HIO_ERR_OUT_OF_RESOURCE, NULL, NULL, "Could not allocate space for new hio context");
+    hioi_err_push (HIO_ERR_OUT_OF_RESOURCE, NULL, "Could not allocate space for new hio context");
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
@@ -315,9 +315,9 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 
   rc = MPI_Comm_dup (comm_in, &context->c_comm);
   if (MPI_COMM_NULL == context->c_comm) {
-    hio_err_push_mpi (rc, context, NULL, "Error duplicating MPI communicator");
+    hioi_err_push_mpi (rc, &context->c_object, "Error duplicating MPI communicator");
     hioi_object_release (&context->c_object);
-    return hio_err_mpi (rc);
+    return hioi_err_mpi (rc);
   }
 
   context->c_use_mpi = true;

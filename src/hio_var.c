@@ -10,7 +10,6 @@
  */
 
 #include "hio_internal.h"
-#include "hio_types.h"
 #include "config_parser.h"
 
 #include <stdlib.h>
@@ -431,8 +430,8 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
 
     fd = open (config_file, O_RDONLY);
     if (0 > fd) {
-      hio_err_push (HIO_ERR_NOT_FOUND, context, NULL, "Could not open configuration file %s for reading. "
-                    "errno: %d", config_file, errno);
+      hioi_err_push (HIO_ERR_NOT_FOUND, &context->c_object, "Could not open configuration file %s for reading. "
+                     "errno: %d", config_file, errno);
       return HIO_ERR_NOT_FOUND;
     }
 
@@ -462,7 +461,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
   if (!hioi_context_using_mpi (context) || 0 == context->c_rank) {
     rc = read (fd, buffer, data_size);
     if (data_size != rc) {
-      hio_err_push (HIO_ERR_TRUNCATE, context, NULL, "Read from configuration file %s trucated",
+      hioi_err_push (HIO_ERR_TRUNCATE, &context->c_object, "Read from configuration file %s trucated",
                     config_file);
     }
 
@@ -489,7 +488,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
 
     rc = hioi_config_parser_parse_line (line, &key, &value, &identifier, &type);
     if (HIOI_CONFIG_PARSER_PARSE_ERROR == rc) {
-      hio_err_push (HIO_ERROR, context, NULL, "Error parsing input file");
+      hioi_err_push (HIO_ERROR, &context->c_object, "Error parsing input file");
       rc = HIO_ERROR;
       break;
     }
@@ -541,7 +540,7 @@ int hio_config_set_value (hio_object_t object, const char *variable, const char 
   var = object->configuration.vars + config_index;
 
   if (HIO_VAR_FLAG_READONLY & var->var_flags) {
-    hio_err_push (HIO_ERR_PERM, NULL, object, "could not set read-only parameter: %s", variable);
+    hioi_err_push (HIO_ERR_PERM, object, "could not set read-only parameter: %s", variable);
     return HIO_ERR_PERM;
   }
 

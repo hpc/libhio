@@ -155,7 +155,7 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
     free (pfs_path);
     free (dataset_path);
     if (0 != rc) {
-      hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
+      hioi_err_push (HIO_ERROR, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
                     "data stage on dataset %s::%lld. DWRC: %d", hioi_object_identifier (dataset), dataset->ds_id, rc);
       return HIO_ERROR;
     }
@@ -198,7 +198,7 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
       rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
       free (dataset_path);
       if (0 != rc) {
-        hio_err_push (HIO_ERROR, context, &dataset->ds_object, "builtin-datawarp/dataset_close: error revoking prior "
+        hioi_err_push (HIO_ERROR, &dataset->ds_object, "builtin-datawarp/dataset_close: error revoking prior "
                       "end-of-job stage of dataset %s::%lld. errno: %d", hioi_object_identifier (dataset),
                       last_stage_id, errno);
         return HIO_ERROR;

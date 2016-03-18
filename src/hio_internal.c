@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2015 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -9,7 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -73,7 +73,8 @@ int hioi_err_errno (int err) {
   }
 }
 
-void hio_err_push (int hrc, hio_context_t context, hio_object_t object, char *format, ...) {
+void hioi_err_push (int hrc, hio_object_t object, char *format, ...) {
+  hio_context_t context = object ? hioi_object_context (object) : NULL;
   hio_error_stack_item_t *new_item;
   va_list vargs;
   int rc;
@@ -117,7 +118,8 @@ void hio_err_push (int hrc, hio_context_t context, hio_object_t object, char *fo
 }
 
 #if HIO_USE_MPI
-void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, char *format, ...) {
+void hioi_err_push_mpi (int mpirc, hio_object_t object, char *format, ...) {
+  hio_context_t context = object ? hioi_object_context (object) : NULL;
   hio_error_stack_item_t *new_item;
   char mpi_error[MPI_MAX_ERROR_STRING] = "Unknown error";
   int resultlen = MPI_MAX_ERROR_STRING;
@@ -145,7 +147,7 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
     return;
   }
 
-  new_item->hrc = hio_err_mpi(mpirc);
+  new_item->hrc = hioi_err_mpi(mpirc);
 
   /* TODO -- Should probably do something smarter here */
   new_item->error_string = malloc (strlen (temp) + 3 + resultlen);
@@ -177,7 +179,7 @@ void hio_err_push_mpi (int mpirc, hio_context_t context, hio_object_t object, ch
   }
 }
 
-int hio_err_mpi (int mpirc) {
+int hioi_err_mpi (int mpirc) {
   /* TODO: implement this */
   if (MPI_SUCCESS == mpirc) {
     return HIO_SUCCESS;
