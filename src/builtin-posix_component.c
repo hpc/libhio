@@ -36,8 +36,7 @@
 /** static functions */
 static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id);
 static int builtin_posix_module_dataset_close (hio_dataset_t dataset);
-static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element_t *element_out,
-                                              const char *element_name, int flags);
+static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element_t element);
 static int builtin_posix_module_element_close (hio_element_t element);
 static int builtin_posix_module_element_write_strided_nb (hio_element_t element, hio_request_t *request,
                                                           off_t offset, const void *ptr, size_t count,
@@ -70,7 +69,7 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
   rc = hio_mkpath (context, posix_dataset->base_path, access_mode);
   if (0 > rc || EEXIST == errno) {
     if (EEXIST != errno) {
-      hio_err_push (hioi_err_errno (errno), context, NULL, "posix: error creating context directory: %s",
+      hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: error creating context directory: %s",
                     posix_dataset->base_path);
     }
 
@@ -220,7 +219,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
 
   rc = hioi_fs_query (context, module->data_root, fs_attr);
   if (HIO_SUCCESS != rc) {
-    hio_err_push (rc, context, NULL, "posix: error querying the filesystem");
+    hioi_err_push (rc, &context->c_object, "posix: error querying the filesystem");
     return rc;
   }
 
@@ -334,13 +333,6 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
     }
   }
 
-  hioi_list_foreach(element, dataset->ds_elist, struct hio_element, e_list) {
-    if (element->e_fh != NULL) {
-      fclose (element->e_fh);
-      element->e_fh = NULL;
-    }
-  }
-
   if (dataset->ds_flags & HIO_FLAG_WRITE) {
     rc = hioi_dataset_gather (dataset);
     if (HIO_SUCCESS != rc) {
@@ -355,7 +347,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
         rc = hioi_manifest_save (dataset, path);
         free (path);
         if (HIO_SUCCESS != rc) {
-          hio_err_push (rc, context, &dataset->ds_object, "posix: error writing dataset manifest");
+          hioi_err_push (rc, &dataset->ds_object, "posix: error writing dataset manifest");
         }
       } else {
         rc = HIO_ERR_OUT_OF_RESOURCE;
@@ -412,7 +404,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
   rc = nftw (path, builtin_posix_unlink_cb, 32, FTW_DEPTH | FTW_PHYS);
   free (path);
   if (0 > rc) {
-    hio_err_push (hioi_err_errno (errno), module->context, NULL, "posix: could not unlink dataset. errno: %d",
+    hioi_err_push (hioi_err_errno (errno), &module->context->c_object, "posix: could not unlink dataset. errno: %d",
                   errno);
     return hioi_err_errno (errno);
   }
@@ -423,7 +415,6 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
                                     char *path, FILE **fh_out) {
   hio_object_t hio_object = &posix_dataset->base.ds_object;
-  hio_context_t context = hioi_object_context (hio_object);
   hio_fs_attr_t *fs_attr = &posix_dataset->base.ds_fsattr;
   int open_flags, fd;
   char *file_mode;
@@ -442,7 +433,7 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
   //hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "posix: calling open; path: %s open_flags: %i", path, open_flags);
   fd = fs_attr->fs_open (path, fs_attr, open_flags, posix_module->access_mode);
   if (fd < 0) {
-    hio_err_push (fd, context, hio_object, "posix: error opening element path %s. "
+    hioi_err_push (fd, hio_object, "posix: error opening element path %s. "
                   "errno: %d", path, errno);
     return fd;
   }
@@ -451,7 +442,7 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
   *fh_out = fdopen (fd, file_mode);
   if (NULL == *fh_out) {
     int hrc = hioi_err_errno (errno);
-    hio_err_push (hrc, context, hio_object, "posix: error opening element file %s. "
+    hioi_err_push (hrc, hio_object, "posix: error opening element file %s. "
                   "errno: %d", path, errno);
     return hrc;
   }
@@ -460,24 +451,19 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
 }
 
 static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
-                                                    hio_element_t element, int flags) {
+                                                    hio_element_t element) {
   hio_context_t context = hioi_object_context (&posix_dataset->base.ds_object);
   const char *element_name = hioi_object_identifier(element);
   char *path;
   int rc;
 
   if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
-    rc = asprintf (&element->e_bfile, "element_data.%s.%05d", element_name,
-                   context->c_rank);
+    rc = asprintf (&path, "%s/element_data.%s.%05d", posix_dataset->base_path, element_name,
+                   element->e_rank);
   } else {
-    rc = asprintf (&element->e_bfile, "element_data.%s", element_name);
+    rc = asprintf (&path, "%s/element_data.%s", posix_dataset->base_path, element_name);
   }
 
-  if (0 > rc) {
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
-  rc = asprintf (&path, "%s/%s", posix_dataset->base_path, element->e_bfile);
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
@@ -495,41 +481,23 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
   return HIO_SUCCESS;
 }
 
-static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element_t *element_out,
-                                              const char *element_name, int flags) {
+static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element_t element) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) dataset->ds_module;
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  hio_element_t element;
   int rc;
 
-  hioi_list_foreach (element, dataset->ds_elist, struct hio_element, e_list) {
-    if (!strcmp (hioi_object_identifier(element), element_name)) {
-      *element_out = element;
-      element->e_is_open = true;
-      /* nothing more to do with optimized mode */
-      return HIO_SUCCESS;
-    }
-  }
-
-  element = hioi_element_alloc (dataset, element_name);
-  if (NULL == element) {
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
   if (HIO_FILE_MODE_BASIC == dataset->ds_fmode) {
-    rc = builtin_posix_module_element_open_basic (posix_module, posix_dataset, element, flags);
+    rc = builtin_posix_module_element_open_basic (posix_module, posix_dataset, element);
     if (HIO_SUCCESS != rc) {
       hioi_object_release (&element->e_object);
       return rc;
     }
   }
 
-  hioi_dataset_add_element (dataset, element);
-
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: %s element %p (identifier %s) for dataset %s",
-	    (HIO_FLAG_WRITE & dataset->ds_flags) ? "created" : "opened", element, element_name,
-            hioi_object_identifier(dataset));
+	    (HIO_FLAG_WRITE & dataset->ds_flags) ? "created" : "opened", element,
+            hioi_object_identifier(element), hioi_object_identifier(dataset));
 
   element->e_write_strided_nb = builtin_posix_module_element_write_strided_nb;
   element->e_read_strided_nb = builtin_posix_module_element_read_strided_nb;
@@ -537,13 +505,10 @@ static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element
   element->e_complete = builtin_posix_module_element_complete;
   element->e_close = builtin_posix_module_element_close;
 
-  *element_out = element;
-
   return HIO_SUCCESS;
 }
 
 static int builtin_posix_module_element_close (hio_element_t element) {
-  element->e_is_open = false;
   return HIO_SUCCESS;
 }
 
@@ -897,7 +862,7 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
   }
 
   if (access (data_root, F_OK)) {
-    hio_err_push (hioi_err_errno (errno), context, NULL, "posix: data root %s does not exist or can not be accessed",
+    hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: data root %s does not exist or can not be accessed",
                   data_root);
     return hioi_err_errno (errno);
   }

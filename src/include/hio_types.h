@@ -12,13 +12,21 @@
 #if !defined(HIO_TYPES_H)
 #define HIO_TYPES_H
 
-#include "hio_internal.h"
 #include "hio_var.h"
 #include "hio_component.h"
 
 #if defined(HAVE_SYS_TIME_H)
 #include <sys/time.h>
 #endif
+
+#if defined(HAVE_PTHREAD_H)
+#include <pthread.h>
+#endif
+
+/**
+ * Maximum number of data roots.
+ */
+#define HIO_MAX_DATA_ROOTS   64
 
 /**
  * Simple lists
@@ -107,10 +115,7 @@ typedef int (*hio_dataset_close_fn_t) (hio_dataset_t dataset);
  *
  * This function opens a named element on an hio dataset.
  */
-typedef int (*hio_dataset_element_open_fn_t) (hio_dataset_t dataset,
-                                              hio_element_t *element_out,
-                                              const char *element_name,
-                                              int flags);
+typedef int (*hio_dataset_element_open_fn_t) (hio_dataset_t dataset, hio_element_t element);
 
 /**
  * Write to an hio dataset element
@@ -211,6 +216,14 @@ typedef int (*hio_element_close_fn_t) (hio_element_t element);
 typedef void (*hio_object_release_fn_t) (hio_object_t object);
 
 struct hio_config_t;
+
+typedef enum {
+  HIO_OBJECT_TYPE_CONTEXT,
+  HIO_OBJECT_TYPE_DATASET,
+  HIO_OBJECT_TYPE_ELEMENT,
+  HIO_OBJECT_TYPE_REQUEST,
+  HIO_OBJECT_TYPE_ANY,
+} hio_object_type_t;
 
 /**
  * Base of all hio objects
@@ -374,6 +387,13 @@ struct hio_fs_attr_t {
 };
 typedef struct hio_fs_attr_t hio_fs_attr_t;
 
+typedef struct hio_manifest_file_t {
+  /** list item (e_flist) */
+  hio_list_t f_list;
+  /** file name */
+  char *f_name;
+} hio_manifest_file_t;
+
 
 struct hio_dataset {
   /** allows for type detection */
@@ -396,6 +416,9 @@ struct hio_dataset {
 
   /** list of elements */
   hio_list_t          ds_elist;
+
+  /** list of files */
+  hio_list_t          ds_flist;
 
   /** dataset file modes */
   hio_dataset_fmode_t ds_fmode;
@@ -455,10 +478,15 @@ typedef struct hio_manifest_segment_t {
   uint64_t   seg_rank;
   /** length of segment */
   uint64_t   seg_length;
+  /** file index */
+  int        seg_file_index;
 } hio_manifest_segment_t;
 
 struct hio_element {
   struct hio_object e_object;
+
+  /** rank this element belongs to (-1 for shared) */
+  int               e_rank;
 
   /** elements are held in a list on the associated dataset */
   hio_list_t        e_list;
@@ -467,10 +495,7 @@ struct hio_element {
   hio_list_t        e_slist;
 
   /** element is currently open */
-  bool              e_is_open;
-
-  /** (basic mode only) backing file for this element */
-  char             *e_bfile;
+  int32_t           e_open_count;
 
   /** first invalid offset after the last valid block */
   int64_t           e_size;
@@ -515,196 +540,5 @@ typedef struct hio_dataset_header_t hio_dataset_header_t;
  * second, and 0 otherwise.
  */
 typedef int (*hioi_dataset_header_compare_t) (hio_dataset_header_t *, hio_dataset_header_t *);
-
-/**
- * Get the associated context for an hio object
- *
- * @param[in] object       hio object
- *
- * @returns hio context on success
- *
- * This function can be used to follow the parent pointers on any hio
- * object to get the hio_context_t the object was created under.
- */
-hio_context_t hioi_object_context (hio_object_t object);
-
-#define hioi_object_identifier(object) ((hio_object_t) object)->identifier
-
-/**
- * Macro to get the dataset for an hio element
- */
-#define hioi_element_dataset(e) (hio_dataset_t) (e)->e_object.parent
-
-
-static inline void hioi_object_lock (hio_object_t object) {
-  pthread_mutex_lock (&object->lock);
-}
-
-static inline void hioi_object_unlock (hio_object_t object) {
-  pthread_mutex_unlock (&object->lock);
-}
-
-hio_object_t hioi_object_alloc (const char *name, hio_object_type_t type, hio_object_t parent,
-                                size_t object_size, hio_object_release_fn_t);
-
-void hioi_object_release (hio_object_t object);
-
-/**
- * Allocate a new dataset object and populate it with common data (internal)
- *
- * @param[in] name         dataset name
- * @param[in] id           id of this dataset instance
- * @param[in] flags        flags for this dataset instance
- * @param[in] mode         offset mode of this dataset
- *
- * @returns hio dataset object on success
- * @returns NULL on failure
- *
- * This function generates a generic dataset object and populates
- * the shared fields. The module should populate private data if
- * needed.
- *
- * This function may or may not appear in the final release of
- * libhio. It may become the responsibility of the hio module to
- * allocate the memory it needs to implement a dataset (including
- * the shared bit above).
- */
-hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
-                                  int flags, hio_dataset_mode_t mode);
-
-/**
- * @brief scatter dataset configuration to all processes
- *
- * @param[in] dataset     dataset to scatter
- * @param[in] rc          current return code
- */
-int hioi_dataset_scatter (hio_dataset_t dataset, int rc);
-
-/**
- * @brief gather dataset configuration from all processes
- *
- * @param[in] dataset     dataset to gather
- */
-int hioi_dataset_gather (hio_dataset_t dataset);
-
-/**
- * Add an element to a dataset
- *
- * @param[in] dataset   dataset to modify
- * @param[in] element   element structure to add
- */
-void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element);
-
-/* context dataset persistent data functions */
-
-/**
- * Allocate new and store backend data structure
- *
- * @param[in] data         dataset persistent data structure
- * @param[in] backend_name name of the requesting backend
- * @param[in] size         size of backend data structure
- */
-hio_dataset_backend_data_t *hioi_dbd_alloc (hio_dataset_data_t *data, const char *backend_name, size_t size);
-
-/**
- * Retrieve stored backend data
- *
- * @param[in] data         dataset persistent data structure
- * @param[in] backend_name name of the requesting backend
- */
-hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *data, const char *backend_name);
-
-/* element functions */
-
-/**
- * Allocate and setup a new element object
- *
- * @param[in] dataset   dataset the element will be added to (see hioi_dataset_add_element)
- * @param[in] name      element identifier
- */
-hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name);
-
-hio_request_t hioi_request_alloc (hio_context_t context);
-
-void hioi_request_release (hio_request_t request);
-
-int hioi_element_add_segment (hio_element_t element, off_t file_offset, uint64_t app_offset,
-                              int rank, size_t seg_length);
-
-int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int rank,
-                              off_t *offset, size_t *length);
-
-/* manifest functions */
-
-/**
- * @brief Serialize the manifest in the dataset
- *
- * @param[in]  dataset   dataset to serialize
- * @param[out] data      serialized data
- * @param[out] data_size size of serialized data
- *
- * This function serializes the local data associated with the dataset and returns a buffer
- * containing the serialized data.
- */
-int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size);
-
-/**
- * @brief Serialize the manifest in the dataset and save it to the specified file
- *
- * @param[in]  dataset   dataset to serialize
- * @param[in]  path      file to save the manifest into
- *
- * This function serializes the local data associated with the dataset and saves it
- * to the specified file.
- */
-int hioi_manifest_save (hio_dataset_t dataset, const char *path);
-
-int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
-int hioi_manifest_load (hio_dataset_t dataset, const char *path);
-int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
-
-/**
- * Read header data from a manifest
- *
- * @param[in]  context   hio context
- * @param[out] header    hio dataset header to fill in
- * @param[in]  path      hio manifest to read
- *
- * @returns HIO_SUCCESS on success
- * @returns hio error code on error
- *
- * This function reads the header data out of an hio manifest. This data includes
- * the dataset id, file status, and modification time.
- */
-int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path);
-
-
-/* context functions */
-
-static inline bool hioi_context_using_mpi (hio_context_t context) {
-#if HIO_USE_MPI
-  return context->c_use_mpi;
-#endif
-
-  return false;
-}
-
-/**
- * @brief Query filesystem attributes
- *
- * @param[in]  context    hio context
- * @param[in]  path       path on the filesystem to query (directory/file ok)
- * @param[out] attributes filesystem path attributes
- *
- * @returns HIO_SUCCESS on success
- * @returns hio error code on error
- *
- * This function queries a filesystem path and returns the attributes of that
- * path (block count, stripe count, etc). The query function also returns an
- * open function that should be used to open/create data files. The open function
- * takes an attributes structure as an extra argument. Any striping information
- * will be retreived from this function.
- */
-int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *attributes);
 
 #endif /* !defined(HIO_TYPES_H) */

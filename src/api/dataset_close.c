@@ -9,7 +9,7 @@
  * $HEADER$
  */
 
-#include "hio_types.h"
+#include "hio_internal.h"
 
 int hio_dataset_close (hio_dataset_t dataset) {
   uint64_t tmp[4] = {0, 0, 0, 0};
@@ -43,7 +43,7 @@ int hio_dataset_close (hio_dataset_t dataset) {
   context->c_bread = dataset->ds_stat.s_bread;
   context->c_bwritten = dataset->ds_stat.s_bwritten;
 
-  rc = dataset->ds_close (dataset);
+  rc = hioi_dataset_close_internal (dataset);
 
   rctime = hioi_gettime ();
 
