@@ -117,6 +117,10 @@ char * help =
   "  mb            issue MPI_Barrier()\n"
   "  mgf           gather failures - send fails to and only report success from rank 0\n"
   "  mf            issue MPI_Finalize()\n"
+  "  fctw <dir> <num files> <file size> <block size> File coherency test - write files\n"
+  "                from rank 0\n" 
+  "  fctr <dir> <num files> <file size> <block size> File coherency test - read files\n"
+  "                from all non-zero ranks \n" 
   #endif
   "  fi <size> <count>\n"
   "                Creates <count> blocks of <size> doubles each.  All\n"
@@ -853,6 +857,71 @@ ACTION_RUN(mf_run) {
   mpi_rbuf = FREEX(mpi_rbuf);
   mpi_buf_len = 0;
 }
+
+//----------------------------------------------------------------------------
+// fctw, fctr (file coherency test) action handlers
+//----------------------------------------------------------------------------
+ACTION_CHECK(fct_check) {
+}
+
+ACTION_RUN(fctw_run) {
+  char * dir = V0.s;
+  U64 file_num = V1.u;  
+  U64 file_sz = V2.u;  
+  U64 blk_sz = V3.u;  
+
+  void * buf = MALLOCX(blk_sz); 
+
+  if (0 == myrank) {
+    for (int i=0; i<file_num; ++i) {
+      char * fname = ALLOC_PRINTF("%s/test_%d", dir, i);
+      FILE *f = fopen(fname, "w");
+      if (!f) ERRX("%s: error opening \"%s\" %s", A.desc, fname, strerror(errno));
+      I64 remain = file_sz;
+      while (remain > 0) {
+        I64 req_len = MIN(blk_sz, remain);
+        DBG4("fctw: write %lld bytes to %s", req_len, fname);
+        I64 act_len = fwrite(buf, 1, req_len, f);
+        if (act_len != req_len) ERRX("%s error writing \"%s\", act_len: %lld req_len: %lld",
+          A.desc, fname, act_len, req_len);
+        remain -= act_len;
+      }
+      fclose(f);
+      FREEX(fname);
+    }
+  }
+  FREEX(buf);
+}
+
+ACTION_RUN(fctr_run) {
+  char * dir = V0.s;
+  U64 file_num = V1.u;  
+  U64 file_sz = V2.u;  
+  U64 blk_sz = V3.u;  
+
+  void * buf = MALLOCX(blk_sz); 
+
+  if (0 != myrank) {
+    for (int i=file_num-1; i>=0; --i) {
+      char * fname = ALLOC_PRINTF("%s/test_%d", dir, i);
+      FILE *f = fopen(fname, "r");
+      if (!f) ERRX("%s: error opening \"%s\" %s", A.desc, fname, strerror(errno));
+      I64 remain = file_sz;
+      while (remain > 0) {
+        I64 req_len = MIN(blk_sz, remain);
+        I64 act_len = fread(buf, 1, req_len, f);
+        DBG4("fctr: read %lld bytes from %s", req_len, fname);
+        if (act_len != req_len) ERRX("%s error reading \"%s\", act_len: %lld req_len: %lld",
+          A.desc, fname, act_len, req_len);
+        remain -= act_len;
+      }
+      fclose(f);
+      FREEX(fname);
+    }
+  }
+  FREEX(buf);
+}
+
 #endif // MPI
 
 
@@ -1307,6 +1376,8 @@ ACTION_RUN(hda_run) {
   HRC_TEST(hio_dataset_alloc);
 }
 
+#include <inttypes.h>
+
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
   DBG2("calling hio_dataset_open(%p)", dataset);
@@ -1317,11 +1388,11 @@ ACTION_RUN(hdo_run) {
     HRC_TEST(hio_dataset_get_id);
     local_fails += hio_fail = (hio_dsid_exp_set && hio_dsid_exp != hio_ds_id_act);
     if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
-      if (hio_dsid_exp_set) {                                
-        MSG("%s: hio_dataset_get_id %s actual %ld exp: %ld", A.desc, hio_fail ? "FAIL": "OK",
+      if (hio_dsid_exp_set) { 
+        MSG("%s: hio_dataset_get_id %s actual: %" PRIi64 " exp: %" PRIi64, A.desc, hio_fail ? "FAIL": "OK",
             hio_ds_id_act, hio_dsid_exp); 
       } else {
-        MSG("%s: hio_dataset_get_id actual %ld", A.desc, hio_ds_id_act); 
+        MSG("%s: hio_dataset_get_id actual %"PRIi64, A.desc, hio_ds_id_act); 
       } 
     }
   }
@@ -1789,6 +1860,8 @@ struct parse {
   {"mb",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mb_run      },
   {"mgf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          mgf_run     },
   {"mf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mf_run      },
+  {"fctw",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctw_run    },
+  {"fctr",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctr_run    },
   #endif
   {"fi",    {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
   {"fr",    {PINT, PINT, NONE, NONE, NONE}, fr_check,      fr_run      },
