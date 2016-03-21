@@ -1,7 +1,7 @@
 HIO Readme
 ==========
 
-Last updated 2016-03-02
+Last updated 2016-03-21
 
 See file NEWS for a description of changes to hio.
 
@@ -79,6 +79,14 @@ run_combo -t ./run02 ./run03 ./run12 -s x y z -n 32 64 128 256 512 1024 -p 32 -b
 This will submit 54 jobs (3 x 3 x 6) with all combinations of the specified
 tests and parameters.  The job scripts and output will be in the tests/run
 subdirectory.
+
+
+Simple DataWarp Test Job
+------------------------
+
+The HIO source contains a script test/dw_simple_sub.sh that will submit a 
+simple, small scale test job on a system with Moab/DataWarp integration.  See
+the comments in the file for instructions and a more detailed description.
 
 
 Step by step procedure for building and running HIO tests on Trinity
