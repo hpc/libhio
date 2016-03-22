@@ -1,0 +1,27 @@
+#! /bin/bash
+. ./run_setup
+
+# Use xexec fctw/r actions to test DataWarp file coherency
+
+batch_sub $(( $ranks * $blksz * $nblk ))
+
+if [[ ${HIO_TEST_ROOTS/DataWarp//} == $HIO_TEST_ROOTS ]]; then
+  echo "Test $0 only valid valid with DataWarp.  Exiting."
+  exit 77
+fi
+
+fct_dir=${HIO_datawarp_root-$DW_JOB_STRIPED}
+
+if [[ -n $HIO_datawarp_root ]]; then fct_dir=$HIO_datawarp_root
+
+cmd="
+  name run91 $verbose_lev d $debug_lev mi 0
+  /@@ run91 - file coherency test @/
+  fctw $fct_dir $nseg $totsz $blksz
+  mb
+  fctr $fct_dir $nseg $totsz $blksz
+  mgf mf
+"
+
+myrun .libs/xexec.x $cmd
+check_rc
