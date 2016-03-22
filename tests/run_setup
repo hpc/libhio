@@ -143,7 +143,8 @@ batch_sub() {
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
 
     mcmd="msub"
-    if [[ -n $HIO_verbose ]]; then mcmd="$mcmd -v HIO_verbose"; fi
+    hiovars=$(set | awk -F '=' '/^HIO_/{v=v","$1}END{print substr(v, 2)}')
+    if [[ -n $hiovars ]]; then mcmd="$mcmd -v $hiovars"; fi
     if [[ -n $msub_arg ]]; then mcmd="$mcmd $msub_arg"; fi
     if [[ $chain -ne 0 ]]; then
       if [[ -r $lastjob ]]; then
