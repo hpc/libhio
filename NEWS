@@ -13,7 +13,9 @@ hio_dataset_close respectively. hio_dataset_open and hio_dataset_close now
 only take a hio_dataset_t handle. After a dataset has been allocated using
 hio_dataset_alloc it can be configured using hio_config_set_value. A new
 function hio_object_get_name() has been added to get the name associated
-with a context, dataset, or element handle.
+with a context, dataset, or element handle.  The example in the API document
+has not yet been updated.  See tests/test01.c for a working example of the
+modified API.  Numerous minor documentation and test fixes and enhancements.
 
 Release hio.1.2.0.3:
 
