@@ -351,7 +351,7 @@ static int hioi_manifest_parse_file_2_1 (hio_dataset_t dataset, json_object *fil
 
   rc = hioi_manifest_get_string (file_object, HIO_MANIFEST_PROP_IDENTIFIER, &tmp_string);
   if (HIO_SUCCESS != rc) {
-    hioi_err_push (HIO_ERROR, &dataset->ds_object, "Manifest file missing identifier");
+    hioi_err_push (HIO_ERROR, &dataset->ds_object, "Manifest file entry missing identifier");
     return HIO_ERROR;
   }
 
@@ -416,7 +416,7 @@ static int hioi_manifest_parse_segment_2_1 (hio_element_t element, json_object *
 static int hioi_manifest_parse_segments_2_1 (hio_element_t element, json_object *files, json_object *object, bool merge) {
   int segment_count = json_object_array_length (object);
 
-  for (int i ; i < segment_count ; ++i) {
+  for (int i = 0 ; i < segment_count ; ++i) {
     json_object *segment_object = json_object_array_get_idx (object, i);
     int rc = hioi_manifest_parse_segment_2_1 (element, files, segment_object, merge);
     if (HIO_SUCCESS != rc) {
@@ -458,7 +458,7 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *
 
   if (merge) {
     hioi_list_foreach (tmp_element, dataset->ds_elist, struct hio_element, e_list) {
-      if (!strcmp (tmp_element->e_object.identifier, tmp_string) && rank == element->e_rank) {
+      if (!strcmp (tmp_element->e_object.identifier, tmp_string) && rank == tmp_element->e_rank) {
         element = tmp_element;
         break;
       }
@@ -480,7 +480,7 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *
     return HIO_ERR_BAD_PARAM;
   }
 
-  if (value > element->e_size) {
+  if (dataset->ds_mode == HIO_SET_ELEMENT_UNIQUE || value > element->e_size) {
     element->e_size = value;
   }
 
@@ -507,7 +507,7 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *
 static int hioi_manifest_parse_elements_2_0 (hio_dataset_t dataset, json_object *files, json_object *object, bool merge) {
   int element_count = json_object_array_length (object);
 
-  for (int i ; i < element_count ; ++i) {
+  for (int i = 0 ; i < element_count ; ++i) {
     json_object *element_object = json_object_array_get_idx (object, i);
     int rc = hioi_manifest_parse_element_2_0 (dataset, files, element_object, merge);
     if (HIO_SUCCESS != rc) {
@@ -519,9 +519,11 @@ static int hioi_manifest_parse_elements_2_0 (hio_dataset_t dataset, json_object 
 }
 
 static int hioi_manifest_parse_files_2_1 (hio_dataset_t dataset, json_object *object) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
   int file_count = json_object_array_length (object);
 
-  for (int i ; i < file_count ; ++i) {
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Parsing %d file entries in manifest", file_count);
+  for (int i = 0 ; i < file_count ; ++i) {
     json_object *file_object = json_object_array_get_idx (object, i);
     int rc = hioi_manifest_parse_file_2_1 (dataset, file_object);
     if (HIO_SUCCESS != rc) {
@@ -575,6 +577,22 @@ static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object, 
                     "mismatch in dataset mode. requested: %d, actual: %d", mode,
                     dataset->ds_mode);
       return HIO_ERR_BAD_PARAM;
+    }
+
+    if (HIO_SET_ELEMENT_UNIQUE == mode) {
+      /* verify that the same number of ranks are in use */
+      rc = hioi_manifest_get_number (object, HIO_MANIFEST_KEY_COMM_SIZE, &size);
+      if (HIO_SUCCESS != rc) {
+        hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "manifest missing required %s key",
+                       HIO_MANIFEST_KEY_COMM_SIZE);
+        return HIO_ERR_BAD_PARAM;
+      }
+
+      if (size != context->c_size) {
+        hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size does not match dataset",
+                       HIO_MANIFEST_KEY_COMM_SIZE);
+        return HIO_ERR_BAD_PARAM;
+      }
     }
 
     rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_FILE_MODE, &tmp_string);
