@@ -74,7 +74,7 @@ typedef struct hio_list_t {
 
 
 static inline bool hioi_list_empty (hio_list_t *list) {
-  return list->prev == list->next;
+  return list->next == list;
 }
 
 /* dataset function types */
