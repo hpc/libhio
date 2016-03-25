@@ -50,8 +50,9 @@ HIO_CHECK_JSON
 HIO_CHECK_DATAWARP
 HIO_CHECK_XPMEM
 HIO_CHECK_LUSTRE
+HIO_CHECK_CVERSION
 
-if test x$hio_use_mpi = x0 ; then
+if test $hio_use_mpi = 0 ; then
     AC_MSG_CHECKING([for craypich])
     if test -n "$CRAY_MPICH2_DIR" ; then
         AC_MSG_RESULT([yes])
@@ -62,6 +63,10 @@ if test x$hio_use_mpi = x0 ; then
     else
         AC_MSG_RESULT([no])
     fi
+fi
+
+if test $hio_use_mpi ; then
+   HIO_CHECK_MPI_FEATURES
 fi
 
 # Checks for programs.
