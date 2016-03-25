@@ -3,7 +3,7 @@ HIO NEWS
 
 Last updated 2016-03-25
 
-release hio.1.3.0.0-rc1:
+Release hio.1.3.0.0-rc1:
 
 Updated external interface to allow for configuration of datasets before
 open. Two existing functions have been modified and two new functions have
@@ -17,23 +17,89 @@ with a context, dataset, or element handle.  The example in the API document
 has not yet been updated.  See tests/test01.c for a working example of the
 modified API.  Numerous minor documentation and test fixes and enhancements.
 
-release hio.1.2.0.2:
+
+Release hio.1.2.0.4:
+
+Make hio.h C89 compliant.  Minor build and test updates.
+
+
+Release hio.1.2.0.3:
+
+Minor documentation and test fixes and enhancements.
+
+
+Release hio.1.2.0.2:
 
 Updated statistics reported when HIO_print_statistics is set to report the
 overall (dataset open -> close) read/write speed and instantaneous
 read/write speed. The speed is now only reported by the first rank in the
 context. Removed error messages when 0-byte dataset manifests are
 encountered. Fixed bugs when using datawarp including deleting the wrong
-dataset id after staging a new dataset id. Added new variables to expose the
+dataset ID after staging a new dataset ID. Added new variables to expose the
 RAID level and filesystem type backing a dataset. New manifests are now
 written ending in a newline instead of a NULL character. This does not
-break backwards compatibility with 1.2.x.x releases.
+break backwards compatibility with 1.2.x.x releases.  Added staging test
+run20.  Added Trinity step-by-step build and run procedure to README.  
+Minor build and test improvements.
+
 
 Release hio.1.2.0.1:
 
 Test scripts enhanced with new, larger size options y and z. Multi-test
 script run_combo added.  Added -m <msub_args> option. Also, additional
 minor build and testcase fixes.
+
+
+Release hio.1.2.0.0:
+
+Switched from XML to JSON format for the manifest file.  This means that hio
+datasets created with previous releases cannot be read with this version. We
+don't expect to be this casual about incompatible changes in the future, but
+since at the moment, hio is only being used for development and testing
+activities an exception seems reasonable.
+
+Minor bug fixes, diagnostic, testing and build improvements.
+
+--- End of NEWS ---
+
+
+HIO NEWS
+========
+
+Last updated 2016-03-02
+
+
+Release hio.1.2.0.4:
+
+Make hio.h C89 compliant.  Minor build and test updates.
+
+
+Release hio.1.2.0.3:
+
+Minor documentation and test fixes and enhancements.
+
+
+Release hio.1.2.0.2:
+
+Updated statistics reported when HIO_print_statistics is set to report the
+overall (dataset open -> close) read/write speed and instantaneous
+read/write speed. The speed is now only reported by the first rank in the
+context. Removed error messages when 0-byte dataset manifests are
+encountered. Fixed bugs when using datawarp including deleting the wrong
+dataset ID after staging a new dataset ID. Added new variables to expose the
+RAID level and filesystem type backing a dataset. New manifests are now
+written ending in a newline instead of a NULL character. This does not
+break backwards compatibility with 1.2.x.x releases.  Added staging test
+run20.  Added Trinity step-by-step build and run procedure to README.  
+Minor build and test improvements.
+
+
+Release hio.1.2.0.1:
+
+Test scripts enhanced with new, larger size options y and z. Multi-test
+script run_combo added.  Added -m <msub_args> option. Also, additional
+minor build and testcase fixes.
+
 
 Release hio.1.2.0.0:
 
