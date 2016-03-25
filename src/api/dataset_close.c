@@ -22,6 +22,13 @@ int hio_dataset_close (hio_dataset_t dataset) {
     return HIO_ERR_BAD_PARAM;
   }
 
+  if (dataset->ds_mode & HIO_FLAG_WRITE) {
+    rc = hio_dataset_flush (dataset, HIO_FLUSH_MODE_LOCAL);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+  }
+
   context = hioi_object_context (&dataset->ds_object);
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%llu",
