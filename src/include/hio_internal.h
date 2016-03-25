@@ -283,8 +283,8 @@ hio_request_t hioi_request_alloc (hio_context_t context);
 
 void hioi_request_release (hio_request_t request);
 
-int hioi_element_add_segment (hio_element_t element, int file_index, off_t file_offset, uint64_t app_offset,
-                              int rank, size_t seg_length);
+int hioi_element_add_segment (hio_element_t element, int file_index, uint64_t file_offset, uint64_t app_offset,
+                              size_t seg_length);
 
 int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int rank,
                               off_t *offset, size_t *length);

@@ -395,8 +395,6 @@ struct hio_fs_attr_t {
 typedef struct hio_fs_attr_t hio_fs_attr_t;
 
 typedef struct hio_manifest_file_t {
-  /** list item (e_flist) */
-  hio_list_t f_list;
   /** file name */
   char *f_name;
 } hio_manifest_file_t;
@@ -425,7 +423,11 @@ struct hio_dataset {
   hio_list_t          ds_elist;
 
   /** list of files */
-  hio_list_t          ds_flist;
+  unsigned int        ds_file_count;
+
+  unsigned int        ds_file_size;
+
+  hio_manifest_file_t *ds_flist;
 
   /** dataset file modes */
   hio_dataset_fmode_t ds_fmode;
@@ -475,16 +477,12 @@ struct hio_request {
 };
 
 typedef struct hio_manifest_segment_t {
-  /** list item (e_slist) */
-  hio_list_t seg_list;
-  /** file offset */
-  uint64_t   seg_foffset;
   /** application offset */
   uint64_t   seg_offset;
-  /** application rank (0 for shared) */
-  uint64_t   seg_rank;
   /** length of segment */
   uint64_t   seg_length;
+  /** file offset */
+  uint64_t   seg_foffset;
   /** file index */
   int        seg_file_index;
 } hio_manifest_segment_t;
@@ -499,7 +497,9 @@ struct hio_element {
   hio_list_t        e_list;
 
   /** segment list */
-  hio_list_t        e_slist;
+  size_t            e_scount;
+  size_t            e_ssize;
+  hio_manifest_segment_t *e_sarray;
 
   /** element is currently open */
   int32_t           e_open_count;

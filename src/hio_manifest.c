@@ -39,11 +39,10 @@
 #define HIO_MANIFEST_KEY_MTIME        "hio_mtime"
 #define HIO_MANIFEST_KEY_COMM_SIZE    "hio_comm_size"
 #define HIO_MANIFEST_KEY_STATUS       "hio_status"
-#define HIO_SEGMENT_KEY_FILE_OFFSET   "file_offset"
-#define HIO_SEGMENT_KEY_APP_OFFSET0   "app_offset0"
-#define HIO_SEGMENT_KEY_APP_OFFSET1   "app_offset1"
-#define HIO_SEGMENT_KEY_LENGTH        "length"
-#define HIO_SEGMENT_KEY_FILE_INDEX    "file_index"
+#define HIO_SEGMENT_KEY_FILE_OFFSET   "loff"
+#define HIO_SEGMENT_KEY_APP_OFFSET0   "off"
+#define HIO_SEGMENT_KEY_LENGTH        "len"
+#define HIO_SEGMENT_KEY_FILE_INDEX    "findex"
 
 static void hioi_manifest_set_number (json_object *parent, const char *name, unsigned long value) {
   json_object *new_object = json_object_new_int64 ((int64_t) value);
@@ -211,15 +210,16 @@ static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
 
     json_object_array_add (elements, element_object);
 
-    if (!hioi_list_empty (&element->e_slist)) {
+    if (element->e_scount) {
       json_object *segments_object = hio_manifest_new_array (element_object, "segments");
       if (NULL == segments_object) {
         json_object_put (top);
         return NULL;
       }
 
-      hioi_list_foreach(segment, element->e_slist, hio_manifest_segment_t, seg_list) {
+      for (int i = 0 ; i < element->e_scount ; ++i) {
         json_object *segment_object = json_object_new_object ();
+        hio_manifest_segment_t *segment = element->e_sarray + i;
         if (NULL == segment_object) {
           json_object_put (top);
           return NULL;
@@ -229,8 +229,6 @@ static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
                                   (unsigned long) segment->seg_foffset);
         hioi_manifest_set_number (segment_object, HIO_SEGMENT_KEY_APP_OFFSET0,
                                   (unsigned long) segment->seg_offset);
-        hioi_manifest_set_number (segment_object, HIO_SEGMENT_KEY_APP_OFFSET1,
-                                  (unsigned long) segment->seg_rank);
         hioi_manifest_set_number (segment_object, HIO_SEGMENT_KEY_LENGTH,
                                   (unsigned long) segment->seg_length);
         hioi_manifest_set_number (segment_object, HIO_SEGMENT_KEY_FILE_INDEX,
@@ -240,14 +238,15 @@ static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
     }
   }
 
-  if (!hioi_list_empty (&dataset->ds_flist)) {
+  if (dataset->ds_file_count) {
     json_object *files_object = hio_manifest_new_array (top, "files");
     if (NULL == files_object) {
       json_object_put (top);
       return NULL;
     }
 
-    hioi_list_foreach(file, dataset->ds_flist, hio_manifest_file_t, f_list) {
+    for (int i = 0 ; i < dataset->ds_file_count ; ++i) {
+      hio_manifest_file_t *file = dataset->ds_flist + i;
       json_object *file_object = json_object_new_object ();
       if (NULL == file_object) {
         json_object_put (top);
@@ -360,7 +359,7 @@ static int hioi_manifest_parse_file_2_1 (hio_dataset_t dataset, json_object *fil
 
 
 static int hioi_manifest_parse_segment_2_1 (hio_element_t element, json_object *files, json_object *segment_object, bool merge) {
-  unsigned long file_offset, app_offset0, app_offset1, length, file_index;
+  unsigned long file_offset, app_offset0, length, file_index;
   hio_dataset_t dataset = hioi_element_dataset (element);
   int rc;
 
@@ -370,11 +369,6 @@ static int hioi_manifest_parse_segment_2_1 (hio_element_t element, json_object *
   }
 
   rc = hioi_manifest_get_number (segment_object, HIO_SEGMENT_KEY_APP_OFFSET0, &app_offset0);
-  if (HIO_SUCCESS != rc) {
-    return rc;
-  }
-
-  rc = hioi_manifest_get_number (segment_object, HIO_SEGMENT_KEY_APP_OFFSET1, &app_offset1);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
@@ -410,7 +404,7 @@ static int hioi_manifest_parse_segment_2_1 (hio_element_t element, json_object *
     }
   }
 
-  return hioi_element_add_segment (element, file_index, file_offset, app_offset0, app_offset1, length);
+  return hioi_element_add_segment (element, file_index, file_offset, app_offset0, length);
 }
 
 static int hioi_manifest_parse_segments_2_1 (hio_element_t element, json_object *files, json_object *object, bool merge) {
