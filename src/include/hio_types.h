@@ -298,6 +298,13 @@ struct hio_context {
   char              *c_dw_root;
 #endif
 
+#if HAVE_MPI_COMM_SPLIT_TYPE
+  MPI_Comm           c_shared_comm;
+  int                c_shared_size;
+  int                c_shared_rank;
+  int               *c_shared_ranks;
+#endif
+
   hio_list_t         c_ds_data;
 
   /** size of a dataset object */
