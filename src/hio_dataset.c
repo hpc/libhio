@@ -274,18 +274,20 @@ int hioi_dataset_gather (hio_dataset_t dataset) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "receiving %lu bytes of manifest data from %d", recv_size_right,
                 right);
       MPI_Recv (data, recv_size_right, MPI_CHAR, right, 1002, context->c_comm, MPI_STATUS_IGNORE);
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "merging manifest data from %d", right);
       hioi_manifest_merge_data (dataset, data, recv_size_right);
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "receiving %lu bytes of manifest data from %d", recv_size_left,
               left);
     MPI_Recv (data, recv_size_left, MPI_CHAR, left, 1002, context->c_comm, MPI_STATUS_IGNORE);
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "merging manifest data from %d", left);
     hioi_manifest_merge_data (dataset, data, recv_size_left);
     free (data);
   }
 
   if (parent >= 0) {
-    rc = hioi_manifest_serialize (dataset, &data, &data_size);
+    rc = hioi_manifest_serialize (dataset, &data, &data_size, true);
     if (HIO_SUCCESS != rc) {
       return rc;
     }
@@ -316,7 +318,7 @@ int hioi_dataset_scatter (hio_dataset_t dataset, int rc) {
   }
 
   if (HIO_SUCCESS == rc && 0 == context->c_rank) {
-    rc = hioi_manifest_serialize (dataset, &data, &data_size);
+    rc = hioi_manifest_serialize (dataset, &data, &data_size, true);
   }
 
   ar_data[0] = rc;

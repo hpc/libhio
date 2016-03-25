@@ -75,10 +75,12 @@ AC_CHECK_PROG([HAVE_PDFLATEX], [pdflatex], [yes], [no])
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdlib.h strings.h sys/types.h sys/time.h pthread.h dlfcn.h sys/stat.h sys/param.h \
-                  sys/mount.h sys/vfs.h])
-AC_CHECK_FUNCS([access gettimeofday dlopen dlclose dlsym stat statfs MPI_Win_allocate_shared \
-                MPI_Comm_split_type MPI_Win_flush])
+AC_CHECK_HEADERS_ONCE([strings.h sys/types.h sys/time.h pthread.h dlfcn.h sys/stat.h \
+                       sys/param.h sys/mount.h sys/vfs.h bzlib.h])
+AC_CHECK_FUNCS_ONCE([access gettimeofday dlopen dlclose dlsym stat statfs MPI_Win_allocate_shared \
+                     MPI_Comm_split_type MPI_Win_flush])
+
+AC_CHECK_LIB([bz2],[BZ2_bzBuffToBuffCompress],[],[AC_MSG_ERROR([could not find working zlib])])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL

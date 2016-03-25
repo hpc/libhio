@@ -301,7 +301,7 @@ int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int ra
  * This function serializes the local data associated with the dataset and returns a buffer
  * containing the serialized data.
  */
-int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size);
+int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data);
 
 /**
  * @brief Serialize the manifest in the dataset and save it to the specified file
