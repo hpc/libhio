@@ -1204,7 +1204,10 @@ hio_recommendation_t hio_dataset_should_checkpoint (hio_context_t context, const
  * specified in {object}. {object} must be a context, dataset, or element. The
  * value is expected to be a string representation that matches the variable's
  * type as returned by hio_config_get_info(). Dataset specific values can be
- * set on a context and will apply to all datasets opened in that context.
+ * set on a context and will apply to all datasets opened in that context. If
+ * the specified variable does not apply to the object or can not be used yet
+ * it will be stored on the object and the same string will be returned if
+ * hio_config_get_value() is called before the variable exists.
  */
 hio_return_t hio_config_set_value (hio_object_t object, const char *variable, const char *value);
 

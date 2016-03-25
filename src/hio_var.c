@@ -349,6 +349,8 @@ static int hioi_config_list_kv_push (hio_config_kv_list_t *list, const char *ide
   hio_config_kv_t *kv = NULL;
   void *tmp;
 
+  /* check if the key already exists. if one is found the corresponding value
+   * will be freed and overwritten with the new value */
   for (int i = 0 ; i < list->kv_list_count ; ++i) {
     kv = list->kv_list + i;
 
@@ -361,6 +363,7 @@ static int hioi_config_list_kv_push (hio_config_kv_list_t *list, const char *ide
   }
 
   if (NULL == kv) {
+    /* this is a new key */
     if (list->kv_list_count == list->kv_list_size) {
       int new_size = list->kv_list_size + 16;
 
@@ -395,15 +398,24 @@ static int hioi_config_list_kv_push (hio_config_kv_list_t *list, const char *ide
 
   kv->value[value_length] = '\0';
 
-  if (identifier) {
-    kv->object_identifier = strdup (identifier);
-  } else {
-    kv->object_identifier = NULL;
-  }
-
+  kv->object_identifier = identifier ? strdup (identifier) : NULL;
   kv->object_type = type;
 
   return HIO_SUCCESS;
+}
+
+static int hioi_config_list_kv_lookup (hio_config_kv_list_t *list, const char *key, char **value) {
+  for (int i = 0 ; i < list->kv_list_count ; ++i) {
+    hio_config_kv_t *kv = list->kv_list + i;
+
+    if (!strcmp (kv->key, key)) {
+      *value = strdup (kv->value);
+
+      return *value ? HIO_SUCCESS : HIO_ERR_OUT_OF_RESOURCE;
+    }
+  }
+
+  return HIO_ERR_NOT_FOUND;
 }
 
 int hioi_config_parse (hio_context_t context, const char *config_file, const char *config_file_prefix) {
@@ -522,6 +534,7 @@ void hioi_var_fini (hio_object_t object) {
 }
 
 int hio_config_set_value (hio_object_t object, const char *variable, const char *value) {
+  int rc = HIO_SUCCESS;
   hio_var_t *var;
   int config_index;
 
@@ -529,84 +542,111 @@ int hio_config_set_value (hio_object_t object, const char *variable, const char 
     return HIO_ERR_BAD_PARAM;
   }
 
-  hioi_config_list_kv_push (&object->config_set, hioi_object_identifier (object),
-                            object->type, variable, value);
+  hioi_object_lock (object);
 
-  config_index = hioi_var_lookup (&object->configuration, variable);
-  if (0 > config_index) {
-    return HIO_SUCCESS;
-  }
+  do {
+    /* go ahead and push this value into the object's key-value store. if the
+     * configuration parameter has not yet been registered it will be read from
+     * this key-valye store after the file store is checked. */
+    hioi_config_list_kv_push (&object->config_set, hioi_object_identifier (object),
+                              object->type, variable, value);
 
-  var = object->configuration.vars + config_index;
+    config_index = hioi_var_lookup (&object->configuration, variable);
+    if (0 > config_index) {
+      /* variable does not exist (yet). nothing more to do */
+      break;
+    }
 
-  if (HIO_VAR_FLAG_READONLY & var->var_flags) {
-    hioi_err_push (HIO_ERR_PERM, object, "could not set read-only parameter: %s", variable);
-    return HIO_ERR_PERM;
-  }
+    var = object->configuration.vars + config_index;
 
-  return hioi_config_set_value_internal (hioi_object_context(object), var, value);
+    if (HIO_VAR_FLAG_READONLY & var->var_flags) {
+      hioi_err_push (HIO_ERR_PERM, object, "could not set read-only parameter: %s", variable);
+      rc = HIO_ERR_PERM;
+      break;
+    }
+
+    rc = hioi_config_set_value_internal (hioi_object_context(object), var, value);
+  } while (0);
+
+  hioi_object_unlock (object);
+
+  return rc;
 }
 
 int hio_config_get_value (hio_object_t object, char *variable, char **value) {
-  hio_var_t *var;
   int config_index, rc = HIO_SUCCESS;
+  hio_var_t *var;
 
   if (NULL == object || NULL == variable || NULL == value) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  config_index = hioi_var_lookup (&object->configuration, variable);
-  if (0 > config_index) {
-    return HIO_ERR_NOT_FOUND;
-  }
+  hioi_object_lock (object);
 
-  var = object->configuration.vars + config_index;
+  do {
+    /* try looking up the variable */
+    config_index = hioi_var_lookup (&object->configuration, variable);
+    if (0 > config_index) {
+      /* variable does not exist (yet). look up the the key-value store */
+      rc = hioi_config_list_kv_lookup (&object->config_set, variable, value);
+      break;
+    }
 
-  if (var->var_enum) {
-    for (int i = 0 ; i < var->var_enum->count ; ++i) {
-      if (var->var_storage->int32val == var->var_enum->values[i].value) {
-        *value = strdup (var->var_enum->values[i].string_value);
+    var = object->configuration.vars + config_index;
 
-        return *value ? HIO_SUCCESS : HIO_ERR_OUT_OF_RESOURCE;
+    if (var->var_enum) {
+      /* look up the value in the associated enumerator */
+      for (int i = 0 ; i < var->var_enum->count ; ++i) {
+        if (var->var_storage->int32val == var->var_enum->values[i].value) {
+          *value = strdup (var->var_enum->values[i].string_value);
+          if (NULL == *value) {
+            rc = HIO_ERR_OUT_OF_RESOURCE;
+          }
+
+          break;
+        }
       }
+
+      break;
     }
-  }
 
-  switch (var->var_type) {
-  case HIO_CONFIG_TYPE_BOOL:
-    rc = asprintf (value, "%s", var->var_storage->boolval ? "true" : "false");
-    break;
-  case HIO_CONFIG_TYPE_STRING:
-    *value = strdup (var->var_storage->strval);
-    if (NULL == *value) {
-      rc = -1;
+    /* create string representation of the value */
+    switch (var->var_type) {
+    case HIO_CONFIG_TYPE_BOOL:
+      rc = asprintf (value, "%s", var->var_storage->boolval ? "true" : "false");
+      break;
+    case HIO_CONFIG_TYPE_STRING:
+      *value = strdup (var->var_storage->strval);
+      if (NULL == *value) {
+        rc = -1;
+      }
+      break;
+    case HIO_CONFIG_TYPE_INT32:
+      rc = asprintf (value, "%i", var->var_storage->int32val);
+      break;
+    case HIO_CONFIG_TYPE_UINT32:
+      rc = asprintf (value, "%u", var->var_storage->uint32val);
+      break;
+    case HIO_CONFIG_TYPE_INT64:
+      rc = asprintf (value, "%lli", var->var_storage->int64val);
+      break;
+    case HIO_CONFIG_TYPE_UINT64:
+      rc = asprintf (value, "%llu", var->var_storage->uint64val);
+      break;
+    case HIO_CONFIG_TYPE_FLOAT:
+      rc = asprintf (value, "%f", var->var_storage->floatval);
+      break;
+    case HIO_CONFIG_TYPE_DOUBLE:
+      rc = asprintf (value, "%lf", var->var_storage->doubleval);
+      break;
     }
-    break;
-  case HIO_CONFIG_TYPE_INT32:
-    rc = asprintf (value, "%i", var->var_storage->int32val);
-    break;
-  case HIO_CONFIG_TYPE_UINT32:
-    rc = asprintf (value, "%u", var->var_storage->uint32val);
-    break;
-  case HIO_CONFIG_TYPE_INT64:
-    rc = asprintf (value, "%lli", var->var_storage->int64val);
-    break;
-  case HIO_CONFIG_TYPE_UINT64:
-    rc = asprintf (value, "%llu", var->var_storage->uint64val);
-    break;
-  case HIO_CONFIG_TYPE_FLOAT:
-    rc = asprintf (value, "%f", var->var_storage->floatval);
-    break;
-  case HIO_CONFIG_TYPE_DOUBLE:
-    rc = asprintf (value, "%lf", var->var_storage->doubleval);
-    break;
-  }
 
-  if (rc < 0) {
-    return HIO_ERROR;
-  }
+    rc = (rc < 0) ? HIO_ERROR : HIO_SUCCESS;
+  } while (0);
 
-  return HIO_SUCCESS;
+  hioi_object_unlock (object);
+
+  return rc;
 }
 
 int hio_config_get_count (hio_object_t object, int *count) {
