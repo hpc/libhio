@@ -18,6 +18,7 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
+#include <bzlib.h>
 
 #include <json.h>
 
@@ -262,10 +263,12 @@ static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
   return top;
 }
 
-int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size) {
+int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data ) {
   json_object *json_object;
   const char *serialized;
-  int size;
+  unsigned int serialized_len;
+  size_t size;
+  int rc;
 
   json_object = hio_manifest_generate_2_0 (dataset);
   if (NULL == json_object) {
@@ -273,14 +276,39 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
   }
 
   serialized = json_object_to_json_string (json_object);
-  *data_size = strlen (serialized) + 1;
+  serialized_len = strlen (serialized) + 1;
+  if (compress_data) {
+    unsigned int compressed_size = serialized_len;
+    char *tmp;
 
-  *data = calloc (*data_size, 1);
-  if (NULL == *data) {
-    return HIO_ERR_OUT_OF_RESOURCE;
+    tmp = malloc (serialized_len);
+    if (NULL == tmp) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    rc = BZ2_bzBuffToBuffCompress (tmp, &compressed_size, (char *) serialized, serialized_len, 3, 0, 0);
+    if (BZ_OK != rc) {
+      free (tmp);
+      return HIO_ERROR;
+    }
+
+    *data = realloc (tmp, compressed_size);
+    if (NULL == *data) {
+      free (tmp);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    *data_size = compressed_size;
+  } else {
+    *data_size = serialized_len;
+
+    *data = calloc (*data_size, 1);
+    if (NULL == *data) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    memcpy (*data, serialized, *data_size - 1);
   }
-
-  memcpy (*data, serialized, *data_size - 1);
 
   /* free the json object */
   json_object_put (json_object);
@@ -289,24 +317,30 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
 }
 
 int hioi_manifest_save (hio_dataset_t dataset, const char *path) {
+  const char *extension = strrchr (path, '.') + 1;
   unsigned char *data;
   size_t data_size;
-  int rc, fd;
+  int rc;
 
-  rc = hioi_manifest_serialize (dataset, &data, &data_size);
+  if (0 == strcmp (extension, "bz2")) {
+    rc = hioi_manifest_serialize (dataset, &data, &data_size, true);
+  } else {
+    rc = hioi_manifest_serialize (dataset, &data, &data_size, false);
+  }
+
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
-  fd = open (path, O_WRONLY | O_CREAT, 0644);
+  int fd = open (path, O_WRONLY | O_CREAT, 0644);
   if (0 > fd) {
     return hioi_err_errno (errno);
   }
 
   errno = 0;
-  data[data_size-1] = '\n';
   write (fd, data, data_size);
   close (fd);
+  free (data);
 
   return hioi_err_errno (errno);
 }
@@ -683,23 +717,97 @@ static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_he
   return HIO_SUCCESS;
 }
 
-int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data, size_t data_size) {
+static int hioi_manifest_decompress (hio_dataset_t dataset, const unsigned char **data, size_t data_size) {
+  const size_t increment = 8192;
+  char *uncompressed, *tmp;
   json_object *object;
+  bz_stream strm;
+  size_t size;
+  int rc;
+
+  uncompressed = malloc (increment);
+  if (NULL == uncompressed) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  strm.bzalloc = NULL;
+  strm.bzfree = NULL;
+  strm.opaque = NULL;
+  strm.next_in = (char *) *data;
+  strm.avail_in = data_size;
+  strm.next_out = uncompressed;
+  strm.avail_out = size = increment;
+
+  BZ2_bzDecompressInit (&strm, 0, 0);
+
+  do {
+    rc = BZ2_bzDecompress (&strm);
+    if (BZ_OK != rc) {
+      BZ2_bzDecompressEnd (&strm);
+      if (BZ_STREAM_END == rc) {
+        break;
+      }
+      free (uncompressed);
+      return HIO_ERROR;
+    }
+
+    tmp = realloc (uncompressed, size + increment);
+    if (NULL == tmp) {
+      BZ2_bzDecompressEnd (&strm);
+      free (uncompressed);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    uncompressed = tmp;
+
+    strm.next_out = uncompressed + size;
+    strm.avail_out = increment;
+    size += increment;
+  } while (1);
+
+  *data = (unsigned char *) uncompressed;
+  return HIO_SUCCESS;
+}
+
+int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data, size_t data_size) {
+  bool free_data = false;
+  json_object *object;
+  int rc;
+
+  if (data_size < 2) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if ('B' == data[0] && 'Z' == data[1]) {
+    /* gz compressed */
+    rc = hioi_manifest_decompress (dataset, &data, data_size);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+
+    free_data = true;
+  }
 
   object = json_tokener_parse ((char *) data);
   if (NULL == object) {
     return HIO_ERROR;
   }
 
-  return hioi_manifest_parse_2_0 (dataset, object, false);
+  rc = hioi_manifest_parse_2_0 (dataset, object, false);
+  if (free_data) {
+    free ((char *) data);
+  }
+
+  return rc;
 }
 
-static int hioi_manifest_read (const char *path, json_object **object_out)
+static int hioi_manifest_read (const char *path, json_object **object_out, char **buffer_out)
 {
+  const char *extension = strrchr (path, '.') + 1;
+  char *buffer = NULL, *tmp;
   json_object *object;
-  char *buffer;
-  size_t size;
   FILE *fh;
+  int rc;
 
   if (access (path, F_OK)) {
     return HIO_ERR_NOT_FOUND;
@@ -714,31 +822,54 @@ static int hioi_manifest_read (const char *path, json_object **object_out)
     return hioi_err_errno (errno);
   }
 
-  (void)fseek (fh, 0, SEEK_END);
+  if (0 == strcmp (extension, "bz2")) {
+    BZFILE *bzfh = BZ2_bzReadOpen (&rc, fh, 0, 0, NULL, 0);
+    if (BZ_OK != rc) {
+      fclose (fh);
+      return hioi_err_errno (errno);
+    }
 
-  size = ftell (fh);
-  if (0 == size) {
+    for (size_t offset = 0, size = 8192 ; ; offset = size, size += 8192) {
+      tmp = realloc (buffer, size);
+      if (NULL == tmp) {
+        free (buffer);
+        BZ2_bzReadClose (&rc, bzfh);
+        fclose (fh);
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
+      buffer = tmp;
+
+      int bytes_read = BZ2_bzRead (&rc, bzfh, (void *)((intptr_t) buffer + offset), size - offset);
+      if (bytes_read < size - offset) {
+        int close_rc;
+        BZ2_bzReadClose (&close_rc, bzfh);
+        fclose (fh);
+        if (BZ_STREAM_END != rc) {
+          free (buffer);
+          return hioi_err_errno (errno);
+        }
+        break;
+      }
+    }
+  } else {
+    size_t size = fseek (fh, 0, SEEK_END);
+
+    buffer = malloc (size);
+    if (NULL == buffer) {
+      fclose (fh);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    fread (buffer, size, 1, fh);
     fclose (fh);
-    return HIO_ERR_NOT_AVAILABLE;
   }
-
-  buffer = malloc (size);
-  if (NULL == buffer) {
-    fclose (fh);
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
-  fseek (fh, 0, SEEK_SET);
-
-  fread (buffer, 1, size, fh);
-  fclose (fh);
 
   object = json_tokener_parse (buffer);
-  free (buffer);
   if (NULL == object) {
     return HIO_ERROR;
   }
 
+  *buffer_out = buffer;
   *object_out = object;
 
   return HIO_SUCCESS;
@@ -747,34 +878,54 @@ static int hioi_manifest_read (const char *path, json_object **object_out)
 int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   json_object *object;
+  char *buffer;
   int rc;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%lu from %s",
 	    dataset->ds_object.identifier, dataset->ds_id, path);
 
-  rc = hioi_manifest_read (path, &object);
+  rc = hioi_manifest_read (path, &object, &buffer);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
   rc = hioi_manifest_parse_2_0 (dataset, object, false);
+  free (buffer);
 
   return rc;
 }
 
 int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size) {
-  json_object *object;
+  json_object *object, *merged;
+  bool free_data = false;
+  int rc;
+
+  if ('B' == data[0] && 'Z' == data[1]) {
+    /* gz compressed */
+    rc = hioi_manifest_decompress (dataset, &data, data_size);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+
+    free_data = true;
+  }
 
   object = json_tokener_parse ((char *) data);
   if (NULL == object) {
     return HIO_ERROR;
   }
 
-  return hioi_manifest_parse_2_0 (dataset, object, true);
+  rc = hioi_manifest_parse_2_0 (dataset, object, true);
+  if (free_data) {
+    free ((char *) data);
+  }
+
+  return rc;
 }
 
 int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path) {
   json_object *object;
+  char *buffer;
   int rc;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "loading json dataset manifest header from %s", path);
@@ -787,10 +938,13 @@ int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *head
     return HIO_ERR_PERM;
   }
 
-  rc = hioi_manifest_read (path, &object);
+  rc = hioi_manifest_read (path, &object, &buffer);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
-  return hioi_manifest_parse_header_2_0 (context, header, object);
+  rc = hioi_manifest_parse_header_2_0 (context, header, object);
+  free (buffer);
+
+  return rc;
 }

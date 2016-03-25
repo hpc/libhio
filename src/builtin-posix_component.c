@@ -125,16 +125,25 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
 
       char *manifest_path;
 
-      rc = asprintf (&manifest_path, "%s/%s/manifest.json", path, dp->d_name);
+      rc = asprintf (&manifest_path, "%s/%s/manifest.json.bz2", path, dp->d_name);
       assert (0 <= rc);
 
       rc = hioi_manifest_read_header (context, headers[0] + set_id_index, manifest_path);
       if (HIO_SUCCESS == rc) {
         ++set_id_index;
       } else {
-        /* skip dataset */
-        hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not read manifest at path: %s. rc: %d",
-                  manifest_path, rc);
+        free (manifest_path);
+        rc = asprintf (&manifest_path, "%s/%s/manifest.json", path, dp->d_name);
+        assert (0 <= rc);
+
+        rc = hioi_manifest_read_header (context, headers[0] + set_id_index, manifest_path);
+        if (HIO_SUCCESS == rc) {
+          ++set_id_index;
+        } else {
+          /* skip dataset */
+          hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not read manifest at path: %s. rc: %d",
+                    manifest_path, rc);
+        }
       }
 
       free (manifest_path);
@@ -268,13 +277,18 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
 
     if (!(dataset->ds_flags & HIO_FLAG_CREAT)) {
       /* load manifest. the manifest data will be shared with other processes in hioi_dataset_scatter */
-      rc = asprintf (&path, "%s/manifest.json", posix_dataset->base_path);
+      rc = asprintf (&path, "%s/manifest.json.bz2", posix_dataset->base_path);
       assert (0 < rc);
 
       if (access (path, F_OK)) {
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: could not find top-level manifest");
-        rc = HIO_ERR_NOT_FOUND;
-        break;
+        free (posix_dataset->base_path);
+        rc = asprintf (&path, "%s/manifest.json", posix_dataset->base_path);
+        assert (0 < rc);
+        if (access (path, F_OK)) {
+          hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: could not find top-level manifest");
+          rc = HIO_ERR_NOT_FOUND;
+          break;
+        }
       }
 
       rc = hioi_manifest_load (dataset, path);
@@ -342,7 +356,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
     if (0 == context->c_rank) {
       char *path;
 
-      rc = asprintf (&path, "%s/manifest.json", posix_dataset->base_path);
+      rc = asprintf (&path, "%s/manifest.json.bz2", posix_dataset->base_path);
       if (0 < rc) {
         rc = hioi_manifest_save (dataset, path);
         free (path);
