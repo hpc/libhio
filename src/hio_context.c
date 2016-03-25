@@ -405,12 +405,6 @@ int hio_fini (hio_context_t *context) {
     return HIO_SUCCESS;
   }
 
-  if ((*context)->c_print_stats) {
-    printf ("Context %s statistics:\n", (*context)->c_object.identifier);
-    printf ("  Bytes read: %" PRIu64 "\n", (*context)->c_bread);
-    printf ("  Bytes written: %" PRIu64 "\n", (*context)->c_bwritten);
-  }
-
   hioi_log (*context, HIO_VERBOSE_DEBUG_LOW, "Destroying context with identifier %s",
             (*context)->c_object.identifier);
 
