@@ -91,6 +91,12 @@ static void hioi_dataset_release (hio_object_t object) {
     hioi_list_remove(element, e_list);
     hioi_object_release (&element->e_object);
   }
+
+  for (int i = 0 ; i < dataset->ds_file_count ; ++i) {
+    free (dataset->ds_flist[i].f_name);
+  }
+
+  free (dataset->ds_flist);
 }
 
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
@@ -155,7 +161,6 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
 
   hioi_list_init (new_dataset->ds_elist);
-  hioi_list_init (new_dataset->ds_flist);
 
   return new_dataset;
 }
@@ -165,26 +170,32 @@ void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element) {
 }
 
 int hioi_dataset_add_file (hio_dataset_t dataset, const char *filename) {
-  hio_manifest_file_t *file;
   int file_index = 0;
+  void *tmp;
 
-  hioi_list_foreach (file, dataset->ds_flist, hio_manifest_file_t, f_list) {
-    if (0 == strcmp (filename, file->f_name)) {
+  for (file_index = 0 ; file_index < dataset->ds_file_count ; ++file_index) {
+    if (0 == strcmp (filename, dataset->ds_flist[file_index].f_name)) {
       return file_index;
     }
-    ++file_index;
   }
 
-  file = calloc (1, sizeof (*file));
-  if (NULL == file) {
+  if (file_index >= dataset->ds_file_size) {
+    dataset->ds_file_size += 16;
+
+    tmp = realloc (dataset->ds_flist, sizeof (dataset->ds_flist[0]) * dataset->ds_file_size);
+    if (NULL == tmp) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    dataset->ds_flist = (hio_manifest_file_t *) tmp;
+  }
+
+  dataset->ds_flist[file_index].f_name = strdup (filename);
+  if (NULL == dataset->ds_flist[file_index].f_name) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  file->f_name = strdup (filename);
-  if (NULL == file->f_name) {
-    free (file);
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
+  ++dataset->ds_file_count;
 
   return file_index;
 }
