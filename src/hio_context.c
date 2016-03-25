@@ -52,6 +52,14 @@ static void hioi_context_release (hio_object_t object) {
   free (context->c_dw_root);
 #endif
 
+#if HAVE_MPI_COMM_SPLIT_TYPE
+  if (MPI_COMM_NULL != context->c_shared_comm) {
+    MPI_Comm_free (&context->c_shared_comm);
+  }
+
+  free (context->c_shared_ranks);
+#endif
+
   /* finalize object variables */
   hioi_var_fini (&context->c_object);
 
@@ -90,6 +98,10 @@ static hio_context_t hio_context_alloc (const char *identifier) {
   new_context->c_print_stats = false;
   new_context->c_rank = 0;
   new_context->c_size = 1;
+
+#if HAVE_MPI_COMM_SPLIT_TYPE
+  new_context->c_shared_comm = MPI_COMM_NULL;
+#endif
 
   hioi_config_list_init (&new_context->c_fconfig);
 
@@ -287,8 +299,48 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
 }
 
 #if HIO_USE_MPI
-int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config_file, const char *config_file_prefix,
-		  const char *context_name) {
+#if HAVE_MPI_COMM_SPLIT_TYPE
+static int hioi_context_init_shared (hio_context_t context) {
+  int shared_rank, shared_size;
+  MPI_Comm shared_comm;
+  int rc;
+
+  rc = MPI_Comm_split_type (context->c_comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
+                            &shared_comm);
+  if (MPI_SUCCESS != rc) {
+    hioi_err_push_mpi (rc, &context->c_object, "Error splitting MPI communicator");
+    return hioi_err_mpi (rc);
+  }
+
+  MPI_Comm_size (shared_comm, &shared_size);
+  MPI_Comm_rank (shared_comm, &shared_rank);
+
+  if (1 == shared_size) {
+    /* no other ranks on this node */
+    MPI_Comm_free (&shared_comm);
+    return HIO_SUCCESS;
+  }
+
+  if (0 == shared_rank) {
+    context->c_shared_ranks = calloc (shared_size, sizeof (int));
+    if (NULL == context->c_shared_ranks) {
+      MPI_Comm_free (&shared_comm);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+  }
+  MPI_Gather (&context->c_rank, 1, MPI_INT, context->c_shared_ranks, 1, MPI_INT,
+              0, shared_comm);
+
+  context->c_shared_comm = shared_comm;
+  context->c_shared_rank = shared_rank;
+  context->c_shared_size = shared_size;
+
+  return HIO_SUCCESS;
+}
+#endif /* HAVE_MPI_COMM_SPLIT_TYPE */
+
+int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config_file,
+                  const char *config_file_prefix, const char *context_name) {
   hio_context_t context;
   MPI_Comm comm_in;
   int rc, flag = 0;
@@ -330,6 +382,14 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
     hioi_object_release (&context->c_object);
     return rc;
   }
+
+#if HAVE_MPI_COMM_SPLIT_TYPE
+  rc = hioi_context_init_shared (context);
+  if (HIO_SUCCESS != rc) {
+    hioi_object_release (&context->c_object);
+    return rc;
+  }
+#endif
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Created new mpi context with identifier %s",
             context_name);
