@@ -19,6 +19,7 @@ synexit() {
   echo "    -a                Autogen (local only) disables -i"
   echo "    -i                Incremental transfer and build"
   echo "    -t build_tree     Local directory containing hio build tree"
+  echo "                      Default is $tree"
   echo "    -n tarname        Dist tarball base name and dir name"
   echo "                      (default $tarname)"
   echo "    -r rmt_dir        Remote directory name.  Default is env var"
@@ -139,8 +140,9 @@ msg "buildall $args: Starting at `date`"
 #----------------------------------------------------------------------------
 autogen=0
 incremental=0
-tree=$PWD
+tree=$(dirname ${BASH_SOURCE[0]})   # -t defaults to location of this script
 tarname="libhio-1.3"
+dir_suffix="13"        # Directory suffix - used to force version specific name on remote directory
 
 goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel tt-gnu bu-gnu bu-cray"
 otherver="ct-cray ct-pgi ga-gnu ga-cray ga-intel ga-pgi tt-intel tt-pgi tt-cray"
@@ -179,38 +181,39 @@ rm -fR $tdir
 # Run builds
 #----------------------------------------------------------------------------
 for v in $vers; do
+  vs=$v$dir_suffix
   case $v in
-    local    ) build_l -n $v;;
+    local    ) build_l -n $vs;;
 
-    mu-gnu   ) build_r none    mu-fey     "$rmt_dir/$v" $tarname -n $v  -l gcc   -l openmpi ;;
-    mu-intel ) build_r none    mu-fey     "$rmt_dir/$v" $tarname -n $v  -l intel -l openmpi ;;
-    mu-pgi   ) build_r none    mu-fey     "$rmt_dir/$v" $tarname -n $v  -l pgi   -l openmpi ;;
+    mu-gnu   ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    mu-intel ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+    mu-pgi   ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l pgi   -l openmpi ;;
 
-    ct-gnu   ) build_r none    ct-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-pgi,PrgEnv-gnu   ;;
-    ct-intel ) build_r none    ct-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-pgi,PrgEnv-intel ;;
-    ct-cray  ) build_r none    ct-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-pgi,PrgEnv-cray  ;;
-    ct-pgi   ) build_r none    ct-fe1     "$rmt_dir/$v" $tarname -n $v                             ;;
+    ct-gnu   ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-gnu   ;;
+    ct-intel ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-intel ;;
+    ct-cray  ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-cray  ;;
+    ct-pgi   ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs                             ;;
 
-    ga-gnu   ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    ga-cray  ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-cray ;;
-    ga-intel ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v                              ;;
-    ga-pgi   ) build_r vl-gate ga-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-pgi  ;;
+    ga-gnu   ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    ga-cray  ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
+    ga-intel ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    ga-pgi   ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
-    tt-gnu   ) build_r none    tt-fey     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tt-cray  ) build_r none    tt-fey     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-cray ;;
-    tt-intel ) build_r none    tt-fey     "$rmt_dir/$v" $tarname -n $v                              ;;
-    tt-pgi   ) build_r none    tt-fey     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-pgi  ;;
+    tt-gnu   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tt-cray  ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
+    tt-intel ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    tt-pgi   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
-    tr-gnu   ) build_r wtrw    tr-fe1     "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tr-intel ) build_r wtrw    tr-fe1     "$rmt_dir/$v" $tarname -n $v                              ;;
+    tr-gnu   ) build_r wtrw    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tr-intel ) build_r wtrw    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
 
-    tc-gnu   ) build_r none    tr-compile "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tc-intel ) build_r none    tr-compile "$rmt_dir/$v" $tarname -n $v                              ;;
+    tc-gnu   ) build_r none    tr-compile "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tc-intel ) build_r none    tr-compile "$rmt_dir/$vs" $tarname -n $vs                              ;;
 
-    bu-gnu   ) build_r vl-gate bu-fe      "$rmt_dir/$v" $tarname -n $v  -s PrgEnv-cray,PrgEnv-gnu  -l craype-sandybridge ;;
-    bu-cray  ) build_r vl-gate bu-fe      "$rmt_dir/$v" $tarname -n $v                             -l craype-sandybridge ;;
+    bu-gnu   ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-cray,PrgEnv-gnu  -l craype-sandybridge ;;
+    bu-cray  ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs                             -l craype-sandybridge ;;
 
-    *        ) msg "Error: version \"$v\" not recognized"     
+    *        ) msg "Error: version \"$v\" not recognized"
   esac
 done
 

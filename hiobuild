@@ -20,7 +20,7 @@ synexit() {
   echo "    -c                  Run configure (implies -f)"
   echo "    -f                  Full build (make clean)"  
   echo "    -x                  Build extras (docs and dist)"
-  echo "    -d dir              Build directory (default \$PWD)"
+  echo "    -d dir              Build directory (default $dir)"
   echo "    -n name             Build name for results messages"
   echo "    -l module           Issue module load"
   echo "    -s oldmod,newmod    Issue module swap"
@@ -67,7 +67,7 @@ autogen=0
 configure=0
 full=0
 extra=0
-dir=$PWD
+dir=$(dirname ${BASH_SOURCE[0]})   # -d defaults to location of this script
 name=""
 while getopts "hacfxd:l:s:n:" optname; do
   case $optname in
