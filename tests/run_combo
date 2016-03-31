@@ -7,7 +7,7 @@ synexit() {
   echo "run_combo - run tests with multiple parameter combinations"
   echo ""
   echo "Iterates through all combinations of specified tests and parameters"
-  echo "(-t, -s, -r, -n, -p are iterated, other options are not.)"
+  echo "(-t, -s, -r, -n, -p, -x are iterated, other options are not.)"
   echo "  Syntax:"
   echo "    $0"
   echo "        [-t <test> [<test>...] ]"
@@ -19,6 +19,7 @@ synexit() {
   echo "        [-d <debug_level>]"
   echo "        [-b] [-c] [-a]"
   echo "        [-w <dw_alloc>]"
+  echo "        [-x <dw_alloc_pct> [<dw_alloc_pct>...] ]"
   echo "        [-m <msub args>]"
   echo ""
   echo "  Options:"   
@@ -32,6 +33,7 @@ synexit() {
   echo "    -c              Chain jobs - make this job dependant on previous job"
   echo "    -a              Clean dirs After running" 
   echo "    -w <dw_alloc>   DataWarp allocation policy 0=never, 1=static, 2=Moab"
+  echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
   echo "    -m              Additional arguments for msub (use with -b)"
   echo ""
   echo "Example: run_combo -t ./run02 ./run03 -r 2 4 -s x"
@@ -70,9 +72,8 @@ is_not_flag() {
 host=`hostname -s`
 batch=0
 chain=0
-nodw=0
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpv:d:bcaw:m:" optname; do
+while getopts "htsrnpxv:d:bcaw:m:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -111,12 +112,19 @@ while getopts "htsrnpv:d:bcaw:m:" optname; do
           eval "aaa=\${$((OPTIND))}"
         done
         ;;
+    x ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          pct+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
     v ) verbose_lev=$OPTARG;;
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
     c ) chain=1;;
     a ) after=1;;
-    w ) warpalloc=$OPTARG;;
+    w ) dw_alloc_mode=$OPTARG;;
     m ) msub_arg=$OPTARG;;
    \? ) synexit "Error: invalid option";;
   esac
@@ -127,12 +135,14 @@ if [[ -z $size ]]; then size+=(" ");fi
 if [[ -z $ranks ]]; then ranks+=(" ");fi
 if [[ -z $nodes ]]; then nodes+=(" ");fi
 if [[ -z $ppn ]]; then ppn+=(" ");fi
+if [[ -z $pct ]]; then pct+=(" ");fi
 
 #msg "test:  '${test[@]}'"
 #msg "size:  '${size[@]}'"
 #msg "ranks: '${ranks[@]}'"
 #msg "nodes: '${nodes[@]}'"
 #msg "ppn:    '${ppn[@]}'"
+#msg "pct:    '${pct[@]}'"
 
 shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
@@ -144,23 +154,25 @@ for r in "${ranks[@]}"; do
   for n in "${nodes[@]}"; do
     for p in "${ppn[@]}"; do
       for s in "${size[@]}"; do
-        for t in "${test[@]}"; do
-          #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
-          c=$t
-          if [[ $s != " " ]]; then c="$c -s $s"; fi
-          if [[ $r != " " ]]; then c="$c -r $r"; fi
-          if [[ $n != " " ]]; then c="$c -n $n"; fi
-          if [[ $p != " " ]]; then c="$c -p $p"; fi
-          if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
-          if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
-          if [[ $batch -eq 1 ]];    then c="$c -b"; fi
-          if [[ $chain -eq 1 ]];    then c="$c -c"; fi
-          if [[ $nodw -eq 1 ]];     then c="$c -z"; fi
-          if [[ $after -eq 1 ]];    then c="$c -a"; fi
-          if [[ -n $warpalloc ]];   then c="$c -w $warpalloc"; fi
-          if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi
-          
-          cmd $c
+        for a in "${pct[@]}"; do
+          for t in "${test[@]}"; do
+            #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
+            c=$t
+            if [[ $s != " " ]]; then c="$c -s $s"; fi
+            if [[ $r != " " ]]; then c="$c -r $r"; fi
+            if [[ $n != " " ]]; then c="$c -n $n"; fi
+            if [[ $p != " " ]]; then c="$c -p $p"; fi
+            if [[ $a != " " ]]; then c="$c -x $a"; fi
+            if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
+            if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
+            if [[ $batch -eq 1 ]];    then c="$c -b"; fi
+            if [[ $chain -eq 1 ]];    then c="$c -c"; fi
+            if [[ $after -eq 1 ]];    then c="$c -a"; fi
+            if [[ -n $dw_alloc_mode ]];   then c="$c -w $dw_alloc_mode"; fi
+            if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi
+
+            cmd $c
+          done
         done
       done
     done

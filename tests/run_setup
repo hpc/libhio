@@ -3,7 +3,7 @@
 # Source this file from each test script.
 #
 # Env vars used for input:
-#   HIO_BUILD - location of HIO build tree, defaults to $PWD/..
+#   BUILD_TREE - location of HIO build tree, defaults to $PWD/..
 #
 # BASH variables set that can be used by test script:
 #        root - data root for test, created or emptied
@@ -35,29 +35,31 @@ synexit() {
   echo "        [-d <debug_level>]"
   echo "        [-b] [-c] [-a]"
   echo "        [-w <dw_alloc>]"
+  echo "        [-x <dw_alloc_pct>]"
   echo "        [-m <msub args>]"
   echo ""
-  echo "  Options:"   
-  echo "    -s <size>       Per rank run size t|s|m|l|x|y|z  (default s)"
+  echo "  Options:"
+  echo "    -s <size>         Per rank run size t|s|m|l|x|y|z  (default s)"
   echo "       <totsz>[,<blksz>][,<nseg>]  where:"
-  echo "                    totsz - total size per rank in MiB"
-  echo "                    blksz - size of each write/read in KiB"
-  echo "                    nseg - number of segments (not used by all tests)"
-  echo "    -r <num_ranks>  Number of MPI ranks.  Default is all allocated"
-  echo "                    PEs or 2 on Mac OS"
-  echo "    -n <num_nodes>  Number of nodes.  Default is all allocated nodes"
-  echo "                    or 2 or 1 on Mac OS"
-  echo "    -p <ppn>        PEs per node.  If specified with -n and -r, must agree"
-  echo "    -v <verbose_lev>   Verbosity level for xexec2, default 1"
-  echo "    -d <debug_lev>  Debug level for xexec2, default 0"
-  echo "    -b              Submit batch job with these options"
-  echo "    -c              Chain jobs - make this job dependant on previous job"
-  echo "    -a              Clean dirs After running" 
-  echo "    -w <dw_alloc>   DataWarp allocation policy 0=never, 1=static, 2=Moab"
-  echo "    -m              Additional arguments for msub (use with -b)"
+  echo "                      totsz - total size per rank in MiB"
+  echo "                      blksz - size of each write/read in KiB"
+  echo "                      nseg - number of segments (not used by all tests)"
+  echo "    -r <num_ranks>    Number of MPI ranks.  Default is all allocated"
+  echo "                      PEs or 2 on Mac OS"
+  echo "    -n <num_nodes>    Number of nodes.  Default is all allocated nodes"
+  echo "                      or 2 or 1 on Mac OS"
+  echo "    -p <ppn>          PEs per node.  If specified with -n and -r, must agree"
+  echo "    -v <verbose_lev>  Verbosity level for xexec2, default 1"
+  echo "    -d <debug_lev>    Debug level for xexec2, default 0"
+  echo "    -b                Submit batch job with these options"
+  echo "    -c                Chain jobs - make this job dependant on previous job"
+  echo "    -a                Clean dirs After running"
+  echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
+  echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
+  echo "    -m                Additional arguments for msub (use with -b)"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
-  
+
   exit 8
 }
 
@@ -103,7 +105,7 @@ check_rc(){
 # Function to build run script and submit batch job if batch mode
 batch_sub() {
   # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
-  dw_cap="$(( (($1 * 21 / 20) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
+  dw_cap="$(( (($1 * 21 / 20 * $dw_alloc_pct / 100) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
   msg "DataWarp Capacity: $dw_cap"
   if [[ $batch -gt 0 ]]; then
     rundir="$PWD/run"
@@ -127,7 +129,7 @@ batch_sub() {
     echo "#MSUB -l walltime=4:00:00" >> $jobsh
     echo "#MSUB -o $jobout -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
-    if [[ $warpalloc -eq 2 ]]; then
+    if [[ $dw_alloc_mode -eq 2 ]]; then
       echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
     fi
     echo "echo \"\`date \"$datefmt\"\` Job $jobname start\"" >> $jobsh
@@ -138,12 +140,12 @@ batch_sub() {
 
     afterparm=""
     if [[ $after -gt 0 ]]; then afterparm="-a"; fi
-    echo "$0 -s $size $afterparm -w $warpalloc -v $verbose_lev -d $debug_lev" >> $jobsh
+    echo "$0 -s $size $afterparm -w $dw_alloc_mode -v $verbose_lev -d $debug_lev" >> $jobsh
 
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
 
     mcmd="msub"
-    hiovars=$(set | awk -F '=' '/^HIO_/{v=v","$1}END{print substr(v, 2)}')
+    IFS=","; hiovars=${!HIO_*}; unset IFS
     if [[ -n $hiovars ]]; then mcmd="$mcmd -v $hiovars"; fi
     if [[ -n $msub_arg ]]; then mcmd="$mcmd $msub_arg"; fi
     if [[ $chain -ne 0 ]]; then
@@ -260,13 +262,14 @@ debug_lev=0
 batch=0
 chain=0
 after=0
+dw_alloc_pct=100
 
 size="s"
 job_dir=""
 # Platform specific defaults
 if [[ ${OSTYPE:0:6} == "darwin" ]]; then
   mympicmd="mpirun"
-  warpalloc=0
+  dw_alloc_mode=0
 else
   size="m"
   type aprun > /dev/null 2>&1
@@ -293,20 +296,20 @@ else
     mympicmd="mpirun"
     if [[ -n $SLURM_JOB_ID ]]; then
       set | egrep "^SLURM|^DW"
-      job_dir="/SLURM_JOB_ID"
+      job_dir="/$SLURM_JOB_ID"
     fi
   fi
   if [[ $hostpre == "ga-" || $hostpre == "tr-" ]]; then
-    warpalloc=2
+    dw_alloc_mode=2
   elif [[ $hostpre == "tt-" ]]; then
-    warpalloc=1
+    dw_alloc_mode=1
   else
-    warpalloc=0
+    dw_alloc_mode=0
   fi
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:v:d:bcw:am:" optname; do
+while getopts "hs:r:n:p:v:d:bcw:ax:m:" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
@@ -317,8 +320,9 @@ while getopts "hs:r:n:p:v:d:bcw:am:" optname; do
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
     c ) chain=1;;
-    w ) warpalloc=$OPTARG;;
+    w ) dw_alloc_mode=$OPTARG;;
     a ) after=1;;
+    x ) dw_alloc_pct=$OPTARG;;
     m ) msub_arg=$OPTARG;;
    \? ) synexit "invalid option";;
   esac
@@ -404,19 +408,19 @@ nblk=$(($totsz / $blksz))
 nblkpseg=$(($totsz / $nseg / $blksz))
 segsz=$(($blksz * $nblkpseg))
 
-# Check -w (warpalloc) option
-case $warpalloc in
+# Check -w (dw_alloc_mode) option
+case $dw_alloc_mode in
   0 ) ;;
   1 ) ;;
   2 ) ;;
-  * ) synexit "invalid -w option $warpalloc";;
+  * ) synexit "invalid -w option $dw_alloc_mode";;
 esac
 
 
 # Following commands for actually running, i.e., not batch submission
 if [[ $batch -eq 0 ]]; then
   # Add .lib dir to library path
-  build=${HIO_BUILD:=$PWD/..}
+  build=${BUILD_TREE:=$PWD/..}
   libs=$build/src/.libs
 
   if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
@@ -425,41 +429,47 @@ if [[ $batch -eq 0 ]]; then
 
   # Load module environment recorded at build
   mod_script="hiobuild.modules.bash"
-  if [[ -e $HIO_BUILD/$mod_script ]]; then . $HIO_BUILD/$mod_script; fi 
+  if [[ -e $BUILD_TREE/$mod_script ]]; then . $BUILD_TREE/$mod_script; fi
 
   addifd() {
-    if [[ -d $1 ]]; then HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"; fi
+    if [[ $root_count -lt 2 && -d $1 ]]; then
+      HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"
+      root_count=$(($root_count + 1))
+    fi
   }
 
   # If HIO_TEST_ROOTS not set, set up default
   if [[ -z $HIO_TEST_ROOTS ]]; then
 
-    if [[ $warpalloc -eq 1 ]]; then
+    if [[ $dw_alloc_mode -eq 1 ]]; then
       if [[ -z $HIO_datawarp_root ]]; then
         if [[ $hostpre == "tt-" ]]; then
           # Late DW Ph 1 - location of manually allocated BB directory
           export HIO_datawarp_root="/tmp/dw_scr"
         else
-          synexit "warpalloc=1 and HIO_datawarp_root not set"
+          synexit "dw_alloc_mode=1 and HIO_datawarp_root not set"
         fi
       fi
       # HIO_datawarp_root set, add LOGNAME and job_dir if needed
-      set -x
       if [[ ${HIO_datawarp_root/$LOGNAME} == $HIO_datawarp_root ]]; then
         HIO_datawarp_root="$HIO_datawarp_root/$LOGNAME"
       fi
       if [[ -n $job_dir && ${HIO_datawarp_root/$job_dir} == $HIO_datawarp_root ]]; then
         HIO_datawarp_root="$HIO_datawarp_root$job_dir"
       fi
-      set +x
     fi
 
-    if [[ $warpalloc -eq 1 || $warpalloc -eq 2 ]]; then HIO_TEST_ROOTS="DataWarp"; fi
+    root_count=0;
+    if [[ $dw_alloc_mode -eq 1 || $dw_alloc_mode -eq 2 ]]; then
+      HIO_TEST_ROOTS="DataWarp"
+      root_count=$(($root_count + 1))
+    fi
 
     addifd "/lscratch1/$LOGNAME"
     addifd "/lscratch2/$LOGNAME"
     addifd "/lscratch3/$LOGNAME"
     addifd "/lscratch4/$LOGNAME"
+    addifd "/lustre/scratch3/$LOGNAME"
     addifd "/lustre/scratch4/$LOGNAME"
     addifd "/lustre/scratch5/$LOGNAME"
     addifd "/scratch1/$LOGNAME"
@@ -476,19 +486,24 @@ if [[ $batch -eq 0 ]]; then
   fi
 
   # Display results of run_setup
-  msg "run_setup:                    Args: \"$args\""
-  msg "run_setup:                     PWD: \"$PWD\""
-  msg "run_setup:                   build: \"$build\""
-  msg "run_setup:                    libs: \"$libs\""
-  msg "run_setup:          HIO_TEST_ROOTS: \"$HIO_TEST_ROOTS\""
-  msg "run_setup:                  mpicmd: \"$mympicmd\""
-  msg "run_setup:                    size: \"$size\""
-  msg "run_setup:         nodes/ranks/ppn: $nodes / $ranks / $ppn"
-  msg "run_setup:      verbose/debug/nodw: $verbose_lev / $debug_lev / $nodw"
-  msg "run_setup:       HIO_datawarp_root: \"$HIO_datawarp_root\""
-  msg "run_setup: HIO_datawarp_stage_mode: \"$HIO_datawarp_stage_mode\""
-  msg "run_setup: totsz: $(cvt $totsz)  blksz: $(cvt $blksz)  nblk: $(cvt $nblk)  nseg: $(cvt $nseg)  nblkpseg: $(cvt $nblkpseg)"
+  msg "run_setup:                      Args: \"$args\""
+  msg "run_setup:                       PWD: \"$PWD\""
+  msg "run_setup:                     build: \"$build\""
+  msg "run_setup:                      libs: \"$libs\""
+  msg "run_setup:                    mpicmd: \"$mympicmd\""
+  msg "run_setup:           nodes/ranks/ppn: $nodes / $ranks / $ppn"
+  msg "run_setup:                      size: \"$size\""
+  msg "run_setup:               totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
+  msg "run_setup:        nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"
+  msg "run_setup:    verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
+
+  # Pretty print all HIO_ variables
+  for var in ${!HIO_*}; do
+    msg "run_setup: $(printf '%*s: "%s"' 25 $var ${!var})"
+  done
+
   if [[ -z $HIO_TEST_ROOTS ]]; then msg "Warning: HIO_TEST_ROOTS not set or defaulted"; fi
+
 fi
 
 # --- end of run_setup ---

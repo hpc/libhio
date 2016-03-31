@@ -121,6 +121,7 @@ char * help =
   "                from rank 0\n"
   "  fctr <dir> <num files> <file size> <block size> File coherency test - read files\n"
   "                from all non-zero ranks \n"
+  "  fget <file>   fopen(), fgets() to eof, fclose()\n"
   #endif
   "  fi <size> <count>\n"
   "                Creates <count> blocks of <size> doubles each.  All\n"
@@ -924,6 +925,29 @@ ACTION_RUN(fctr_run) {
 
 #endif // MPI
 
+//----------------------------------------------------------------------------
+// fget action handler
+//----------------------------------------------------------------------------
+ACTION_RUN(fget_run) {
+  char * fn = V0.s;
+  double delta_t;
+  ETIMER tmr;
+  FILE * f;
+  U64 len = 0;
+
+  #define BUFSIZE (1024*1024)
+  char * buf = MALLOCX(BUFSIZE);
+
+  ETIMER_START(&tmr);
+  if (! (f = fopen(fn, "r+")) ) ERRX("fopen(%s, \"r\") errno: %d(%s)", fn, errno, strerror(errno));
+  while ( fgets(buf, BUFSIZE, f) ) len += strlen(buf);
+  if (! feof(f)) ERRX("fgets(%s) errn ERRX(fgets(%s) errno: %d(%s)", fn, errno, strerror(errno));
+  if (fclose(f)) ERRX("fclose(%s) errno: %d(%s)", fn, errno, strerror(errno));
+  delta_t = ETIMER_ELAPSED(&tmr);
+  FREEX(buf);
+
+  VERB1("fget %s done;  len: %llu  time: %f Seconds", fn, len, delta_t);
+}
 
 //----------------------------------------------------------------------------
 // fi, fr, ff (floating point addition init, run, free) action handlers
@@ -1862,6 +1886,7 @@ struct parse {
   {"mf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          mf_run      },
   {"fctw",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctw_run    },
   {"fctr",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctr_run    },
+  {"fget",  {STR,  NONE, NONE, NONE, NONE}, NULL,          fget_run    },
   #endif
   {"fi",    {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
   {"fr",    {PINT, PINT, NONE, NONE, NONE}, fr_check,      fr_run      },
