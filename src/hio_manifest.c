@@ -104,7 +104,6 @@ static int hioi_manifest_get_string (json_object *parent, const char *name, cons
 
   object = hioi_manifest_find_object (parent, name);
   if (NULL == object) {
-    fprintf (stderr, "Could not find JSON object for %s\n", name);
     return HIO_ERR_NOT_FOUND;
   }
 
@@ -121,7 +120,6 @@ static int hioi_manifest_get_number (json_object *parent, const char *name, unsi
 
   object = hioi_manifest_find_object (parent, name);
   if (NULL == object) {
-    fprintf (stderr, "Could not find JSON object for %s\n", name);
     return HIO_ERR_NOT_FOUND;
   }
 
@@ -135,7 +133,6 @@ static int hioi_manifest_get_signed_number (json_object *parent, const char *nam
 
   object = hioi_manifest_find_object (parent, name);
   if (NULL == object) {
-    fprintf (stderr, "Could not find JSON object for %s\n", name);
     return HIO_ERR_NOT_FOUND;
   }
 
@@ -818,6 +815,7 @@ static int hioi_manifest_read (const char *path, json_object **object_out, char 
   const char *extension = strrchr (path, '.') + 1;
   char *buffer = NULL, *tmp;
   json_object *object;
+  size_t file_size;
   FILE *fh;
   int rc;
 
@@ -832,6 +830,15 @@ static int hioi_manifest_read (const char *path, json_object **object_out, char 
   fh = fopen (path, "r");
   if (NULL == fh) {
     return hioi_err_errno (errno);
+  }
+
+  (void) fseek (fh, 0, SEEK_END);
+  file_size = ftell (fh);
+  (void) fseek (fh, 0, SEEK_SET);
+
+  if (0 == file_size) {
+    fclose (fh);
+    return HIO_ERR_BAD_PARAM;
   }
 
   if (0 == strcmp (extension, "bz2")) {
@@ -854,6 +861,9 @@ static int hioi_manifest_read (const char *path, json_object **object_out, char 
       int bytes_read = BZ2_bzRead (&rc, bzfh, (void *)((intptr_t) buffer + offset), size - offset);
       if (bytes_read < size - offset) {
         int close_rc;
+
+        file_size = offset + bytes_read;
+
         BZ2_bzReadClose (&close_rc, bzfh);
         fclose (fh);
         if (BZ_STREAM_END != rc) {
@@ -864,17 +874,18 @@ static int hioi_manifest_read (const char *path, json_object **object_out, char 
       }
     }
   } else {
-    size_t size = fseek (fh, 0, SEEK_END);
-
-    buffer = malloc (size);
+    buffer = malloc (file_size);
     if (NULL == buffer) {
       fclose (fh);
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    fread (buffer, size, 1, fh);
+    fread (buffer, file_size, 1, fh);
     fclose (fh);
   }
+
+  /* ensure the data is null-terminated */
+  buffer[file_size-1] = '\0';
 
   object = json_tokener_parse (buffer);
   if (NULL == object) {
