@@ -131,7 +131,7 @@ if [[ ${OSTYPE:0:6} == "darwin" ]]; then
 else
   files="src/.libs/libhio.so.1.0.0"
 fi
-files="$files tests/.libs/error_test.x tests/.libs/test01.x tests/.libs/xexec.x"
+files="$files test/.libs/error_test.x test/.libs/test01.x test/.libs/xexec.x"
 
 if [[ $extra -gt 0 ]]; then
   cmd make docs

@@ -189,6 +189,8 @@ for v in $vers; do
     mu-intel ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
     mu-pgi   ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l pgi   -l openmpi ;;
 
+    ml-gnu   ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+
     ct-gnu   ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-gnu   ;;
     ct-intel ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-intel ;;
     ct-cray  ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-cray  ;;

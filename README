@@ -40,7 +40,7 @@ can be sourced to recreate the module environment used for build.
 Testing
 -------
 
-HIO's tests are in the tests subdirectory.  There is a simple API test named
+HIO's tests are in the test subdirectory.  There is a simple API test named
 test01 which can also serve as a coding example.  Additionally, other tests
 are named run02, run03, etc.  Theses tests are able to run in a variety of
 environments:
@@ -57,7 +57,7 @@ contained in the runxx test scripts.
 
 A typical usage to submit a test DataWarp batch job on buffy might look like:
 
-cd <tarball>/tests
+cd <tarball>/test
 ./run02 -s m -r 32 -n 2 -b 
 
 Options used:
@@ -77,7 +77,7 @@ on a large system like Trinity might look like:
 run_combo -t ./run02 ./run03 ./run12 -s x y z -n 32 64 128 256 512 1024 -p 32 -b
 
 This will submit 54 jobs (3 x 3 x 6) with all combinations of the specified
-tests and parameters.  The job scripts and output will be in the tests/run
+tests and parameters.  The job scripts and output will be in the test/run
 subdirectory.
 
 
@@ -117,11 +117,11 @@ This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
 
    Ideally, the two warning messages would not be present, but at the moment, they can be ignored.
 
-5) cd tests
+5) cd test
 
 6) ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s z y x -n 1024 512 256 128 64 32 16 -p 32 -b
 
-   This will create 84 job scripts in the libhio-1.2/tests/run directory and submit the jobs.
+   This will create 84 job scripts in the libhio-1.2/test/run directory and submit the jobs.
    Msub messages are in the cooresponding .jobid files in the same directory. Job output is
    directed to corresponding .out files.  The number and mix of jobs is controlled by the
    parameters. Issue run_combo -h for more information.
@@ -132,7 +132,7 @@ This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
 
    If all jobs ran OK, grep should show 84 files with a count of 1.  Like this:
 
-   cornell@tr-login1:~/pgm/hio/tr-gnu/libhio-1.2/tests> grep -c "RESULT: SUCCESS" run/*.out
+   cornell@tr-login1:~/pgm/hio/tr-gnu/libhio-1.2/test> grep -c "RESULT: SUCCESS" run/*.out
    run/job.20160108.080917.out:1
    run/job.20160108.080927.out:1
    run/job.20160108.080936.out:1
@@ -147,10 +147,10 @@ This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
 
    libhio-1.2/README
    libhio-1.2/hiobuild -h
-   libhio-1.2/tests/run_combo -h
-   libhio-1.2/tests/run_setup -h
-   libhio-1.2/tests/run02, run03, run12, run20
-   libhio-1.2/tests/xexec -h
+   libhio-1.2/test/run_combo -h
+   libhio-1.2/test/run_setup -h
+   libhio-1.2/test/run02, run03, run12, run20
+   libhio-1.2/test/xexec -h
    libhio-1.2/design/libhio_api.pdf
 
 9) Additional test commands, check the results the same way as above.

@@ -11,6 +11,7 @@ clean_roots $HIO_TEST_ROOTS
 
 set -x
 echo "#HIO.data_roots=$HIO_TEST_ROOTS" > $cfg_file
+ranks=1     # Since test01 is non-MPI
 myrun .libs/test01.x $cfg_file
 set +x
 
