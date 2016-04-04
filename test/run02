@@ -1,7 +1,7 @@
-#! /bin/bash 
+#! /bin/bash
 . ./run_setup
 
-# Read and write N-N test case with read data value checking.  
+# Read and write N-N test case with read data value checking.
 
 batch_sub $(( $ranks * $blksz * $nblk ))
 
@@ -14,7 +14,7 @@ cmdw="
   hvp c. .
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf hf mgf mf
 "
 
@@ -28,7 +28,7 @@ cmdr="
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf hf mgf mf
 "
 

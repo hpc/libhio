@@ -15,11 +15,11 @@ typedef  int64_t I64;
 typedef uint32_t U32;
 typedef  int32_t I32;
 #define DIM1(array) ( sizeof(array) / sizeof(array[0]) )
-#ifndef MAX 
-  #define MAX(a,b) ( (a) > (b) ? (a) : (b) ) 
+#ifndef MAX
+  #define MAX(a,b) ( (a) > (b) ? (a) : (b) )
 #endif
-#ifndef MIN 
-  #define MIN(a,b) ( (a) < (b) ? (a) : (b) ) 
+#ifndef MIN
+  #define MIN(a,b) ( (a) < (b) ? (a) : (b) )
 #endif
 
 //----------------------------------------------------------------------------
@@ -43,7 +43,7 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...);
 // Preprocessor variable MY_MSG_CTX must be defined to an expression that
 // resolves to the address of a msg_context structure.  It is used by the MSG,
 // MSGE, ERRX, DBG<n> and IFDBG<n> macros.  It may be redefined in different
-// sections of a program.   
+// sections of a program.
 //
 // Example:
 //   MSG_CONTEXT my_msg_context;
@@ -65,7 +65,7 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...);
 // The default value is DBGMAXLEV = 4.  The purpose of this is to make
 // it possible to include debug messages in a program that may impact
 // performance if tested on every iteration, but only compile those debug
-// messages into the program if requested at compile time by setting 
+// messages into the program if requested at compile time by setting
 // DBGMAXLEV to a higher than normal value.
 //----------------------------------------------------------------------------
 #ifndef DBGMAXLEV
@@ -147,7 +147,7 @@ char *alloc_printf(MSG_CONTEXT *msgctx, const char *context, const char *format,
 #define ALLOC_PRINTF(...) alloc_printf((MY_MSG_CTX), SOURCE_FILE_LINE_STRING, __VA_ARGS__)
 
 //----------------------------------------------------------------------------
-// Enum name/value conversion table and function definitions 
+// Enum name/value conversion table and function definitions
 //----------------------------------------------------------------------------
 typedef struct enum_name_val_pair {
   char * name;
@@ -176,7 +176,7 @@ char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val);
 // Sets *val to an enum value or OR of values for multiple types
 int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * val);
 
-// Returns a list of enum names prefixed by "one of" or "one or more of".  List 
+// Returns a list of enum names prefixed by "one of" or "one or more of".  List
 // must be freed by caller.
 char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr);
 
@@ -212,11 +212,11 @@ void fsleep(double seconds);
 unsigned int crc32(unsigned int crc, const void *buf, size_t size);
 
 //----------------------------------------------------------------------------
-// memdiff - compares two memory areas, returns NULL if they match, else the 
+// memdiff - compares two memory areas, returns NULL if they match, else the
 // address in the first operand where the first differing byte occurs.
 //----------------------------------------------------------------------------
 void * memdiff(const void * s1, const void *s2, size_t n);
- 
+
 #ifdef __linux__
 //-----------------------------------------------------------------------------
 // Return CPU affinity in a form suitable for messages.  Single CPU affinity
@@ -232,12 +232,12 @@ I64 GetCPUaffinity(void);
 // k, ki, M, Mi, G, Gi, etc.  Limited value checking based on enum cvt_num_type.
 //-----------------------------------------------------------------------------
 enum cvt_num_type {
-  CVT_SINT,                  // Signed integer 
+  CVT_SINT,                  // Signed integer
   CVT_PINT,                  // Positive integer     ( i >  0 )
   CVT_NNINT,                 // Non-negative integer ( i >= 0 )
-  CVT_DOUB,                  // Double 
+  CVT_DOUB,                  // Double
   CVT_PDOUB,                 // Positive double      ( d >  0.0 )
-  CVT_NNDOUB                 // Non-negative double  ( d >= 0.0 )  
+  CVT_NNDOUB                 // Non-negative double  ( d >= 0.0 )
 };
 int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t msglen);
 

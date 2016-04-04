@@ -21,7 +21,7 @@
 #include <mpi.h>
 
 //#define PREFIX "/tmp/dw_scr/cornell/"
-#define PREFIX getenv("DW_JOB_STRIPED") 
+#define PREFIX getenv("DW_JOB_STRIPED")
 
 #define MSG(fmt, args...)                                                    \
   fprintf(stdout, __FILE__ "(%4d) %s[%d/%d]: " fmt "\n", __LINE__, hostname, myrank, mpi_size, args);

@@ -1,4 +1,4 @@
-#! /bin/bash 
+#! /bin/bash
 . ./run_setup
 
 # Read and write N-N test case with read data value checking.
@@ -19,7 +19,7 @@ cmdw="
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   s 1
@@ -30,7 +30,7 @@ cmdw="
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   s 1
@@ -41,7 +41,7 @@ cmdw="
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   hf mgf mf
@@ -50,37 +50,37 @@ cmdw="
 cmdr="
   name run09r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N test case with read data value checking @/
-  hi MYCTX $HIO_TEST_ROOTS 
+  hi MYCTX $HIO_TEST_ROOTS
 
   hxdi 97
   hvp c. .
   hda NTNDS 97 READ UNIQUE hdo
   heo MY_EL READ 20Mi
-  hvp c. .     
+  hvp c. .
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   hxdi 98
   hda NTNDS ID_HIGHEST READ UNIQUE
   heo MY_EL READ 20Mi
-  hvp c. .     
+  hvp c. .
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   qof 2 hxdi 96
   hda NTNDS ID_NEWEST READ UNIQUE hdo
   heo MY_EL READ 20Mi
-  hvp c. .     
+  hvp c. .
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   hf mgf mf

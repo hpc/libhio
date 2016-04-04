@@ -50,7 +50,7 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...) {
 
   va_start(args, format);
   vsnprintf(msg_buf, sizeof(msg_buf), format, args);
-  va_end(args); 
+  va_end(args);
   fprintf(stream, "%s %s%s\n", time_str, msgctx->id_string, msg_buf);
 }
 
@@ -105,35 +105,35 @@ char *alloc_printf(MSG_CONTEXT *msgctx, const char *context, const char *format,
   msg_buf = mallocx(msgctx, "alloc_printf", BUFLEN);
   va_start(args, format);
   msg_len = 1 + vsnprintf(msg_buf, BUFLEN, format, args);
-  va_end(args); 
+  va_end(args);
   msg_buf = reallocx(msgctx, "alloc_printf", msg_buf, msg_len);
   return msg_buf;
 }
 
 //----------------------------------------------------------------------------
-// Enum name/value conversion table and function definitions 
+// Enum name/value conversion table and function definitions
 //----------------------------------------------------------------------------
 int enum_name_compare(const void * nv1, const void * nv2) {
   return strcmp((*(ENUM_NAME_VAL_PAIR*)nv1).name, (*(ENUM_NAME_VAL_PAIR*)nv2).name);
-} 
+}
 
 int enum_val_compare(const void * nv1, const void * nv2) {
   int v1 = (*(ENUM_NAME_VAL_PAIR*)nv1).val;
   int v2 = (*(ENUM_NAME_VAL_PAIR*)nv2).val;
 
   return (v1 == v2) ? 0: ( (v1 > v2) ? 1: -1 );
-} 
+}
 
 void enum_table_sort(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr) {
-  ENUM_NAME_VAL_PAIR * nvn = etptr->nv_by_name; 
-  ENUM_NAME_VAL_PAIR * nvv = etptr->nv_by_val; 
+  ENUM_NAME_VAL_PAIR * nvn = etptr->nv_by_name;
+  ENUM_NAME_VAL_PAIR * nvv = etptr->nv_by_val;
   int i, n = etptr->nv_count;
 
   // Count entries
   i = -1;
   while ( nvn[++i].name );
   etptr->nv_count = n = i;
-  
+
   // Sort by name
   qsort(nvn, n, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
 
@@ -150,7 +150,7 @@ int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name) {
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
 
   if (etptr->multiple) {
-    char * str = NULL;    
+    char * str = NULL;
     int part = val;
     DBG4("part: 0x%X  str: %s", part, str);
     for (int i = etptr->nv_count-1; i >= 0; i--) {
@@ -160,8 +160,8 @@ int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name) {
         part &= ~etptr->nv_by_val[i].val;
         DBG4("val: 0x%X  part: 0x%X  str: %s", etptr->nv_by_val[i].val, part, str);
         if (part == 0) break;
-      } 
-    } 
+      }
+    }
     DBG4("part: 0x%X  str: %s", part, str);
     if (part != 0) {
       char msg[32];
@@ -207,7 +207,7 @@ char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
   #if 1
     else {
       retval = ALLOC_PRINTF("<Invalid Enum 0x%X >", val);
-    }  
+    }
   #endif
 
   return retval;
@@ -222,7 +222,7 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
     char * string = STRDUPX(name);
     char * token, *saveptr;
     int myval = 0;
-    
+
     token = strtok_r(string, etptr->delim, &saveptr);
     while (token) {
     ENUM_NAME_VAL_PAIR nv = {token, 0};
@@ -231,10 +231,10 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
         myval |= nvp->val;
       } else {
         rc = -1;
-      } 
+      }
       token = strtok_r(NULL, etptr->delim, &saveptr);
     }
-    if (rc == 0) *val = myval;  
+    if (rc == 0) *val = myval;
   } else {
     ENUM_NAME_VAL_PAIR nv = {name, 0};
     ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
@@ -242,21 +242,21 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
       *val = nvp->val;
     } else {
       rc = -1;
-    } 
+    }
   }
   return rc;
 }
 
-// Returns a list of enum names prefixed by "one of" or "one or more of".  List 
+// Returns a list of enum names prefixed by "one of" or "one or more of".  List
 // must be freed by caller.
 char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr) {
   // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
-  
+
   char * retval = STRDUPX(etptr->multiple?"one or more of ": "one of ");
   for (int i = 0; i < etptr->nv_count; i++) {
     retval = STRCATRX(retval, etptr->nv_by_name[i].name);
-    retval = STRCATRX(retval, ", "); 
+    retval = STRCATRX(retval, ", ");
   }
   retval[strlen(retval)-2] = '\0';
   return retval;
@@ -276,13 +276,13 @@ void hex_dump(void *data, int size) {
     char hexstr[ 16*3 + 5] = {0};
     char hexprev[ 16*3 + 5] = {0};
     char charstr[16*1 + 5] = {0};
-    int skipped = 0; 
+    int skipped = 0;
     for(n=1;n<=size;n++) {
         if (n%16 == 1) {
             /* store address for this line */
             snprintf(addrstr, sizeof(addrstr), "%.4lx", p-(unsigned char *)data);
         }
-            
+
         c = *p;
         if (isalnum(c) == 0) {
             c = '.';
@@ -296,9 +296,9 @@ void hex_dump(void *data, int size) {
         snprintf(bytestr, sizeof(bytestr), "%c", c);
         strncat(charstr, bytestr, sizeof(charstr)-strlen(charstr)-1);
 
-        if(n%16 == 0) { 
+        if(n%16 == 0) {
             /* line completed */
-            if (!strcmp(hexstr, hexprev) && n< size) { 
+            if (!strcmp(hexstr, hexprev) && n< size) {
               skipped++;
             } else {
               if (skipped > 0) {
@@ -307,7 +307,7 @@ void hex_dump(void *data, int size) {
               }
               printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
               strcpy(hexprev, hexstr);
-            } 
+            }
             hexstr[0] = 0;
             charstr[0] = 0;
         } else if(n%8 == 0) {
@@ -466,7 +466,7 @@ unsigned int crc32(unsigned int crc, const void *buf, size_t size) {
 }
 
 //----------------------------------------------------------------------------
-// memdiff - compares two memory areas, returns NULL if they match, else the 
+// memdiff - compares two memory areas, returns NULL if they match, else the
 // address in the first operand where the first differing byte occurs.
 //----------------------------------------------------------------------------
 void * memdiff(const void * s1, const void *s2, size_t n) {
@@ -519,7 +519,7 @@ I64 GetCPUaffinity(void) {
       snprintf(msgp, msglen, "%s: \"%s\"", ERR, str); \
     }                                                  \
     return 12;                                         \
-  } 
+  }
 
 int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t msglen) {
   I64 i = 0;
@@ -547,7 +547,7 @@ int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t
       if (type == CVT_PDOUB && d <= 0) CVT_ERR("non-positive double");
       if (type == CVT_NNDOUB && d < 0) CVT_ERR("negative double");
       break;
-  } 
+  }
 
   if (*endptr == '\0') mult = 1;
   else if (!strcmp("k",  endptr)) mult = 1000;
@@ -566,14 +566,14 @@ int cvt_num(enum cvt_num_type type, char * str, void * outp, char * msgp, size_t
     case CVT_SINT:
     case CVT_PINT:
     case CVT_NNINT:
-      *(I64*)outp = i * mult; 
+      *(I64*)outp = i * mult;
       break;
     case CVT_DOUB:
     case CVT_PDOUB:
     case CVT_NNDOUB:
-      *(double*)outp = d * mult; 
+      *(double*)outp = d * mult;
       break;
-  } 
+  }
   return 0;
 }
 
@@ -590,7 +590,7 @@ I64 rand_range(I64 min, I64 max, size_t align) {
 
   align64 = (I64) align;
   // min rounded up to next boundary divided by alignment
-  if (min < 0) {                  
+  if (min < 0) {
     minda = min / align64;
   } else {
     minda = (min + align64 - 1) / align64;
@@ -599,15 +599,15 @@ I64 rand_range(I64 min, I64 max, size_t align) {
   // max rounded down to next boundary divided by alignment
   if (max < 0) {
     maxda = (max - align64 + 1) / align64;
-  } else {  
-    maxda = max/align64;                  
+  } else {
+    maxda = max/align64;
   }
 
   rlen = maxda - minda + 1;              // range length
 
   //printf("min: %lld  max: %lld  align64: %lld\n", min, max, align64);
   //printf("minda: %lld  maxda: %lld  rlen:%lld\n", minda, maxda, rlen);
-  
+
   if (rlen < 1) {
     fprintf(stderr, "Error: rand_range range length < 1, exiting\n");
     exit(EXIT_FAILURE);
@@ -615,7 +615,7 @@ I64 rand_range(I64 min, I64 max, size_t align) {
 
   // Multiplying by almost 2^31 expands the random range to close to 2^62, mitigating
   // uneven distribution caused by using modulo with a very large result range
-  long r = (lrand48() * PR231 % rlen) * align64 + (minda * align64); 
+  long r = (lrand48() * PR231 % rlen) * align64 + (minda * align64);
 
   return r;
 };

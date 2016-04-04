@@ -1,33 +1,33 @@
-#! /bin/bash 
+#! /bin/bash
 . ./run_setup
 
-# Create and reuse N-N dataset - i.e., ensure TRUNC works  
+# Create and reuse N-N dataset - i.e., ensure TRUNC works
 batch_sub $(( $ranks * $blksz * $nblk ))
 
 cmdw="
   name run05w v $verbose_lev d $debug_lev mi 0
   /@@ Create and reuse N-N dataset - i.e., ensure TRUNC works @/
-  hi MY_CTX $HIO_TEST_ROOTS 
+  hi MY_CTX $HIO_TEST_ROOTS
   hda NTN_DS 97 WRITE,CREAT,TRUNC UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf hf mgf mf
 "
 
 cmdr="
   name run05r v $verbose_lev d $debug_lev mi 0
   /@@ Create and reuse N-N dataset - i.e., ensure TRUNC works @/
-  hi MY_CTX $HIO_TEST_ROOTS 
+  hi MY_CTX $HIO_TEST_ROOTS
   hda NTN_DS 97 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf hf mgf mf
 "
 

@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------------
-# run_combo - run tests with multiple combinations of parameters 
+# run_combo - run tests with multiple combinations of parameters
 #----------------------------------------------------------------------------
 synexit() {
   echo ""
@@ -22,7 +22,7 @@ synexit() {
   echo "        [-x <dw_alloc_pct> [<dw_alloc_pct>...] ]"
   echo "        [-m <msub args>]"
   echo ""
-  echo "  Options:"   
+  echo "  Options:"
   echo "    -s <size>       Per rank run sizes t|s|m|l|x|y|z  (default s)"
   echo "    -r <num_ranks>  Number of ranks parameters"
   echo "    -n <num_nodes>  Number of nodes parameters."
@@ -31,7 +31,7 @@ synexit() {
   echo "    -d <debug_lev>  Debug level for xexec2, default 0"
   echo "    -b              Submit batch job with these options"
   echo "    -c              Chain jobs - make this job dependant on previous job"
-  echo "    -a              Clean dirs After running" 
+  echo "    -a              Clean dirs After running"
   echo "    -w <dw_alloc>   DataWarp allocation policy 0=never, 1=static, 2=Moab"
   echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
   echo "    -m              Additional arguments for msub (use with -b)"
@@ -44,7 +44,7 @@ synexit() {
   echo "    ./run03 -s x -r 4"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
-  
+
   exit 8
 }
 
@@ -54,11 +54,11 @@ synexit() {
 cmd() {
   echo "$host run_combo: ---> $*"
   eval "$*"
-  return $?         
+  return $?
 }
 
-msg() { 
-  echo "$host run_combo: $*" 
+msg() {
+  echo "$host run_combo: $*"
 }
 
 is_not_flag() {
@@ -67,7 +67,7 @@ is_not_flag() {
 }
 
 #----------------------------------------------------------------------------
-# Parse arguments 
+# Parse arguments
 #----------------------------------------------------------------------------
 host=`hostname -s`
 batch=0
@@ -148,7 +148,7 @@ shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
 
 #----------------------------------------------------------------------------
-# Iterate through al combinations of specified parameters 
+# Iterate through al combinations of specified parameters
 #----------------------------------------------------------------------------
 for r in "${ranks[@]}"; do
   for n in "${nodes[@]}"; do

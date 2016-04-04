@@ -1,12 +1,12 @@
-#! /bin/bash 
+#! /bin/bash
 . ./run_setup
 
 # Read and write N-N test case with read data value checking.
-# Dataset staged to scratch and deleted from DataWarp prior 
-# to read.  
+# Dataset staged to scratch and deleted from DataWarp prior
+# to read.
 
-if [[ ${HIO_TEST_ROOTS/DataWarp//} == $HIO_TEST_ROOTS ]]; then 
-  echo "Test $0 only valid valid with DataWarp.  Exiting."  
+if [[ ${HIO_TEST_ROOTS/DataWarp//} == $HIO_TEST_ROOTS ]]; then
+  echo "Test $0 only valid valid with DataWarp.  Exiting."
   exit 77
 fi
 
@@ -22,22 +22,22 @@ cmdw="
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf hf mgf mf
 "
 
 cmdr="
   name run07r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N test case with read data value checking @/
-  hi MYCTX $HIO_TEST_ROOTS 
+  hi MYCTX $HIO_TEST_ROOTS
   hvp c. .
   hda NTNDS 97 READ UNIQUE hdo
   heo MY_EL READ 20Mi
-  hvp c. .     
+  hvp c. .
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf hf mgf mf
 "
 

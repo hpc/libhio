@@ -106,6 +106,6 @@ AC_SUBST(HIO_BUILD_TIMESTAMP,[$(date "+%A %B %d, %Y at %l:%M %p %Z")])
 
 # Checks for library functions.
 
-AC_CONFIG_FILES([Makefile design/Makefile src/Makefile tests/Makefile libhio.pc design/doxygen.conf design/template/header.tex])
+AC_CONFIG_FILES([Makefile design/Makefile src/Makefile test/Makefile libhio.pc design/doxygen.conf design/template/header.tex])
 
 AC_OUTPUT

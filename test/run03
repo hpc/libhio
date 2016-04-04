@@ -1,15 +1,15 @@
 #! /bin/bash
 . ./run_setup
 
-# Read and write N-1 test case with read data value checking.  
+# Read and write N-1 test case with read data value checking.
 
 batch_sub $(( $ranks * $blksz * $nblkpseg * $nseg ))
 
 cmdw="
   name run03w v $verbose_lev d $debug_lev mi 0
-  /@@ Write N-1 test case @/  
+  /@@ Write N-1 test case @/
   hi MY_CTX $HIO_TEST_ROOTS
-  hdu NT1_DS 98 ALL 
+  hdu NT1_DS 98 ALL
   hda NT1_DS 98 WRITE,CREAT SHARED hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
@@ -17,15 +17,15 @@ cmdw="
     hsegr 0 $segsz 0
     lc $nblkpseg
       hew 0 $blksz
-    le 
-  le 
+    le
+  le
   hec hdc hdf hf mgf mf
 "
 
 cmdr="
   name run03r v $verbose_lev d $debug_lev mi 32
-  /@@ Read N-1 test case with data checking @/  
-  hi MY_CTX $HIO_TEST_ROOTS 
+  /@@ Read N-1 test case with data checking @/
+  hi MY_CTX $HIO_TEST_ROOTS
   hda NT1_DS 98 READ SHARED hdo
   heo MY_EL READ 20Mi
   hvp c. .
@@ -34,8 +34,8 @@ cmdr="
     hsegr 0 $segsz 17
     lc $nblkpseg
       her 0 $blksz
-    le 
-  le 
+    le
+  le
   hec hdc hdf hf mgf mf
 "
 

@@ -1,7 +1,7 @@
-#! /bin/bash 
+#! /bin/bash
 . ./run_setup
 
-# Read and write N-N test case with read data value checking.  
+# Read and write N-N test case with read data value checking.
 # Check for correct DS ID for ID_HIGHEST and ID_NEWEST
 
 batch_sub $(( 3 * $ranks * $blksz * $nblk ))
@@ -9,14 +9,14 @@ batch_sub $(( 3 * $ranks * $blksz * $nblk ))
 cmdw="
   name run20w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write N-N multi DS test case @/
-  hi MY_CTX $HIO_TEST_ROOTS 
+  hi MY_CTX $HIO_TEST_ROOTS
 
   hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   s 1
@@ -25,16 +25,16 @@ cmdw="
   hvp c. .
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   s 1
-  hdo NTN_DS 99 WRITE,CREAT UNIQUE
+  hda NTN_DS 99 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
   lc $nblk
     hew 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   hf mgf mf
@@ -43,7 +43,7 @@ cmdw="
 cmdr="
   name run20r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N multi DS test case @/
-  hi MY_CTX $HIO_TEST_ROOTS 
+  hi MY_CTX $HIO_TEST_ROOTS
 
   hxdi 99
   hda NTN_DS 99 READ UNIQUE hdo
@@ -52,7 +52,7 @@ cmdr="
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   hxdi 99
@@ -62,7 +62,7 @@ cmdr="
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   hxdi 99
@@ -72,7 +72,7 @@ cmdr="
   hck on
   lc $nblk
     her 0 $blksz
-  le 
+  le
   hec hdc hdf
 
   hf mgf mf

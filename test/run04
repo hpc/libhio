@@ -1,8 +1,8 @@
 #! /bin/bash
 . ./run_setup
 
-# Invalid parameter test cases 
-# Much more needed 
+# Invalid parameter test cases
+# Much more needed
 
 batch_sub $(( $ranks * $blksz * $nblk ))
 
@@ -23,19 +23,19 @@ fails="
   /@@ 2. HDA and HDO without prior init @/
     hxrc ERR_BAD_PARAM
     hda NT1_DS 98 WRITE,CREAT SHARED
-    hxrc ERR_BAD_PARAM 
+    hxrc ERR_BAD_PARAM
     hdo
 
   /@@ 3. HI, HDA CREAT HDO in non-writable data root directory @/
-    hi MY_CTX posix:$ro_dir 
+    hi MY_CTX posix:$ro_dir
     hvp c. .
     hda NTN_DS 97 WRITE,CREAT UNIQUE
-    hxrc ERR_PERM 
+    hxrc ERR_PERM
     hdo hdf
     hf
 
   /@@ 4. HI, HDO READ in non-existent data root directory @/
-    hi MY_CTX posix:/does_not_exist 
+    hi MY_CTX posix:/does_not_exist
     hvp c. .
     hxrc ERR_NOT_FOUND
     hda NTN_DS 97 READ UNIQUE
@@ -43,20 +43,20 @@ fails="
     hf
 
   /@@ 5. HI, HDO invalid data root prefix @/
-    hi MY_CTX WIERD:$PWD 
+    hi MY_CTX WIERD:$PWD
     hvp c. .
-    hxrc ERR_NOT_FOUND 
+    hxrc ERR_NOT_FOUND
     hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
     hf
 
   /@@ 6. HEO without HDO @/
-    hxrc ERR_BAD_PARAM 
+    hxrc ERR_BAD_PARAM
     heo MY_EL WRITE,CREAT,TRUNC 20Mi
 
   /@@ 7. HI, HDA READ HDO non-existent DS ID  @/
     hi MY_CTX $HIO_TEST_ROOTS
     hvp c. .
-    hxrc ERR_NOT_FOUND 
+    hxrc ERR_NOT_FOUND
     hda NTN_DS 29 READ UNIQUE
     hxrc ERR_NOT_FOUND
     hdo

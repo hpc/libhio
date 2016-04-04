@@ -11,7 +11,7 @@
 
 ACLOCAL_AMFLAGS=-I m4
 
-SUBDIRS = src design tests
+SUBDIRS = src design test
 
 EXTRA_DIST = hiobuild extra/json-c-0.12-nodoc-patched.tar.gz extra/json-c.patch \
 	extra/json_rename.h

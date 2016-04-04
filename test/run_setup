@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------------
-# run_setup - common setup for hio tests 
+# run_setup - common setup for hio tests
 # Source this file from each test script.
 #
 # Env vars used for input:
@@ -11,13 +11,13 @@
 #       ranks - number of MPI ranks
 #    verbose_lev - xexec2 verbosity level
 #   debug_lev - xexec2 debug level
-#   HIO_TEST_ROOT - if not set, will be set to default data root string  
+#   HIO_TEST_ROOT - if not set, will be set to default data root string
 #
 # BASH functions that can be called by the test script:
 #   clean_roots - creates or empties out specified data roots
 #           cmd - logs and runs a command
 #           msg - logs a message
-#         myrun - issues mpirun or aprun command with -n specified 
+#         myrun - issues mpirun or aprun command with -n specified
 #
 #----------------------------------------------------------------------------
 synexit() {
@@ -69,12 +69,12 @@ synexit() {
 cmd() {
   echo "$host ---> $*"
   eval "$*"
-  return $?         
+  return $?
 }
 
 msglog=""
-msg() { 
-  echo "$host $*" 
+msg() {
+  echo "$host $*"
   if [[ -n $msglog ]]; then echo "$host $*" >> $msglog; fi
 }
 
@@ -159,7 +159,7 @@ batch_sub() {
         msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
       fi
     fi
-    mcmd="$mcmd $jobsh" 
+    mcmd="$mcmd $jobsh"
     msg "run_setup: ---> $mcmd"
     msub_msg=`$mcmd 2>&1`
 
@@ -204,7 +204,7 @@ clean_cmd="
   fi
 "
 
-# Function to clean data roots, i.e., create or empty them out 
+# Function to clean data roots, i.e., create or empty them out
 clean_roots() {
   allroots=${1-$HIO_TEST_ROOTS}
   IFS=","; read -ra root <<< "$allroots"; unset IFS
@@ -231,7 +231,7 @@ clean_roots() {
       fi
     else
       errx "data root \"$r\" type not recognized."
-    fi 
+    fi
     shopt -u nocasematch
   done
 }
@@ -281,7 +281,7 @@ else
       set | egrep "^PBS|^DW|^HOST|^HIO"
       job_dir="/${PBS_JOBID%%.*}"
     fi
-    if [[ -n $PBS_NODEFILE ]]; then 
+    if [[ -n $PBS_NODEFILE ]]; then
       echo ""
       cmd "cat $PBS_NODEFILE | sort | uniq | pr -t --columns 8"
     fi
@@ -333,8 +333,8 @@ if [[ -n $1 ]]; then synexit "extra parameters"; fi
 # Figure out nodes, ranks and ppn
 until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
   # Two parm cases -- calc third parm
-  if   [[ -n $nodes && -n $ranks ]]; then   ppn=$(( $ranks / $nodes ))   
-  elif [[ -n $nodes && -n $ppn ]];   then ranks=$(( $nodes * $ppn   ))   
+  if   [[ -n $nodes && -n $ranks ]]; then   ppn=$(( $ranks / $nodes ))
+  elif [[ -n $nodes && -n $ppn ]];   then ranks=$(( $nodes * $ppn   ))
   elif [[ -n $ranks && -n $ppn ]];   then nodes=$(( $ranks / $ppn   ))
   # Nodes only specified, determine ppn and iterate
   elif [[ -n $nodes ]]; then
@@ -355,7 +355,7 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
   elif [[ -n ranks ]]; then
     if [[ ${OSTYPE:0:6} == "darwin" ]]; then nodes=1
     else                                     nodes=2
-    fi 
+    fi
   # Nothing specified, determine ranks and iterate
   else
     if   [[ -n $PBS_NP ]]; then                ranks=$PBS_NP
@@ -364,7 +364,7 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
     else                                       ranks=4
     fi
   fi
-done  
+done
 
 
 if [[ $ranks -ne $(($nodes * $ppn)) ]]; then errx "ranks ($ranks) != nodes ($nodes) x ppn ($ppn)"; fi
