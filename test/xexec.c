@@ -1,3 +1,14 @@
+/* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
+/*
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ *                         reserved.
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
 //----------------------------------------------------------------------------
 // xexec.c - xexec is a multi-purpose HPC system testing tool.  See the help
 // text a few lines below for a description of its capabilities.

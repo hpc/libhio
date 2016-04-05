@@ -1,3 +1,14 @@
+/* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
+/*
+ * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ *                         reserved.
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
 //============================================================================
 // cw_misc.h - various small functions and macros to simplify the writing
 // of utility programs.

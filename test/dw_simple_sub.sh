@@ -1,4 +1,15 @@
 #! /bin/bash
+# -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*- */
+#
+# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
 #=============================================================================
 # dw_simple_sub.sh - submits a DataWarp batch job to test basic Moab and
 # DataWarp functionality at small scale.
