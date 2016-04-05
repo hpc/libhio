@@ -58,20 +58,22 @@
 #   b) Compare (via diff) the actual stage-out destination directory with the
 #      expected stage out destination directory
 #
-# Last update: 20160321  Cornell Wright
+# Last update: 20160405  Cornell Wright
 #=============================================================================
 
 #-----------------------------------------------------------------------------
 # Convenience functions
 #-----------------------------------------------------------------------------
-cmd() {
-  echo "$HOST ---> $*"
-  cmd_msg=$(eval "$*")
-  return $?
-}
-
+msg_log=""
 msg() {
   echo "$HOST $*"
+  if [[ -n $msg_log ]]; then echo "$HOST $*" >> $msg_log; fi
+}
+
+cmd() {
+  msg "---> $*"
+  cmd_msg=$(eval "$*")
+  return $?
 }
 
 errx() {
@@ -91,7 +93,7 @@ find_scratch () {
 # Start up
 #-----------------------------------------------------------------------------
 pkg="dw_simple"
-ver="20160321"
+ver="20160405"
 dashes="---------------------------------------------------------------------"
 msg "$dashes"
 msg "$pkg version $ver starting"
@@ -121,11 +123,13 @@ while [[ -e $dir ]]; do
   dir="$DW_SIMPLE_SCR/run_${pkg}_$(date +%Y%m%d.%H%M%S)"
 done
 cmd "mkdir -p $dir"
+msg_log="$dir/${pkg}_job.start.log"
 msg "Run directory is $dir"
+msg "These messages now logged to $msg_log"
 
-dir_si=$dir/stage_in
-dir_so=$dir/stage_out
-dir_ex=$dir/expect
+dir_si="$dir/stage_in"
+dir_so="$dir/stage_out"
+dir_ex="$dir/expect"
 job_file="$dir/${pkg}_job.sh"
 job_out="$dir/${pkg}_job.out"
 newdata="New file $(date)."
