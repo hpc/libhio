@@ -12,9 +12,11 @@
 HIO Readme
 ==========
 
-Last updated 2016-03-21
+Last updated 2016-04-06
 
-See file NEWS for a description of changes to hio.
+See file NEWS for a description of changes to hio.  Note that this README
+refers to various LANL clusters that have been used for testing HIO. Using
+HIO in other environments may require some adjustments.
 
 
 Building
@@ -66,7 +68,8 @@ named run_setup to process options and establish the testing environment.
 They invoke hio using a program named xexec which is driven by command strings
 contained in the runxx test scripts.
 
-A typical usage to submit a test DataWarp batch job on buffy might look like:
+A typical usage to submit a test DataWarp batch job on the small LANL test system
+named buffy might look like:
 
 cd <tarball>/test
 ./run02 -s m -r 32 -n 2 -b 
@@ -100,8 +103,8 @@ simple, small scale test job on a system with Moab/DataWarp integration.  See
 the comments in the file for instructions and a more detailed description.
 
 
-Step by step procedure for building and running HIO tests on Trinity
---------------------------------------------------------------------
+Step by step procedure for building and running HIO tests on LANL system Trinity
+--------------------------------------------------------------------------------
 
 This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
 
@@ -109,6 +112,7 @@ This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
    a) tr-login1:~cornell/hio/libhio-1.2.0.1.tar.gz
    b) yellow /usr/projects/hio/user/rel/libhio-1.2.0.1.tar.gz
    c) By request from Cornell Wright - cornell@lanl.gov
+   d) Download from Github << need location >>
 
 2) Untar
 
@@ -170,7 +174,7 @@ This procedure is accurate as of 2016-03-02 with HIO.1.2.0.4.
 
      ./run02 -s t -n 1 -r 1 -b
 
-   Alternate multi job test suitable for Gadget:
+   Alternate multi job test suitable for small test system Gadget:
 
      ./run_combo -t ./run02 ./run03 ./run12 ./run20 -s t s m l -n 1 2 4 1 2 4 -p 32 -b
 
