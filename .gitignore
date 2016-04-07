@@ -3,9 +3,9 @@ Makefile.in
 aclocal.m4
 autom4te.cache
 compile
+.DS_Store
 *~
 \#*
-.*
 config.*
 hio_config.*
 *.la
