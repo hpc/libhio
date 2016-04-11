@@ -1345,6 +1345,8 @@ static U64 hio_e_ofs;
 static I64 hseg_start = 0;
 static U64 rw_count[2];
 static ETIMER hio_tmr;
+double hio_hew_time, hio_her_time;
+
 
 #define HRC_TEST(API_NAME)  {                                                                \
   local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);           \
@@ -1402,6 +1404,7 @@ ACTION_RUN(hda_run) {
   hio_dataset_mode = V3.i;
   rw_count[0] = rw_count[1] = 0;
   MPI_CK(MPI_Barrier(mpi_comm));
+  hio_hew_time = hio_her_time = 0.0;
   ETIMER_START(&hio_tmr);
   DBG2("hda_run: dataset: %p", dataset);
   DBG2("Calling hio_datset_alloc(context, &dataset, %s, %lld, %d(%s), %d(%s))", hio_dataset_name, hio_ds_id_req,
@@ -1503,11 +1506,14 @@ ACTION_RUN(hew_run) {
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
   U64 ofs_abs;
+  ETIMER op_tmr;
 
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
+  ETIMER_START(&op_tmr);
   hcnt = hio_element_write (element, ofs_abs, 0, wbuf + ( (ofs_abs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
+  hio_hew_time += ETIMER_ELAPSED(&op_tmr);
   HCNT_TEST(hio_element_write)
   rw_count[1] += hcnt;
 }
@@ -1529,11 +1535,14 @@ ACTION_RUN(her_run) {
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
   U64 ofs_abs;
+  ETIMER op_tmr;
 
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("her el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
+  ETIMER_START(&op_tmr);
   hcnt = hio_element_read (element, ofs_abs, 0, rbuf, 1, hreq);
+  hio_her_time += ETIMER_ELAPSED(&op_tmr);
   HCNT_TEST(hio_element_read)
   rw_count[0] += hcnt;
 
@@ -1588,8 +1597,11 @@ ACTION_RUN(hdc_run) {
     VERB1("hdo-hdc R/W GiB: %f %f  time: %f S  R/W speed: %f %f GiB/S",
           (double)rw_count_sum[0]/GIGBIN, (double)rw_count_sum[1]/GIGBIN, time,
            rw_count_sum[0] / time / GIGBIN, rw_count_sum[1] / time / GIGBIN );
+    VERB1("Accumulated time since hda; hew: %f S  her: %f S", hio_hew_time, hio_her_time);
     printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / time / GIGBIN );
     printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / time / GIGBIN );
+  } else {
+    VERB2("Accumulated time since hda; hew: %f S  her: %f S", hio_hew_time, hio_her_time);
   }
 }
 
