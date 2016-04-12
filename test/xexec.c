@@ -1587,7 +1587,7 @@ ACTION_RUN(hec_run) {
   hrc = hio_element_close(&element);
   ETIMER_START(&hio_api_tmr);
   HRC_TEST(hio_elemnt_close)
-  hio_hdc_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hec_time += ETIMER_ELAPSED(&hio_api_tmr);
   ETIMER_START(&hio_api_tmr);
   wbuf = FREEX(wbuf);
   rbuf = FREEX(rbuf);
