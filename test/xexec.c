@@ -1344,8 +1344,9 @@ static int hio_check = 0;
 static U64 hio_e_ofs;
 static I64 hseg_start = 0;
 static U64 rw_count[2];
-static ETIMER hio_tmr;
-double hio_hew_time, hio_her_time;
+static ETIMER hio_hdaf_tmr, hio_api_tmr;
+double hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_her_time,
+       hio_hec_time, hio_hdc_time, hio_hdf_time, hio_exc_time;
 
 
 #define HRC_TEST(API_NAME)  {                                                                \
@@ -1404,12 +1405,15 @@ ACTION_RUN(hda_run) {
   hio_dataset_mode = V3.i;
   rw_count[0] = rw_count[1] = 0;
   MPI_CK(MPI_Barrier(mpi_comm));
-  hio_hew_time = hio_her_time = 0.0;
-  ETIMER_START(&hio_tmr);
+  hio_hda_time = hio_hdo_time = hio_heo_time = hio_hew_time = hio_her_time =
+                 hio_hec_time = hio_hdc_time = hio_hdf_time = hio_exc_time = 0.0;
   DBG2("hda_run: dataset: %p", dataset);
   DBG2("Calling hio_datset_alloc(context, &dataset, %s, %lld, %d(%s), %d(%s))", hio_dataset_name, hio_ds_id_req,
         hio_dataset_flags, V2.s, hio_dataset_mode, V3.s);
+  ETIMER_START(&hio_hdaf_tmr);
+  ETIMER_START(&hio_api_tmr);
   hrc = hio_dataset_alloc (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
+  hio_hda_time += ETIMER_ELAPSED(&hio_api_tmr);
   DBG2("hda_run: dataset: %p", dataset);
   HRC_TEST(hio_dataset_alloc);
 }
@@ -1419,7 +1423,9 @@ ACTION_RUN(hda_run) {
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
   DBG2("calling hio_dataset_open(%p)", dataset);
+  ETIMER_START(&hio_api_tmr);
   hrc = hio_dataset_open (dataset);
+  hio_hdo_time += ETIMER_ELAPSED(&hio_api_tmr);
   HRC_TEST(hio_dataset_open);
   if (HIO_SUCCESS == hrc) {
     hrc = hio_dataset_get_id(dataset, &hio_ds_id_act);
@@ -1447,9 +1453,12 @@ ACTION_RUN(heo_run) {
   hio_element_name = V0.s;
   int flag_i = V1.i;
   bufsz = V2.u;
+  ETIMER_START(&hio_api_tmr);
   hrc = hio_element_open (dataset, &element, hio_element_name, flag_i);
+  hio_heo_time += ETIMER_ELAPSED(&hio_api_tmr);
   HRC_TEST(hio_element_open)
 
+  ETIMER_START(&hio_api_tmr);
   wbuf = MALLOCX(bufsz + LFSR_22_CYCLE);
   lfsr_22_byte_init();
   lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE);
@@ -1464,6 +1473,7 @@ ACTION_RUN(heo_run) {
   hio_element_hash = crc32(0, hash_str, strlen(hash_str)) % EL_HASH_MODULUS;
   DBG4("heo hash: \"%s\" 0x%04X", hash_str, hio_element_hash);
   FREEX(hash_str);
+  hio_exc_time += ETIMER_ELAPSED(&hio_api_tmr);
 
 }
 
@@ -1506,14 +1516,13 @@ ACTION_RUN(hew_run) {
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
   U64 ofs_abs;
-  ETIMER op_tmr;
 
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
-  ETIMER_START(&op_tmr);
+  ETIMER_START(&hio_api_tmr);
   hcnt = hio_element_write (element, ofs_abs, 0, wbuf + ( (ofs_abs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
-  hio_hew_time += ETIMER_ELAPSED(&op_tmr);
+  hio_hew_time += ETIMER_ELAPSED(&hio_api_tmr);
   HCNT_TEST(hio_element_write)
   rw_count[1] += hcnt;
 }
@@ -1535,14 +1544,13 @@ ACTION_RUN(her_run) {
   I64 ofs_param = V0.u;
   U64 hreq = V1.u;
   U64 ofs_abs;
-  ETIMER op_tmr;
 
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("her el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
-  ETIMER_START(&op_tmr);
+  ETIMER_START(&hio_api_tmr);
   hcnt = hio_element_read (element, ofs_abs, 0, rbuf, 1, hreq);
-  hio_her_time += ETIMER_ELAPSED(&op_tmr);
+  hio_her_time += ETIMER_ELAPSED(&hio_api_tmr);
   HCNT_TEST(hio_element_read)
   rw_count[0] += hcnt;
 
@@ -1577,9 +1585,13 @@ ACTION_RUN(herr_run) {
 ACTION_RUN(hec_run) {
   hio_return_t hrc;
   hrc = hio_element_close(&element);
+  ETIMER_START(&hio_api_tmr);
   HRC_TEST(hio_elemnt_close)
+  hio_hdc_time += ETIMER_ELAPSED(&hio_api_tmr);
+  ETIMER_START(&hio_api_tmr);
   wbuf = FREEX(wbuf);
   rbuf = FREEX(rbuf);
+  hio_exc_time += ETIMER_ELAPSED(&hio_api_tmr);
   bufsz = 0;
 }
 
@@ -1587,31 +1599,40 @@ ACTION_RUN(hec_run) {
 
 ACTION_RUN(hdc_run) {
   hio_return_t hrc;
+  ETIMER_START(&hio_api_tmr);
   hrc = hio_dataset_close(dataset);
-  MPI_CK(MPI_Barrier(mpi_comm));
-  double time = ETIMER_ELAPSED(&hio_tmr);
+  hio_hdc_time += ETIMER_ELAPSED(&hio_api_tmr);
   HRC_TEST(hio_dataset_close)
-  U64 rw_count_sum[2];
-  MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
-  if (myrank == 0) {
-    VERB1("hdo-hdc R/W GiB: %f %f  time: %f S  R/W speed: %f %f GiB/S",
-          (double)rw_count_sum[0]/GIGBIN, (double)rw_count_sum[1]/GIGBIN, time,
-           rw_count_sum[0] / time / GIGBIN, rw_count_sum[1] / time / GIGBIN );
-    VERB1("Accumulated time since hda; hew: %f S  her: %f S", hio_hew_time, hio_her_time);
-    printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / time / GIGBIN );
-    printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / time / GIGBIN );
-  } else {
-    VERB2("Accumulated time since hda; hew: %f S  her: %f S", hio_hew_time, hio_her_time);
-  }
 }
 
 ACTION_RUN(hdf_run) {
   hio_return_t hrc;
   DBG3("Calling hio_dataset_free(%p); dataset: %p", &dataset, dataset);
+  ETIMER_START(&hio_api_tmr);
   hrc = hio_dataset_free(&dataset);
+  hio_hdf_time += ETIMER_ELAPSED(&hio_api_tmr);
+  MPI_CK(MPI_Barrier(mpi_comm));
+  double hdaf_time = ETIMER_ELAPSED(&hio_hdaf_tmr);
+  U64 rw_count_sum[2];
+  MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   DBG3("After hio_dataset_free(); dataset: %p", dataset);
   IFDBG3( hex_dump(&dataset, sizeof(dataset)) );
   HRC_TEST(hio_dataset_close)
+  double una_time = hdaf_time - (hio_hda_time + hio_hdo_time + hio_heo_time + hio_hew_time +
+                                 hio_her_time + hio_hec_time + hio_hdc_time + hio_hdf_time + hio_exc_time);
+  if (myrank == 0) {
+    VERB1("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
+    VERB1("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
+    hdaf_time -= hio_exc_time;
+    VERB1("hda-hdf R/W GiB: %f %f  time: %f S  R/W speed: %f %f GiB/S",
+          (double)rw_count_sum[0]/GIGBIN, (double)rw_count_sum[1]/GIGBIN, hdaf_time,
+           rw_count_sum[0] / hdaf_time / GIGBIN, rw_count_sum[1] / hdaf_time / GIGBIN );
+    printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / hdaf_time / GIGBIN );
+    printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / hdaf_time / GIGBIN );
+  } else {
+    VERB2("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
+    VERB2("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
+  }
 }
 
 ACTION_RUN(hdu_run) {
