@@ -88,6 +88,11 @@ AC_SEARCH_LIBS([dlopen],[dl],[hio_dynamic_component=1],[hio_dynamic_component=0]
 
 AC_CHECK_LIB([bz2],[BZ2_bzBuffToBuffCompress],[],[AC_MSG_ERROR([could not find working zlib])])
 
+AX_PTHREAD([])
+
+LIBS="$PTHREAD_LIBS $LIBS"
+CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
 
