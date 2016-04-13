@@ -21,8 +21,8 @@ addons:
             - openmpi-dev
 
 before_script:
-    - if [[ "$TRAVIS_OS_NAME" == "osx" ]] ; brew update ; brew install openmpi ; fi
-    - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; sudo apt-get -qq update ; apt-get -qq install openmpi-dev openmpi-bin ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "osx" ]] ; then brew update ; brew install openmpi ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then sudo apt-get -qq update ; apt-get -qq install openmpi-dev openmpi-bin ; fi
 
 script:
     - ./autogen.sh && ./configure
