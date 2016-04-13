@@ -106,6 +106,7 @@ AC_DEFINE_UNQUOTED([USE_DYNAMIC_COMPONENTS], [$hio_dynamic_component], [Whether 
 AC_DEFINE([_GNU_SOURCE], [1], [Define _GNU_SOURCE feature macro])
 AC_DEFINE_UNQUOTED([HIO_PREFIX], ["$prefix"], [HIO install prefix])
 AM_CONDITIONAL([HAVE_PDFLATEX], [test $HAVE_PDFLATEX = yes])
+AM_CONDITIONAL([HAVE_MPI], [test $hio_use_mpi = 1])
 
 AC_SUBST([HIO_PKGCONFIG_REQUIRES], [$hio_pkgconfig_requires])
 

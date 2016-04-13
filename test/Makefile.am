@@ -16,9 +16,16 @@ EXTRA_DIST = run_setup run_combo run01 run02 run03 run04 run05 run07 run08 run09
 clean-local:
 	-rm -rf .test_root1
 
-noinst_PROGRAMS = test01.x xexec.x error_test.x
+noinst_PROGRAMS = test01.x error_test.x
+if HAVE_MPI
+noinst_PROGRAMS += xexec.x
+endif
+
 check_PROGRAMS = ${noinst_PROGRAMS}
-TESTS = run01 run02 run03 run04 run05 run07 run08 run09 run12 error_test.x
+TESTS = run01 error_test.x
+if HAVE_MPI
+TESTS += run02 run03 run04 run05 run07 run08 run09 run12
+endif
 
 test01_x_SOURCES = test01.c
 xexec_x_SOURCES = xexec.c cw_misc.c cw_misc.h
