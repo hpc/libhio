@@ -33,6 +33,7 @@ typedef unsigned long atomic_ulong;
 
 #define atomic_init(p, v) (*(p) = v)
 #define atomic_fetch_add(p, v) __sync_fetch_and_add(p, v)
+#define atomic_load(v) (*(v))
 
 #endif
 

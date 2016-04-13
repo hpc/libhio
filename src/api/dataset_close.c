@@ -37,8 +37,8 @@ int hio_dataset_close (hio_dataset_t dataset) {
   tmp[1] = dataset->ds_stat.s_bwritten;
   tmp[2] = dataset->ds_stat.s_rtime;
   tmp[3] = dataset->ds_stat.s_wtime;
-  tmp[4] = dataset->ds_stat.s_rcount;
-  tmp[5] = dataset->ds_stat.s_wcount;
+  tmp[4] = atomic_load(&dataset->ds_stat.s_rcount);
+  tmp[5] = atomic_load(&dataset->ds_stat.s_wcount);
 
   context->c_bread = dataset->ds_stat.s_bread;
   context->c_bwritten = dataset->ds_stat.s_bwritten;
