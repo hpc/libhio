@@ -82,8 +82,9 @@ AC_CHECK_PROG([HAVE_PDFLATEX], [pdflatex], [yes], [no])
 # Checks for header files.
 AC_CHECK_HEADERS_ONCE([strings.h sys/types.h sys/time.h pthread.h dlfcn.h sys/stat.h \
                        sys/param.h sys/mount.h sys/vfs.h bzlib.h])
-AC_CHECK_FUNCS_ONCE([access gettimeofday dlopen dlclose dlsym stat statfs MPI_Win_allocate_shared \
+AC_CHECK_FUNCS_ONCE([access gettimeofday stat statfs MPI_Win_allocate_shared \
                      MPI_Comm_split_type MPI_Win_flush])
+AC_SEARCH_LIBS([dlopen],[dl],[hio_dynamic_component=1],[hio_dynamic_component=0])
 
 AC_CHECK_LIB([bz2],[BZ2_bzBuffToBuffCompress],[],[AC_MSG_ERROR([could not find working zlib])])
 
@@ -96,6 +97,7 @@ AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 
 AC_DEFINE_UNQUOTED([HIO_USE_MPI], [$hio_use_mpi], [Whether to use mpi with hio])
+AC_DEFINE_UNQUOTED([USE_DYNAMIC_COMPONENTS], [$hio_dynamic_component], [Whether to use dynamic components])
 AC_DEFINE([_GNU_SOURCE], [1], [Define _GNU_SOURCE feature macro])
 AC_DEFINE_UNQUOTED([HIO_PREFIX], ["$prefix"], [HIO install prefix])
 AM_CONDITIONAL([HAVE_PDFLATEX], [test $HAVE_PDFLATEX = yes])

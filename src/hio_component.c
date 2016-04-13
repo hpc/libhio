@@ -11,8 +11,7 @@
 
 #include "hio_internal.h"
 
-#if HAVE_DLFCN_H
-#define USE_DYNAMIC_COMPONENTS
+#if USE_DYNAMIC_COMPONENTS
 #include <dlfcn.h>
 #include <dirent.h>
 #endif
@@ -36,7 +35,7 @@ static hio_component_t *hio_builtin_components[] = {&builtin_posix_component,
 
 static int hio_component_init_count = 0;
 
-#if defined(USE_DYNAMIC_COMPONENTS)
+#if USE_DYNAMIC_COMPONENTS
 typedef struct hio_dynamic_component_t {
   void *dl_ctx;
   hio_component_t *component;
@@ -150,7 +149,7 @@ int hioi_component_init (hio_context_t context) {
     return rc;
   }
 
-#if defined(USE_DYNAMIC_COMPONENTS)
+#if USE_DYNAMIC_COMPONENTS
   return hioi_dynamic_component_init (context);
 #endif
 
@@ -168,7 +167,7 @@ int hioi_component_fini (void) {
     (void) component->fini ();
   }
 
-#if defined(USE_DYNAMIC_COMPONENTS)
+#if USE_DYNAMIC_COMPONENTS
   for (int i = 0 ; i < hio_external_component_count ; ++i) {
     hio_dynamic_component_t *component = hio_external_components + i;
     (void) component->component->fini ();
@@ -194,7 +193,7 @@ int hioi_component_query (hio_context_t context, const char *data_root, const ch
     }
   }
 
-#if defined(USE_DYNAMIC_COMPONENTS)
+#if USE_DYNAMIC_COMPONENTS
   for (int i = 0 ; i < hio_external_component_count ; ++i) {
     hio_dynamic_component_t *component = hio_external_components + i;
 
