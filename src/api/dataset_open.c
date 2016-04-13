@@ -208,7 +208,6 @@ static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t datas
 
 int hio_dataset_open (hio_dataset_t dataset) {
   hio_context_t context;
-  int rc;
 
   if (HIO_OBJECT_NULL == dataset) {
     return HIO_ERR_BAD_PARAM;

@@ -155,7 +155,7 @@ static struct lov_user_md *hioi_alloc_lustre_data (void) {
   }
 #endif
 
-  return malloc (struct_size);
+  return calloc (1, struct_size);
 }
 
 static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {

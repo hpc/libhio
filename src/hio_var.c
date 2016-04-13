@@ -422,6 +422,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
   char *key, *value, *default_file = NULL, *buffer, *line, *lastl;
   int data_size = 0, fd, rc = HIO_SUCCESS;
   struct stat statinfo;
+  int ret;
 
   if (NULL == config_file) {
     /* nothing to do */
@@ -430,7 +431,10 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
 
   if (!hioi_context_using_mpi (context) || 0 == context->c_rank) {
     if (HIO_CONFIG_FILE_DEFAULT == config_file) {
-      asprintf (&default_file, "%s.cfg", context->c_object.identifier);
+      ret = asprintf (&default_file, "%s.cfg", context->c_object.identifier);
+      if (0 > ret) {
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
       config_file = default_file;
     }
 
@@ -628,10 +632,10 @@ int hio_config_get_value (hio_object_t object, char *variable, char **value) {
       rc = asprintf (value, "%u", var->var_storage->uint32val);
       break;
     case HIO_CONFIG_TYPE_INT64:
-      rc = asprintf (value, "%lli", var->var_storage->int64val);
+      rc = asprintf (value, "%" PRId64, var->var_storage->int64val);
       break;
     case HIO_CONFIG_TYPE_UINT64:
-      rc = asprintf (value, "%llu", var->var_storage->uint64val);
+      rc = asprintf (value, "%" PRIu64, var->var_storage->uint64val);
       break;
     case HIO_CONFIG_TYPE_FLOAT:
       rc = asprintf (value, "%f", var->var_storage->floatval);

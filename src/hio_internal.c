@@ -348,6 +348,7 @@ int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode) {
 
 hio_object_t hioi_object_alloc (const char *name, hio_object_type_t type, hio_object_t parent,
                                 size_t object_size, hio_object_release_fn_t release_fn) {
+  pthread_mutexattr_t mutex_attr;
   hio_object_t new_object;
   int rc;
 
@@ -373,7 +374,10 @@ hio_object_t hioi_object_alloc (const char *name, hio_object_type_t type, hio_ob
   new_object->type = type;
   new_object->parent = parent;
   new_object->release_fn = release_fn;
-  pthread_mutex_init (&new_object->lock, NULL);
+  pthread_mutexattr_init (&mutex_attr);
+  pthread_mutexattr_settype (&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init (&new_object->lock, &mutex_attr);
+  pthread_mutexattr_destroy (&mutex_attr);
 
   return new_object;
 }
@@ -386,6 +390,8 @@ void hioi_object_release (hio_object_t object) {
   if (NULL != object->release_fn) {
     object->release_fn (object);
   }
+
+  hioi_var_fini (object);
 
   free (object->identifier);
   free (object);

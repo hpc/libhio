@@ -60,9 +60,6 @@ static void hioi_context_release (hio_object_t object) {
   free (context->c_shared_ranks);
 #endif
 
-  /* finalize object variables */
-  hioi_var_fini (&context->c_object);
-
   free (context->c_droots);
 
   /* clean up dataset data structures */
@@ -204,7 +201,9 @@ static int hioi_context_set_default_droot (hio_context_t context) {
   int rc;
 
   /* default data root is the current working directory */
-  getcwd (cwd_buffer, MAXPATHLEN);
+  if (NULL == getcwd (cwd_buffer, MAXPATHLEN)) {
+    return HIO_ERROR;
+  }
 
   rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
   if (0 > rc) {

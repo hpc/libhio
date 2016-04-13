@@ -82,9 +82,7 @@ static hio_return_t hioi_dataset_close_stub (hio_dataset_t dataset) {
 }
 
 static void hioi_dataset_release (hio_object_t object) {
-  hio_context_t context = hioi_object_context (object);
   hio_dataset_t dataset = (hio_dataset_t) object;
-  hio_module_t *module = dataset->ds_module;
   hio_element_t element, next;
 
   hioi_list_foreach_safe(element, next, dataset->ds_elist, struct hio_element, e_list) {
