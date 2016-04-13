@@ -22,3 +22,5 @@ pkgconfig_DATA=libhio.pc
 
 docs:
 	make -C design docs
+
+dist: dist-bzip2
