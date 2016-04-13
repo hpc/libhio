@@ -233,14 +233,14 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
  * @param[in] dataset     dataset to scatter
  * @param[in] rc          current return code
  */
-int hioi_dataset_scatter (hio_dataset_t dataset, int rc);
+int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc);
 
 /**
  * @brief gather dataset configuration from all processes
  *
  * @param[in] dataset     dataset to gather
  */
-int hioi_dataset_gather (hio_dataset_t dataset);
+int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out, bool compress_data);
 
 /**
  * Add an element to a dataset
@@ -303,6 +303,8 @@ int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int ra
  */
 int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data);
 
+int hioi_manifest_read (const char *path, unsigned char **manifest_out, size_t *manifest_size_out);
+
 /**
  * @brief Serialize the manifest in the dataset and save it to the specified file
  *
@@ -317,6 +319,7 @@ int hioi_manifest_save (hio_dataset_t dataset, const char *path);
 int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
 int hioi_manifest_load (hio_dataset_t dataset, const char *path);
 int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
+int hioi_manifest_merge_data2 (unsigned char **data1, size_t *data1_size, const unsigned char *data2, size_t data2_size);
 
 /**
  * Read header data from a manifest
@@ -370,8 +373,41 @@ int hioi_element_open_internal (hio_dataset_t dataset, hio_element_t *element_ou
                                 int flags, int rank);
 int hioi_element_close_internal (hio_element_t element);
 
+int hioi_dataset_shared_init (hio_dataset_t dataset);
+int hioi_dataset_buffer_flush (hio_dataset_t dataset);
+/**
+ * Translate an application offset into a logical file and offset
+ *
+ * @param[in] element hio element handle
+ * @param[in] app_offset application offset
+ * @param[out] file_index logical file index
+ * @param[out] offset logical file offset
+ * @param[inout] length length of application segment
+ *
+ * This function translates an application block into a logical file
+ * segment. If a segment exists that matches the beginning of the
+ * segment the index and offset are returned. If the application
+ * block extends past the end of the segment the length is adjusted
+ * to the end of the file segment.
+ */
+int hioi_element_translate_offset (hio_element_t element, uint64_t app_offset, int *file_index,
+                                   uint64_t *offset, size_t *length);
+
 static inline bool hioi_dataset_doing_io (hio_dataset_t dataset) {
   return true;
 }
 
+#define DEBUG 1
+
+#if defined(DEBUG)
+#define hioi_timed_call(fn) {                   \
+    uint64_t _timed_start, _timed_end;          \
+    _timed_start = hioi_gettime ();             \
+    fn;                                         \
+    _timed_end = hioi_gettime ();               \
+    fprintf (stderr, "call " # fn " took %" PRIu64 "us\n", _timed_end - _timed_start); \
+  }
+#else
+#define hioi_timed_call(call) call
+#endif
 #endif /* !defined(HIO_INTERNAL_H) */

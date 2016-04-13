@@ -18,12 +18,12 @@
 #define HIO_POSIX_MAX_OPEN_FILES  32
 
 typedef struct builtin_posix_file_t {
+  /** file handle */
+  hio_file_t f_file;
   /** hio element */
   hio_element_t f_element;
   /** file block id */
   int f_bid;
-  /** file handle */
-  FILE *f_fh;
 } builtin_posix_file_t;
 
 /* data types */
@@ -37,6 +37,8 @@ typedef struct builtin_posix_module_dataset_t {
   pthread_mutex_t lock;
   builtin_posix_file_t files[HIO_POSIX_MAX_OPEN_FILES];
   char *base_path;
+  uint64_t reserved_offset;
+  uint64_t reserved_remaining;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;

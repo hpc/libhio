@@ -24,10 +24,9 @@ static void hioi_element_release (hio_object_t object) {
 
 hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name, const int rank) {
   hio_element_t element;
-  int rc;
 
   element = (hio_element_t) hioi_object_alloc (name, HIO_OBJECT_TYPE_ELEMENT, &dataset->ds_object,
-                                               sizeof (*element), NULL);
+                                               sizeof (*element), hioi_element_release);
   if (NULL == element) {
     return NULL;
   }
@@ -93,18 +92,20 @@ int hioi_element_open_internal (hio_dataset_t dataset, hio_element_t *element_ou
 
 int hioi_element_close_internal (hio_element_t element) {
   hio_dataset_t dataset = hioi_element_dataset (element);
-  int rc;
+  int rc = HIO_SUCCESS;
 
   hioi_object_lock (&dataset->ds_object);
   if (0 == --element->e_open_count && hioi_dataset_doing_io (dataset)) {
-    if (dataset->ds_mode & HIO_FLAG_WRITE) {
+    if (dataset->ds_flags & HIO_FLAG_WRITE) {
+      hioi_object_unlock (&dataset->ds_object);
       rc = hio_element_flush (element, HIO_FLUSH_MODE_LOCAL);
+      hioi_object_lock (&dataset->ds_object);
     }
 
     rc = element->e_close (element);
-    if (element->e_fh) {
-      fclose (element->e_fh);
-      element->e_fh = NULL;
+    if (element->e_file.f_hndl) {
+      fclose (element->e_file.f_hndl);
+      element->e_file.f_hndl = NULL;
     }
   }
   hioi_object_unlock (&dataset->ds_object);
@@ -222,8 +223,7 @@ int hioi_element_add_segment (hio_element_t element, int file_index, uint64_t fi
  * to the end of the file segment.
  */
 int hioi_element_translate_offset (hio_element_t element, uint64_t app_offset, int *file_index,
-                                   unsigned long *offset, size_t *length) {
-  hio_dataset_t dataset = hioi_element_dataset (element);
+                                   uint64_t *offset, size_t *length) {
   hio_manifest_segment_t *segment;
   uint64_t base, bound, remaining;
   int rc = HIO_ERR_NOT_FOUND;

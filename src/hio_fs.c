@@ -111,6 +111,12 @@ static int hioi_fs_open_lustre (const char *path, hio_fs_attr_t *fs_attr, int fl
       rc = ioctl (fd, LL_IOC_LOV_SETSTRIPE, &lum);
     }
 
+#if defined(LL_IOC_GROUP_LOCK)
+    if (fs_attr->fs_use_group_locking) {
+      rc = ioctl (fd,  LL_IOC_GROUP_LOCK, 1);
+    }
+#endif
+
     return fd;
   }
 

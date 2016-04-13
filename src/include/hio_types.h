@@ -92,6 +92,9 @@ static inline bool hioi_list_empty (hio_list_t *list) {
 
 /* dataset function types */
 
+/* forward declaration for internal request structure */
+struct hio_internal_request_t;
+
 /**
  * Close a dataset and release any internal state
  *
@@ -149,6 +152,9 @@ typedef int (*hio_dataset_element_open_fn_t) (hio_dataset_t dataset, hio_element
  * to delay any updates to the dataset element until hio_element_close() or
  * hio_element_flush() at the latest.
  */
+typedef int (*hio_dataset_process_requests_fn_t) (hio_dataset_t dataset, struct hio_internal_request_t **reqs,
+                                                  int req_count);
+
 typedef int (*hio_element_write_strided_nb_fn_t) (hio_element_t element,
                                                   hio_request_t *request,
                                                   off_t offset, const void *ptr,
@@ -404,6 +410,9 @@ struct hio_fs_attr_t {
 
   /** filesystem open function (for data) */
   hio_fs_open_fn_t fs_open;
+
+  /** use lustre group locking feature if available */
+  bool fs_use_group_locking;
 };
 typedef struct hio_fs_attr_t hio_fs_attr_t;
 
@@ -412,6 +421,28 @@ typedef struct hio_manifest_file_t {
   char *f_name;
 } hio_manifest_file_t;
 
+/**
+ * hio buffer descriptor
+ */
+typedef struct hio_buffer_t {
+  hio_list_t b_reqlist;
+  int        b_reqcount;
+  void      *b_base;
+  size_t     b_size;
+  size_t     b_remaining;
+} hio_buffer_t;
+
+/**
+ * Data structure for control block in shared memory
+ */
+typedef struct hio_shared_control_t {
+  /** master rank in context */
+  int32_t      s_master;
+  /** data file offset */
+  atomic_ulong s_offset;
+  /** shared lock */
+  pthread_mutex_t s_mutex;
+} hio_shared_control_t;
 
 struct hio_dataset {
   /** allows for type detection */
@@ -477,12 +508,31 @@ struct hio_dataset {
   /** dataset open function (data) */
   hio_fs_attr_t       ds_fsattr;
 
+  hio_buffer_t        ds_buffer;
+
+  bool                ds_use_bzip;
+
+#if HAVE_MPI_WIN_ALLOCATE_SHARED
+  MPI_Win             ds_shared_win;
+  hio_shared_control_t *ds_shared_control;
+#endif
+
   /** close the dataset and free any internal resources */
   hio_dataset_close_fn_t ds_close;
 
   /** open an element in the dataset */
   hio_dataset_element_open_fn_t ds_element_open;
+
+  /** process multiple requests */
+  hio_dataset_process_requests_fn_t ds_process_reqs;
 };
+
+typedef struct hio_file_t {
+  /** POSIX file handle */
+  FILE     *f_hndl;
+  /** current offset in the file */
+  uint64_t  f_offset;
+} hio_file_t;
 
 struct hio_request {
   struct hio_object req_object;
@@ -493,6 +543,28 @@ struct hio_request {
   /** status of the request */
   int               req_status;
 };
+
+typedef enum hio_request_type_t {
+  HIO_REQUEST_TYPE_READ,
+  HIO_REQUEST_TYPE_WRITE,
+} hio_request_type_t;
+
+typedef struct hio_internal_request_t {
+  hio_list_t    ir_list;
+  hio_element_t ir_element;
+  uint64_t      ir_offset;
+  union {
+    void *r;
+    const void *w;
+  } ir_data;
+  size_t        ir_count;
+  size_t        ir_size;
+  size_t        ir_stride;
+  size_t        ir_transferred;
+  int           ir_status;
+  hio_request_type_t ir_type;
+  hio_request_t ir_urequest;
+} hio_internal_request_t;
 
 typedef struct hio_manifest_segment_t {
   /** application offset */
@@ -525,8 +597,8 @@ struct hio_element {
   /** first invalid offset after the last valid block */
   int64_t           e_size;
 
-  /** element file handle (not used by all backends) */
-  FILE             *e_fh;
+  /** element file structure */
+  hio_file_t        e_file;
 
   /** function to write strided data */
   hio_element_write_strided_nb_fn_t e_write_strided_nb;

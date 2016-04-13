@@ -901,7 +901,7 @@ ssize_t hio_element_write (hio_element_t element, off_t offset, unsigned long re
  * the data has been written.
  */
 hio_return_t hio_element_write_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                          unsigned long reserved0, const void *ptr, size_t count, size_t size);
+                                   unsigned long reserved0, const void *ptr, size_t count, size_t size);
 
 /**
  * @ingroup blocking
@@ -957,8 +957,8 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
  * the data has been written.
  */
 hio_return_t hio_element_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                                  unsigned long reserved0, const void *ptr, size_t count, size_t size,
-                                  size_t stride);
+                                           unsigned long reserved0, const void *ptr, size_t count, size_t size,
+                                           size_t stride);
 
 /**
  * @ingroup nonblocking

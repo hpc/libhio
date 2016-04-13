@@ -44,6 +44,7 @@
 #define HIO_SEGMENT_KEY_LENGTH        "len"
 #define HIO_SEGMENT_KEY_FILE_INDEX    "findex"
 
+/* manifest helper functions */
 static void hioi_manifest_set_number (json_object *parent, const char *name, unsigned long value) {
   json_object *new_object = json_object_new_int64 ((int64_t) value);
 
@@ -63,18 +64,6 @@ static void hioi_manifest_set_string (json_object *parent, const char *name, con
 
   assert (NULL != new_object);
   json_object_object_add (parent, name, new_object);
-}
-
-static json_object *hio_manifest_new_object (json_object *parent, const char *name) {
-  json_object *new_object = json_object_new_object ();
-
-  if (NULL == new_object) {
-    return NULL;
-  }
-
-  json_object_object_add (parent, name, new_object);
-
-  return new_object;
 }
 
 static json_object *hio_manifest_new_array (json_object *parent, const char *name) {
@@ -141,12 +130,17 @@ static int hioi_manifest_get_signed_number (json_object *parent, const char *nam
   return HIO_SUCCESS;
 }
 
+/**
+ * @brief Generate a json manifest from an hio dataset
+ *
+ * @param[in] dataset hio dataset handle
+ *
+ * @returns json object representing the dataset's manifest
+ */
 static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
-  json_object *elements, *object, *segments, *top, *files;
+  json_object *elements, *top;
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_object_t hio_object = &dataset->ds_object;
-  hio_manifest_segment_t *segment;
-  hio_manifest_file_t *file;
   hio_element_t element;
   char *string_tmp;
   int rc;
@@ -174,9 +168,6 @@ static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
   hioi_manifest_set_string (top, HIO_MANIFEST_KEY_FILE_MODE, string_tmp);
   free (string_tmp);
 
-  if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
-    hioi_manifest_set_number (top, HIO_MANIFEST_KEY_BLOCK_SIZE, (unsigned long) dataset->ds_bs);
-  }
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_COMM_SIZE, (unsigned long) context->c_size);
   hioi_manifest_set_signed_number (top, HIO_MANIFEST_KEY_STATUS, (long) dataset->ds_status);
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_MTIME, (unsigned long) time (NULL));
@@ -244,14 +235,12 @@ static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
 
     for (int i = 0 ; i < dataset->ds_file_count ; ++i) {
       hio_manifest_file_t *file = dataset->ds_flist + i;
-      json_object *file_object = json_object_new_object ();
+      json_object *file_object = json_object_new_string (file->f_name);
       if (NULL == file_object) {
         json_object_put (top);
         return NULL;
       }
 
-      hioi_manifest_set_string (file_object, HIO_MANIFEST_PROP_IDENTIFIER,
-                                file->f_name);
       json_object_array_add (files_object, file_object);
     }
   }
@@ -259,17 +248,22 @@ static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
   return top;
 }
 
-int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data ) {
-  json_object *json_object;
+/**
+ * @brief Serialize a json object
+ *
+ * @param[in] json_object json object pointer
+ * @param[out] data serialized data out
+ * @param[out] data_size length of serialized data
+ * @param[in] compress_data whether to compress the serialized data
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_OUT_OF_RESOURCE if run out of memory
+ */
+static int hioi_manifest_serialize_json (json_object *json_object, unsigned char **data, size_t *data_size,
+                                         bool compress_data) {
   const char *serialized;
   unsigned int serialized_len;
-  size_t size;
   int rc;
-
-  json_object = hio_manifest_generate_2_0 (dataset);
-  if (NULL == json_object) {
-    return HIO_ERROR;
-  }
 
   serialized = json_object_to_json_string (json_object);
   serialized_len = strlen (serialized) + 1;
@@ -306,10 +300,22 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
     memcpy (*data, serialized, *data_size - 1);
   }
 
-  /* free the json object */
+  return HIO_SUCCESS;
+}
+
+int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data) {
+  json_object *json_object;
+  int rc;
+
+  json_object = hio_manifest_generate_2_0 (dataset);
+  if (NULL == json_object) {
+    return HIO_ERROR;
+  }
+
+  rc = hioi_manifest_serialize_json (json_object, data, data_size, compress_data);
   json_object_put (json_object);
 
-  return HIO_SUCCESS;
+  return rc;
 }
 
 int hioi_manifest_save (hio_dataset_t dataset, const char *path) {
@@ -334,20 +340,23 @@ int hioi_manifest_save (hio_dataset_t dataset, const char *path) {
   }
 
   errno = 0;
-  write (fd, data, data_size);
+  rc = write (fd, data, data_size);
   close (fd);
   free (data);
 
-  return hioi_err_errno (errno);
+  if (0 > rc) {
+    return hioi_err_errno (errno);
+  }
+
+  return rc == data_size ? HIO_SUCCESS : HIO_ERR_TRUNCATE;
 }
 
 static int hioi_manifest_parse_file_2_1 (hio_dataset_t dataset, json_object *file_object) {
   const char *tmp_string;
-  int rc;
 
-  rc = hioi_manifest_get_string (file_object, HIO_MANIFEST_PROP_IDENTIFIER, &tmp_string);
-  if (HIO_SUCCESS != rc) {
-    hioi_err_push (HIO_ERROR, &dataset->ds_object, "Manifest file entry missing identifier");
+  tmp_string = json_object_get_string (file_object);
+  if (NULL == tmp_string) {
+    hioi_err_push (HIO_ERROR, &dataset->ds_object, "Error parsing manifest file");
     return HIO_ERROR;
   }
 
@@ -355,9 +364,8 @@ static int hioi_manifest_parse_file_2_1 (hio_dataset_t dataset, json_object *fil
 }
 
 
-static int hioi_manifest_parse_segment_2_1 (hio_element_t element, json_object *files, json_object *segment_object, bool merge) {
+static int hioi_manifest_parse_segment_2_1 (hio_element_t element, json_object *files, json_object *segment_object) {
   unsigned long file_offset, app_offset0, length, file_index;
-  hio_dataset_t dataset = hioi_element_dataset (element);
   int rc;
 
   rc = hioi_manifest_get_number (segment_object, HIO_SEGMENT_KEY_FILE_OFFSET, &file_offset);
@@ -381,35 +389,27 @@ static int hioi_manifest_parse_segment_2_1 (hio_element_t element, json_object *
     return rc;
   }
 
-  if (files && merge) {
-    json_object *file_object;
-    const char *tmp_string;
-
-    file_object = json_object_array_get_idx (files, file_index);
-    if (NULL == file_object) {
+  if (files) {
+    /* verify the file index is valid */
+    if (file_index >= json_object_array_length (files)) {
       hioi_err_push (HIO_ERROR, &element->e_object, "Manifest segment specified invalid file index");
       return HIO_ERROR;
-    }
-
-    if (merge) {
-      rc = hioi_manifest_parse_file_2_1 (dataset, file_object);
-      if (0 > rc) {
-        return rc;
-      }
-
-      file_index = rc;
     }
   }
 
   return hioi_element_add_segment (element, file_index, file_offset, app_offset0, length);
 }
 
-static int hioi_manifest_parse_segments_2_1 (hio_element_t element, json_object *files, json_object *object, bool merge) {
+static int hioi_manifest_parse_segments_2_1 (hio_element_t element, json_object *files, json_object *object) {
+  hio_context_t context = hioi_object_context (&element->e_object);
   int segment_count = json_object_array_length (object);
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "parsing %d segments in element %s", segment_count,
+            hioi_object_identifier (&element->e_object));
 
   for (int i = 0 ; i < segment_count ; ++i) {
     json_object *segment_object = json_object_array_get_idx (object, i);
-    int rc = hioi_manifest_parse_segment_2_1 (element, files, segment_object, merge);
+    int rc = hioi_manifest_parse_segment_2_1 (element, files, segment_object);
     if (HIO_SUCCESS != rc) {
       return rc;
     }
@@ -418,10 +418,9 @@ static int hioi_manifest_parse_segments_2_1 (hio_element_t element, json_object 
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *files, json_object *element_object, bool merge) {
+static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *files, json_object *element_object) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  hio_element_t element = NULL, tmp_element;
-  bool new_element = false;
+  hio_element_t element = NULL;
   json_object *segments_object;
   const char *tmp_string;
   unsigned long value;
@@ -429,11 +428,11 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *
 
   rc = hioi_manifest_get_string (element_object, HIO_MANIFEST_PROP_IDENTIFIER, &tmp_string);
   if (HIO_SUCCESS != rc) {
-    hioi_err_push (HIO_ERROR, &dataset->ds_object, "Manifest element missing identifier property");
+    hioi_err_push (HIO_ERROR, &dataset->ds_object, "manifest element missing identifier property");
     return HIO_ERROR;
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Manifest element: %s", tmp_string);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "parsing manifest element: %s", tmp_string);
 
   if (HIO_SET_ELEMENT_UNIQUE == dataset->ds_mode) {
     rc = hioi_manifest_get_number (element_object, HIO_MANIFEST_PROP_RANK, &value);
@@ -442,27 +441,19 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *
       return HIO_ERR_BAD_PARAM;
     }
 
+    if (value != context->c_rank) {
+      /* nothing to do */
+      return HIO_SUCCESS;
+    }
+
     rank = value;
   } else {
     rank = -1;
   }
 
-  if (merge) {
-    hioi_list_foreach (tmp_element, dataset->ds_elist, struct hio_element, e_list) {
-      if (!strcmp (tmp_element->e_object.identifier, tmp_string) && rank == tmp_element->e_rank) {
-        element = tmp_element;
-        break;
-      }
-    }
-  }
-
+  element = hioi_element_alloc (dataset, (const char *) tmp_string, rank);
   if (NULL == element) {
-    element = hioi_element_alloc (dataset, (const char *) tmp_string, rank);
-    if (NULL == element) {
-      return HIO_ERR_OUT_OF_RESOURCE;
-    }
-
-    new_element = true;
+    return HIO_ERR_OUT_OF_RESOURCE;
   }
 
   rc = hioi_manifest_get_number (element_object, HIO_MANIFEST_PROP_SIZE, &value);
@@ -476,31 +467,30 @@ static int hioi_manifest_parse_element_2_0 (hio_dataset_t dataset, json_object *
   }
 
   segments_object = hioi_manifest_find_object (element_object, "segments");
-
   if (NULL != segments_object) {
-    rc = hioi_manifest_parse_segments_2_1 (element, files, segments_object, merge);
+    rc = hioi_manifest_parse_segments_2_1 (element, files, segments_object);
     if (HIO_SUCCESS != rc) {
       hioi_object_release (&element->e_object);
       return rc;
     }
   }
 
-  if (new_element) {
-    hioi_dataset_add_element (dataset, element);
-  }
+  hioi_dataset_add_element (dataset, element);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Found element with identifier %s in manifest",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "found element with identifier %s in manifest",
 	    element->e_object.identifier);
 
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_parse_elements_2_0 (hio_dataset_t dataset, json_object *files, json_object *object, bool merge) {
+static int hioi_manifest_parse_elements_2_0 (hio_dataset_t dataset, json_object *files, json_object *object) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
   int element_count = json_object_array_length (object);
 
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "parsing %d elements in manifest", element_count);
   for (int i = 0 ; i < element_count ; ++i) {
     json_object *element_object = json_object_array_get_idx (object, i);
-    int rc = hioi_manifest_parse_element_2_0 (dataset, files, element_object, merge);
+    int rc = hioi_manifest_parse_element_2_0 (dataset, files, element_object);
     if (HIO_SUCCESS != rc) {
       return rc;
     }
@@ -513,11 +503,11 @@ static int hioi_manifest_parse_files_2_1 (hio_dataset_t dataset, json_object *ob
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   int file_count = json_object_array_length (object);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "Parsing %d file entries in manifest", file_count);
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "parsing %d file entries in manifest", file_count);
   for (int i = 0 ; i < file_count ; ++i) {
     json_object *file_object = json_object_array_get_idx (object, i);
     int rc = hioi_manifest_parse_file_2_1 (dataset, file_object);
-    if (HIO_SUCCESS != rc) {
+    if (0 > rc) {
       return rc;
     }
   }
@@ -525,7 +515,7 @@ static int hioi_manifest_parse_files_2_1 (hio_dataset_t dataset, json_object *ob
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object, bool merge) {
+static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   json_object *elements_object, *files_object;
   unsigned long mode = 0, size;
@@ -533,81 +523,72 @@ static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object, 
   long status;
   int rc;
 
-  if (!merge) {
-    /* check for compatibility with this manifest version */
-    rc = hioi_manifest_get_string (object, HIO_MANIFEST_PROP_COMPAT, &tmp_string);
+  /* check for compatibility with this manifest version */
+  rc = hioi_manifest_get_string (object, HIO_MANIFEST_PROP_COMPAT, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (rc, &dataset->ds_object, "manifest missing required %s key",
+                   HIO_MANIFEST_PROP_COMPAT);
+    return rc;
+  }
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "compatibility version of manifest: %s",
+            (char *) tmp_string);
+
+  if (strcmp ((char *) tmp_string, "2.0")) {
+    /* incompatible version */
+    return HIO_ERROR;
+  }
+
+  rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_DATASET_MODE, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (rc, &dataset->ds_object, "manifest missing required %s key",
+                   HIO_MANIFEST_KEY_DATASET_MODE);
+    return rc;
+  }
+
+  if (0 == strcmp (tmp_string, "unique")) {
+    mode = HIO_SET_ELEMENT_UNIQUE;
+  } else if (0 == strcmp (tmp_string, "shared")) {
+    mode = HIO_SET_ELEMENT_SHARED;
+  } else {
+    hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object,
+                   "unknown dataset mode specified in manifest: %s", (const char *) tmp_string);
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if (mode != dataset->ds_mode) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object,
+                   "mismatch in dataset mode. requested: %d, actual: %d", mode,
+                   dataset->ds_mode);
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if (HIO_SET_ELEMENT_UNIQUE == mode) {
+    /* verify that the same number of ranks are in use */
+    rc = hioi_manifest_get_number (object, HIO_MANIFEST_KEY_COMM_SIZE, &size);
     if (HIO_SUCCESS != rc) {
-      return rc;
-    }
-
-    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Compatibility version of manifest: %s",
-              (char *) tmp_string);
-
-    if (strcmp ((char *) tmp_string, "2.0")) {
-      /* incompatible version */
-      return HIO_ERROR;
-    }
-
-    rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_DATASET_MODE, &tmp_string);
-    if (HIO_SUCCESS != rc) {
-      return rc;
-    }
-
-    if (0 == strcmp ((const char *) tmp_string, "unique")) {
-      mode = HIO_SET_ELEMENT_UNIQUE;
-    } else if (0 == strcmp ((const char *) tmp_string, "shared")) {
-      mode = HIO_SET_ELEMENT_SHARED;
-    } else {
-      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object,
-                    "unknown dataset mode specified in manifest: %s", (const char *) tmp_string);
+      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "manifest missing required %s key",
+                     HIO_MANIFEST_KEY_COMM_SIZE);
       return HIO_ERR_BAD_PARAM;
     }
 
-    if (mode != dataset->ds_mode) {
-      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object,
-                    "mismatch in dataset mode. requested: %d, actual: %d", mode,
-                    dataset->ds_mode);
+    if (size != context->c_size) {
+      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size does not match dataset",
+                     HIO_MANIFEST_KEY_COMM_SIZE);
       return HIO_ERR_BAD_PARAM;
     }
+  }
 
-    if (HIO_SET_ELEMENT_UNIQUE == mode) {
-      /* verify that the same number of ranks are in use */
-      rc = hioi_manifest_get_number (object, HIO_MANIFEST_KEY_COMM_SIZE, &size);
-      if (HIO_SUCCESS != rc) {
-        hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "manifest missing required %s key",
-                       HIO_MANIFEST_KEY_COMM_SIZE);
-        return HIO_ERR_BAD_PARAM;
-      }
+  rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_FILE_MODE, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "file mode was not specified in manifest");
+    return HIO_ERR_BAD_PARAM;
+  }
 
-      if (size != context->c_size) {
-        hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size does not match dataset",
-                       HIO_MANIFEST_KEY_COMM_SIZE);
-        return HIO_ERR_BAD_PARAM;
-      }
-    }
-
-    rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_FILE_MODE, &tmp_string);
-    if (HIO_SUCCESS != rc) {
-      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "file mode was not specified in manifest");
-      return HIO_ERR_BAD_PARAM;
-    }
-
-    rc = hio_config_set_value (&dataset->ds_object, "dataset_file_mode", (const char *) tmp_string);
-    if (HIO_SUCCESS != rc) {
-      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "bad file mode: %s", tmp_string);
-      return HIO_ERR_BAD_PARAM;
-    }
-
-    if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
-      rc = hioi_manifest_get_number (object, HIO_MANIFEST_KEY_BLOCK_SIZE, &size);
-      if (HIO_SUCCESS != rc) {
-        return HIO_ERR_BAD_PARAM;
-      }
-
-      dataset->ds_bs = size;
-    } else {
-      dataset->ds_bs = (uint64_t) -1;
-    }
+  rc = hio_config_set_value (&dataset->ds_object, "dataset_file_mode", (const char *) tmp_string);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "bad file mode: %s", tmp_string);
+    return HIO_ERR_BAD_PARAM;
   }
 
   rc = hioi_manifest_get_signed_number (object, HIO_MANIFEST_KEY_STATUS, &status);
@@ -615,12 +596,10 @@ static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object, 
     return HIO_ERR_BAD_PARAM;
   }
 
-  if (!merge || !dataset->ds_status) {
-    dataset->ds_status = status;
-  }
+  dataset->ds_status = status;
 
   files_object = hioi_manifest_find_object (object, "files");
-  if (!merge && files_object) {
+  if (files_object) {
     rc = hioi_manifest_parse_files_2_1 (dataset, files_object);
     if (HIO_SUCCESS != rc) {
       return rc;
@@ -636,11 +615,10 @@ static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object, 
     return HIO_SUCCESS;
   }
 
-  return hioi_manifest_parse_elements_2_0 (dataset, files_object, elements_object, merge);
+  return hioi_manifest_parse_elements_2_0 (dataset, files_object, elements_object);
 }
 
 static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_header_t *header, json_object *object) {
-  json_object *elements_object;
   const char *tmp_string;
   unsigned long value;
   long svalue;
@@ -665,13 +643,13 @@ static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_he
     return rc;
   }
 
-  if (0 == strcmp ((const char *) tmp_string, "unique")) {
+  if (0 == strcmp (tmp_string, "unique")) {
     value = HIO_SET_ELEMENT_UNIQUE;
-  } else if (0 == strcmp ((const char *) tmp_string, "shared")) {
+  } else if (0 == strcmp (tmp_string, "shared")) {
     value = HIO_SET_ELEMENT_SHARED;
   } else {
     hioi_err_push (HIO_ERR_BAD_PARAM, &context->c_object, "unknown dataset mode specified in manifest: "
-                  "%s", (const char *) tmp_string);
+                  "%s", tmp_string);
     return HIO_ERR_BAD_PARAM;
   }
 
@@ -726,10 +704,9 @@ static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_he
   return HIO_SUCCESS;
 }
 
-static int hioi_manifest_decompress (hio_dataset_t dataset, const unsigned char **data, size_t data_size) {
+static int hioi_manifest_decompress (unsigned char **data, size_t data_size) {
   const size_t increment = 8192;
   char *uncompressed, *tmp;
-  json_object *object;
   bz_stream strm;
   size_t size;
   int rc;
@@ -789,7 +766,7 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data,
 
   if ('B' == data[0] && 'Z' == data[1]) {
     /* gz compressed */
-    rc = hioi_manifest_decompress (dataset, &data, data_size);
+    rc = hioi_manifest_decompress ((unsigned char **) &data, data_size);
     if (HIO_SUCCESS != rc) {
       return rc;
     }
@@ -799,10 +776,13 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data,
 
   object = json_tokener_parse ((char *) data);
   if (NULL == object) {
+    if (free_data) {
+      free ((char *) data);
+    }
     return HIO_ERROR;
   }
 
-  rc = hioi_manifest_parse_2_0 (dataset, object, false);
+  rc = hioi_manifest_parse_2_0 (dataset, object);
   if (free_data) {
     free ((char *) data);
   }
@@ -810,11 +790,9 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data,
   return rc;
 }
 
-static int hioi_manifest_read (const char *path, json_object **object_out, char **buffer_out)
+int hioi_manifest_read (const char *path, unsigned char **manifest_out, size_t *manifest_size_out)
 {
-  const char *extension = strrchr (path, '.') + 1;
-  char *buffer = NULL, *tmp;
-  json_object *object;
+  unsigned char *buffer = NULL;
   size_t file_size;
   FILE *fh;
   int rc;
@@ -841,114 +819,356 @@ static int hioi_manifest_read (const char *path, json_object **object_out, char 
     return HIO_ERR_BAD_PARAM;
   }
 
-  if (0 == strcmp (extension, "bz2")) {
-    BZFILE *bzfh = BZ2_bzReadOpen (&rc, fh, 0, 0, NULL, 0);
-    if (BZ_OK != rc) {
-      fclose (fh);
-      return hioi_err_errno (errno);
-    }
-
-    for (size_t offset = 0, size = 8192 ; ; offset = size, size += 8192) {
-      tmp = realloc (buffer, size);
-      if (NULL == tmp) {
-        free (buffer);
-        BZ2_bzReadClose (&rc, bzfh);
-        fclose (fh);
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-      buffer = tmp;
-
-      int bytes_read = BZ2_bzRead (&rc, bzfh, (void *)((intptr_t) buffer + offset), size - offset);
-      if (bytes_read < size - offset) {
-        int close_rc;
-
-        file_size = offset + bytes_read;
-
-        BZ2_bzReadClose (&close_rc, bzfh);
-        fclose (fh);
-        if (BZ_STREAM_END != rc) {
-          free (buffer);
-          return hioi_err_errno (errno);
-        }
-        break;
-      }
-    }
-  } else {
-    buffer = malloc (file_size);
-    if (NULL == buffer) {
-      fclose (fh);
-      return HIO_ERR_OUT_OF_RESOURCE;
-    }
-
-    fread (buffer, file_size, 1, fh);
+  buffer = malloc (file_size);
+  if (NULL == buffer) {
     fclose (fh);
+    return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  /* ensure the data is null-terminated */
-  buffer[file_size-1] = '\0';
-
-  object = json_tokener_parse (buffer);
-  if (NULL == object) {
+  rc = fread (buffer, 1, file_size, fh);
+  fclose (fh);
+  if (file_size != rc) {
+    free (buffer);
     return HIO_ERROR;
   }
 
-  *buffer_out = buffer;
-  *object_out = object;
+  *manifest_out = buffer;
+  *manifest_size_out = file_size;
 
   return HIO_SUCCESS;
 }
 
 int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  json_object *object;
-  char *buffer;
+  unsigned char *manifest;
+  size_t manifest_size;
   int rc;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%lu from %s",
 	    dataset->ds_object.identifier, dataset->ds_id, path);
 
-  rc = hioi_manifest_read (path, &object, &buffer);
+  rc = hioi_manifest_read (path, &manifest, &manifest_size);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
-  rc = hioi_manifest_parse_2_0 (dataset, object, false);
-  free (buffer);
+  rc = hioi_manifest_deserialize (dataset, manifest, manifest_size);
+  free (manifest);
 
   return rc;
 }
 
-int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size) {
-  json_object *object, *merged;
-  bool free_data = false;
+
+static bool hioi_manifest_compare_json (json_object *object1, json_object *object2, const char *key) {
+  const char *value1, *value2;
   int rc;
 
-  if ('B' == data[0] && 'Z' == data[1]) {
-    /* gz compressed */
-    rc = hioi_manifest_decompress (dataset, &data, data_size);
+  rc = hioi_manifest_get_string (object1, key, &value1);
+  if (HIO_SUCCESS != rc) {
+    return false;
+  }
+
+  rc = hioi_manifest_get_string (object2, key, &value2);
+  if (HIO_SUCCESS != rc) {
+    return false;
+  }
+
+  return 0 == strcmp (value1, value2);
+}
+
+static int hioi_manifest_array_find_matching (json_object *array, json_object *object, const char *key) {
+  int array_size = json_object_array_length (array);
+  const char *value = NULL;
+
+  if (NULL != key) {
+    (void) hioi_manifest_get_string (object, key, &value);
+  } else {
+    value = json_object_get_string (object);
+  }
+
+  for (int i = 0 ; i < array_size ; ++i) {
+    json_object *array_object = json_object_array_get_idx (array, i);
+    const char *value1 = NULL;
+
+    assert (array_object);
+    if (NULL != key) {
+      (void) hioi_manifest_get_string (array_object, key, &value1);
+    } else {
+      value1 = json_object_get_string (array_object);
+    }
+
+    if (0 == strcmp (value, value1)) {
+      return i;
+    }
+  }
+
+  return HIO_ERR_NOT_FOUND;
+}
+
+static int segment_compare (const void *arg1, const void *arg2) {
+  json_object * const *segment1 = (json_object * const *) arg1;
+  json_object * const *segment2 = (json_object * const *) arg2;
+  unsigned long base1 = 0, base2 = 0;
+
+  (void) hioi_manifest_get_number (*segment1, HIO_SEGMENT_KEY_APP_OFFSET0, &base1);
+  (void) hioi_manifest_get_number (*segment2, HIO_SEGMENT_KEY_APP_OFFSET0, &base2);
+
+  if (base1 > base2) {
+    return 1;
+  }
+
+  return (base1 < base2) ? -1 : 0;
+}
+
+static int hioi_manifest_merge_internal (json_object *object1, json_object *object2) {
+  json_object *elements1, *elements2, *files1, *files2;
+  int *file_index_reloc = NULL, rc, manifest_mode;
+  const char *tmp_string;
+
+  /* sanity check. make sure the manifest meta-data matches */
+  if (!hioi_manifest_compare_json (object1, object2, HIO_MANIFEST_KEY_DATASET_MODE) ||
+      !hioi_manifest_compare_json (object1, object2, HIO_MANIFEST_PROP_HIO_VERSION) ||
+      !hioi_manifest_compare_json (object1, object2, HIO_MANIFEST_PROP_DATASET_ID)) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  rc = hioi_manifest_get_string (object1, HIO_MANIFEST_KEY_DATASET_MODE, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if (0 == strcmp (tmp_string, "unique")) {
+    manifest_mode = HIO_SET_ELEMENT_UNIQUE;
+  } else if (0 == strcmp (tmp_string, "shared")) {
+    manifest_mode = HIO_SET_ELEMENT_SHARED;
+  } else {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  elements1 = hioi_manifest_find_object (object1, "elements");
+  elements2 = hioi_manifest_find_object (object2, "elements");
+  files1 = hioi_manifest_find_object (object1, "files");
+  files2 = hioi_manifest_find_object (object2, "files");
+
+  /* NTH: if the second manifest has a file list but the current manifest does not
+   * we need to create the array in the current manifest. this can happen if not all
+   * ranks in a manifest region write to the dataset. */
+  if (NULL == files1 && NULL != files2) {
+    /* move the array from object2 to object. the reference count needs to be
+     * incremented before it is deleted to ensure it is not freed prematurely */
+    json_object_get (files2);
+    json_object_object_del (object2, "files");
+    json_object_object_add (object1, "files", files2);
+    files1 = files2;
+    files2 = NULL;
+  }
+
+  /* merge the file list if necessary. keeping track of any updated file index */
+  if (NULL != files2) {
+    int files1_count = json_object_array_length (files1);
+    int files2_count = json_object_array_length (files2);
+
+    /* allocate the index translation table */
+    file_index_reloc = calloc (files2_count, sizeof (int));
+    if (NULL == file_index_reloc) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    for (int i = 0, new_index = files1_count ; i < files2_count ; ++i) {
+      json_object *file2;
+
+      file2 = json_object_array_get_idx (files2, i);
+      assert (file2);
+
+      /* check to see if this file already exists in the array */
+      rc = hioi_manifest_array_find_matching (files1, file2, NULL);
+      if (0 > rc) {
+        /* increment the reference count. it will be decremented when the array is deleted from object2 */
+        json_object_get (file2);
+        json_object_array_add (files1, file2);
+        file_index_reloc[i] = new_index++;
+      } else {
+        file_index_reloc[i] = rc;
+      }
+    }
+
+    json_object_object_del (object2, "files");
+  }
+
+  if (NULL == elements1 && NULL != elements2) {
+    /* move the array from object2 to object. the reference count needs to be
+     * incremented before it is deleted to ensure it is not freed prematurely and
+     * the reference count remains correct after it is added to object1. */
+    json_object_get (elements2);
+    json_object_object_del (object2, "elements");
+    json_object_object_add (object1, "elements", elements2);
+    elements1 = elements2;
+    elements2 = NULL;
+  }
+
+  /* check if elements need to be merged */
+  if (NULL != elements2) {
+    int elements2_count = json_object_array_length (elements2);
+
+    for (int i = 0 ; i < elements2_count ; ++i) {
+      json_object *segments, *element = json_object_array_get_idx (elements2, i);
+      int segment_count = 0;
+
+      assert (NULL != element);
+
+      segments = hioi_manifest_find_object (element, "segments");
+      if (NULL != segments) {
+        segment_count = json_object_array_length (segments);
+
+        /* remove the segments from the element in the object2. get a reference first
+         * so the array doesn't get freed before we are done with it */
+        json_object_get (segments);
+        json_object_object_del (element, "segments");
+
+        if (file_index_reloc) {
+          /* need to update the file indicies */
+          for (int j = 0 ; j < segment_count ; ++j) {
+            json_object *segment = json_object_array_get_idx (segments, j);
+            unsigned long file_index = (unsigned long) -1;
+            assert (NULL != segment);
+
+            (void) hioi_manifest_get_number (segment, HIO_SEGMENT_KEY_FILE_INDEX, &file_index);
+            if (file_index != file_index_reloc[file_index]) {
+              json_object_object_del (segment, HIO_SEGMENT_KEY_FILE_INDEX);
+              hioi_manifest_set_number (segment, HIO_SEGMENT_KEY_FILE_INDEX, file_index_reloc[file_index]);
+            }
+          }
+        }
+      }
+
+      if (HIO_SET_ELEMENT_UNIQUE != manifest_mode) {
+        /* check if this element already exists */
+        rc = hioi_manifest_array_find_matching (elements1, element, HIO_MANIFEST_PROP_IDENTIFIER);
+      } else {
+        /* assuming the manifests are from different ranks for now.. I may changet this
+         * in the future. */
+        rc = HIO_ERR_NOT_FOUND;
+      }
+
+      if (0 <= rc) {
+        json_object *element1 = json_object_array_get_idx (elements1, rc);
+        json_object *segments1 = hioi_manifest_find_object (element1, "segments");
+        unsigned long element_size = 0, element1_size = 0;
+
+        if (NULL != segments1) {
+          for (int j = 0 ; j < segment_count ; ++j) {
+            json_object *segment = json_object_array_get_idx (segments, j);
+            json_object_get (segment);
+            json_object_array_add (segments1, segment);
+          }
+
+          json_object_put (segments);
+          /* re-sort the segment array by base pointer */
+          json_object_array_sort (segments1, segment_compare);
+        } else {
+          json_object_object_add (element1, "segments", segments);
+        }
+
+        (void) hioi_manifest_get_number (element, HIO_MANIFEST_PROP_SIZE, &element_size);
+        (void) hioi_manifest_get_number (element1, HIO_MANIFEST_PROP_SIZE, &element1_size);
+        if (element_size > element1_size) {
+          /* use the larger of the two sizes */
+          json_object_object_del (element1, HIO_MANIFEST_PROP_SIZE);
+          hioi_manifest_set_number (element1, HIO_MANIFEST_PROP_SIZE, element_size);
+        }
+      } else {
+        json_object_get (element);
+        json_object_array_add (elements1, element);
+      }
+
+    }
+
+    /* remove the elements array from object2 */
+    json_object_object_del (object2, "elements");
+  }
+
+  return HIO_SUCCESS;
+}
+
+int hioi_manifest_merge_data2 (unsigned char **data1, size_t *data1_size, const unsigned char *data2, size_t data2_size) {
+  bool free_data2 = false, compressed = false;
+  json_object *object1, *object2;
+  unsigned char *data1_save;
+  int rc;
+
+  if (NULL == data1[0]) {
+    if (NULL != data2 && data2_size) {
+      data1[0] = malloc (data2_size);
+      if (NULL == data1[0]) {
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
+
+      memcpy (data1[0], data2, data2_size);
+    } else {
+      data1[0] = NULL;
+    }
+
+    *data1_size = data2_size;
+    return HIO_SUCCESS;
+  }
+
+  /* decompress the data if necessary */
+  if ('B' == data1[0][0] && 'Z' == data1[0][1]) {
+    data1_save = data1[0];
+    /* bz2 compressed */
+    rc = hioi_manifest_decompress (data1, *data1_size);
     if (HIO_SUCCESS != rc) {
       return rc;
     }
 
-    free_data = true;
+    compressed = true;
+    free (data1_save);
   }
 
-  object = json_tokener_parse ((char *) data);
-  if (NULL == object) {
+  object1 = json_tokener_parse ((char *) data1[0]);
+  if (NULL == object1) {
     return HIO_ERROR;
   }
 
-  rc = hioi_manifest_parse_2_0 (dataset, object, true);
-  if (free_data) {
-    free ((char *) data);
+  /* decompress the data if necessary */
+  if ('B' == data2[0] && 'Z' == data2[1]) {
+    /* bz2 compressed */
+    rc = hioi_manifest_decompress ((unsigned char **) &data2, data2_size);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+
+    /* data2 was malloc'd by decompress so it needs to be freed */
+    free_data2 = true;
+  }
+
+  object2 = json_tokener_parse ((char *) data2);
+  if (NULL == object2) {
+    return HIO_ERROR;
+  }
+
+  rc = hioi_manifest_merge_internal (object1, object2);
+  if (free_data2) {
+    free ((void *) data2);
+  }
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  data1_save = data1[0];
+  rc = hioi_manifest_serialize_json (object1, data1, data1_size, compressed);
+  free (data1_save);
+  if (HIO_SUCCESS != rc) {
+    return rc;
   }
 
   return rc;
 }
 
 int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path) {
+  unsigned char *manifest;
+  size_t manifest_size;
   json_object *object;
-  char *buffer;
   int rc;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "loading json dataset manifest header from %s", path);
@@ -961,13 +1181,31 @@ int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *head
     return HIO_ERR_PERM;
   }
 
-  rc = hioi_manifest_read (path, &object, &buffer);
+  rc = hioi_manifest_read (path, &manifest, &manifest_size);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
+  if ('B' == manifest[0] && 'Z' == manifest[1]) {
+    unsigned char *data = manifest;
+    /* gz compressed */
+    rc = hioi_manifest_decompress ((unsigned char **) &data, manifest_size);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+    free (manifest);
+    manifest = data;
+  }
+
+  object = json_tokener_parse ((char *) manifest);
+  if (NULL == object) {
+    free (manifest);
+    return HIO_ERROR;
+  }
+
   rc = hioi_manifest_parse_header_2_0 (context, header, object);
-  free (buffer);
+  json_object_put (object);
+  free (manifest);
 
   return rc;
 }
