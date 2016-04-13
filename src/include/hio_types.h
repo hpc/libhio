@@ -23,6 +23,19 @@
 #include <pthread.h>
 #endif
 
+#if HIO_ATOMICS_C11
+
+#include <stdatomic.h>
+
+#elif HIO_ATOMICS_SYNC
+
+typedef unsigned long atomic_ulong;
+
+#define atomic_init(p, v) (*(p) = v)
+#define atomic_fetch_add(p, v) __sync_fetch_and_add(p, v)
+
+#endif
+
 /**
  * Maximum number of data roots.
  */
@@ -448,6 +461,11 @@ struct hio_dataset {
     uint64_t            s_bwritten;
     /** aggregate write time */
     uint64_t            s_wtime;
+
+    /** total number of write operations */
+    atomic_ulong        s_wcount;
+    /** total number of read operations */
+    atomic_ulong        s_rcount;
   } ds_stat;
 
   /** data associated with this dataset */

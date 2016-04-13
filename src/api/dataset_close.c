@@ -12,8 +12,7 @@
 #include "hio_internal.h"
 
 int hio_dataset_close (hio_dataset_t dataset) {
-  uint64_t tmp[4] = {0, 0, 0, 0};
-  double aggregate_time;
+  uint64_t tmp[6];
   hio_context_t context;
   uint64_t rctime;
   int rc;
@@ -22,8 +21,8 @@ int hio_dataset_close (hio_dataset_t dataset) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  if (dataset->ds_mode & HIO_FLAG_WRITE) {
-    rc = hio_dataset_flush (dataset, HIO_FLUSH_MODE_LOCAL);
+  if (dataset->ds_flags & HIO_FLAG_WRITE) {
+    rc = hio_dataset_flush (dataset, HIO_FLUSH_MODE_COMPLETE);
     if (HIO_SUCCESS != rc) {
       return rc;
     }
@@ -36,16 +35,10 @@ int hio_dataset_close (hio_dataset_t dataset) {
 
   tmp[0] = dataset->ds_stat.s_bread;
   tmp[1] = dataset->ds_stat.s_bwritten;
-
-  if (dataset->ds_stat.s_bread) {
-    aggregate_time = dataset->ds_stat.s_rtime;
-    tmp[2] = (1000 * dataset->ds_stat.s_bread) / aggregate_time;
-  }
-
-  if (dataset->ds_stat.s_bwritten) {
-    aggregate_time = dataset->ds_stat.s_wtime;
-    tmp[3] = (1000 * dataset->ds_stat.s_bwritten) / aggregate_time;
-  }
+  tmp[2] = dataset->ds_stat.s_rtime;
+  tmp[3] = dataset->ds_stat.s_wtime;
+  tmp[4] = dataset->ds_stat.s_rcount;
+  tmp[5] = dataset->ds_stat.s_wcount;
 
   context->c_bread = dataset->ds_stat.s_bread;
   context->c_bwritten = dataset->ds_stat.s_bwritten;
@@ -69,18 +62,15 @@ int hio_dataset_close (hio_dataset_t dataset) {
   }
 #if HIO_USE_MPI
   if (1 != context->c_size) {
-    MPI_Reduce (0 == context->c_rank ? MPI_IN_PLACE : tmp, tmp, 4, MPI_DOUBLE, MPI_SUM, 0, context->c_comm);
+    MPI_Reduce (0 == context->c_rank ? MPI_IN_PLACE : tmp, tmp, 6, MPI_UINT64_T, MPI_SUM, 0, context->c_comm);
   }
 #endif
 
   if (0 == context->c_rank && context->c_print_stats) {
-    printf ("Dataset %s:%llu statistics:\n", dataset->ds_object.identifier, dataset->ds_id);
-
-    printf ("  Overall bytes read: %" PRIu64 " in %" PRIu64 " usec, aggregate speed: %1.2f MB/sec, overall speed: %1.2f MB/sec\n",
-            tmp[0], rctime - dataset->ds_rotime, (double) tmp[2] / 1000.0, (double) tmp[0] / (double) (rctime - dataset->ds_rotime));
-
-    printf ("  Overall bytes written: %" PRIu64 " in %" PRIu64 " usec, aggregate speed: %1.2f MB/sec, overall speed: %1.2f MB/sec\n",
-            tmp[1], rctime - dataset->ds_rotime, (double) tmp[3] / 1000.0, (double) tmp[1] / (double) (rctime - dataset->ds_rotime));
+    printf ("hio.dataset.stat %s.%s.%" PRIu64 " RW Bytes%" PRIu64 "B %" PRIu64 "B, RW Ops %" PRIu64 "ops %" PRIu64 "ops, %" PRIu64
+            "us, RW API Time %" PRIu64 "us, Walltime %" PRIu64 "us\n", hioi_object_identifier (&context->c_object),
+            hioi_object_identifier (&dataset->ds_object), dataset->ds_id, tmp[0], tmp[1], tmp[4], tmp[5], tmp[2],
+            tmp[3], rctime - dataset->ds_rotime);
   }
 
   /* reset the id to the id originally requested */

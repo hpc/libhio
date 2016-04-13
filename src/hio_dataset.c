@@ -115,6 +115,10 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
     return NULL;
   }
 
+  /* initialize counters */
+  atomic_init (&new_dataset->ds_stat.s_wcount, 0);
+  atomic_init (&new_dataset->ds_stat.s_rcount, 0);
+
   /* lookup/allocate persistent dataset data. this data will keep track of per-dataset
    * statistics (average write time, last successful checkpoint, etc) */
   rc = hioi_dataset_data_lookup (context, name, &new_dataset->ds_data);

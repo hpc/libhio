@@ -40,13 +40,22 @@ ssize_t hio_element_write_strided (hio_element_t element, off_t offset, unsigned
 int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
                                   unsigned long reserved0, const void *ptr, size_t count, size_t size,
                                   size_t stride) {
+  hio_dataset_t dataset = hioi_element_dataset (element);
+  int rc;
+
   if (NULL == element || offset < 0) {
     return HIO_ERR_BAD_PARAM;
   }
 
-  int rc = element->e_write_strided_nb (element, request, offset, ptr, count, size, stride);
+  if (!(dataset->ds_flags & HIO_FLAG_WRITE)) {
+    return HIO_ERR_PERM;
+  }
+
+  (void) atomic_fetch_add (&dataset->ds_stat.s_wcount, 1);
+
+  rc = element->e_write_strided_nb (element, request, offset, ptr, count, size, stride);
   if (HIO_SUCCESS != rc && (NULL == request || NULL == *request)) {
-      return rc;
+    return rc;
   }
 
   return rc;
