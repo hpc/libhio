@@ -17,7 +17,8 @@ addons:
             - automake
             - libtool
             - m4
-            - openmpi
+            - openmpi-bin
+            - openmpi-dev
 
 script:
     - ./autogen.sh && ./configure
