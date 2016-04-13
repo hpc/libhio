@@ -514,8 +514,8 @@ struct hio_dataset {
 
 #if HAVE_MPI_WIN_ALLOCATE_SHARED
   MPI_Win             ds_shared_win;
-  hio_shared_control_t *ds_shared_control;
 #endif
+  hio_shared_control_t *ds_shared_control;
 
   /** close the dataset and free any internal resources */
   hio_dataset_close_fn_t ds_close;

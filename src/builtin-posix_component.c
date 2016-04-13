@@ -322,7 +322,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   free (manifest);
 
   if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
-    if (HIO_SET_ELEMENT_UNIQUE == dataset->ds_mode || 2 > context->c_size) {
+    if (HIO_SET_ELEMENT_UNIQUE == dataset->ds_mode || 2 > context->c_size || NULL == dataset->ds_shared_control) {
       posix_dataset->base.ds_fmode = HIO_FILE_MODE_BASIC;
       /* NTH: no optimized mode for N->N yet */
       hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: optimized file mode requested but not supported in this "
