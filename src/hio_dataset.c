@@ -271,8 +271,6 @@ static int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm co
    * grow as the results are reduced. this function implements a basic reduction algorithm on
    * the hio dataset */
 
-  hioi_timed_call(MPI_Barrier (MPI_COMM_WORLD));
-
   if (right < c_size) {
     MPI_Irecv (&recv_size_right, 1, MPI_LONG, right, 1001, comm, reqs + 1);
     ++nreqs;

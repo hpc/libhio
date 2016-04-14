@@ -397,8 +397,6 @@ static inline bool hioi_dataset_doing_io (hio_dataset_t dataset) {
   return true;
 }
 
-#define DEBUG 1
-
 #if defined(DEBUG)
 #define hioi_timed_call(fn) {                   \
     uint64_t _timed_start, _timed_end;          \
