@@ -15,9 +15,6 @@
 
 #include "config_parser.h"
 
-/* This really shouldn't be needed, and it's very ugly, but the fefinitions of these functions are unlikely to change */
-
-
 /* These two function declarations should not be required because flex
    generates includes for string.h and stdio.h, but for unknown reasons
    when the flex output file is compiled, there are warnings due to 
