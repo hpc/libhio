@@ -15,6 +15,19 @@
 
 #include "config_parser.h"
 
+/* This really shouldn't be needed, and it's very ugly, but the fefinitions of these functions are unlikely to change */
+
+
+/* These two function declarations should not be required because flex
+   generates includes for string.h and stdio.h, but for unknown reasons
+   when the flex output file is compiled, there are warnings due to 
+   strdup() and fileno() not being defined.  It ought to be relatively
+   safe to declare them here, they are unlikely to change.  But, if the
+   underlying problem is fixed, these will need to be removed.
+*/
+char * strdup(const char *s1);
+int fileno(FILE *stream);
+
 int   config_parser_section_type = HIO_OBJECT_TYPE_ANY;
 char *config_parser_section_identifier = NULL;
 const char *config_parser_prefix = NULL;
