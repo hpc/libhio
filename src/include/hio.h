@@ -259,7 +259,7 @@
  * - @b datawarp_root - Overide the root directory for DataWarp.  If not set, the value of system provided
  *   environment variable DW_JOB_STRIPED is used.
  *
- * - @b print_statistics - Print IO statistics when hio_fini() is called. This value is only meaningful
+ * - @b print_statistics - Print IO statistics when hio_dataset_free() is called. This value is only meaningful
  *   on the first IO rank.
  *
  * - @b verbose - Verbosity level of libhio (0-100). The default is a verbosity level of 0
