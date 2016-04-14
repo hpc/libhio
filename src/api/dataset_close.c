@@ -67,8 +67,8 @@ int hio_dataset_close (hio_dataset_t dataset) {
 #endif
 
   if (0 == context->c_rank && context->c_print_stats) {
-    printf ("hio.dataset.stat %s.%s.%" PRIu64 " RW Bytes%" PRIu64 "B %" PRIu64 "B, RW Ops %" PRIu64 "ops %" PRIu64 "ops, %" PRIu64
-            "us, RW API Time %" PRIu64 "us, Walltime %" PRIu64 "us\n", hioi_object_identifier (&context->c_object),
+    printf ("hio.dataset.stat %s.%s.%" PRIu64 " RW_Bytes %" PRIu64 " B %" PRIu64 " B, RW_Ops %" PRIu64 " ops %" PRIu64 " ops, "
+            "RW_API_Time %" PRIu64 " us %" PRIu64 " us, Walltime %" PRIu64 " us\n", hioi_object_identifier (&context->c_object),
             hioi_object_identifier (&dataset->ds_object), dataset->ds_id, tmp[0], tmp[1], tmp[4], tmp[5], tmp[2],
             tmp[3], rctime - dataset->ds_rotime);
   }
