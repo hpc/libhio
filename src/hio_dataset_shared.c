@@ -81,6 +81,10 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
   int rc, disp_unit;
   void *base;
 
+  if (MPI_COMM_NULL == context->c_shared_comm) {
+    return HIO_SUCCESS;
+  }
+
   /* ensure data block starts on a cache line boundary */
   control_block_size = (sizeof (hio_shared_control_t) + 127) & ~127;
   data_size = ds_buffer_size + control_block_size * (0 == context->c_shared_rank);
