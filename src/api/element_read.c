@@ -41,6 +41,7 @@ int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, 
                                  unsigned long reserved0, void *ptr, size_t count, size_t size,
                                  size_t stride) {
   hio_dataset_t dataset = hioi_element_dataset (element);
+  hio_internal_request_t req, *reqs[1] = {&req};
 
   if (HIO_OBJECT_NULL == element || offset < 0) {
     return HIO_ERR_BAD_PARAM;
@@ -48,10 +49,14 @@ int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, 
 
   (void) atomic_fetch_add (&dataset->ds_stat.s_rcount, 1);
 
-  int rc = element->e_read_strided_nb (element, request, offset, ptr, count, size, stride);
-  if (HIO_SUCCESS != rc && (NULL == request || NULL == *request)) {
-      return rc;
-  }
+  req.ir_element = element;
+  req.ir_offset = offset;
+  req.ir_data.r = ptr;
+  req.ir_count = count;
+  req.ir_size = size;
+  req.ir_stride = stride;
+  req.ir_type = HIO_REQUEST_TYPE_READ;
+  req.ir_urequest = request;
 
-  return rc;
+  return dataset->ds_process_reqs (dataset, (hio_internal_request_t **) &reqs, 1);
 }

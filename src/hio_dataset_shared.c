@@ -74,6 +74,7 @@ int hioi_dataset_buffer_flush (hio_dataset_t dataset) {
 
 int hioi_dataset_shared_init (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
+  int stripes = dataset->ds_fsattr.fs_scount;
   size_t ds_buffer_size = 512 * 1024;
   size_t control_block_size;
   MPI_Win shared_win;
@@ -86,7 +87,7 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
   }
 
   /* ensure data block starts on a cache line boundary */
-  control_block_size = (sizeof (hio_shared_control_t) + 127) & ~127;
+  control_block_size = (sizeof (hio_shared_control_t) + stripes * sizeof (dataset->ds_shared_control->s_stripes[0]) + 127) & ~127;
   data_size = ds_buffer_size + control_block_size * (0 == context->c_shared_rank);
 
   rc = MPI_Win_allocate_shared (data_size, 1, MPI_INFO_NULL,
@@ -97,12 +98,22 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
   }
 
   if (0 == context->c_shared_rank) {
+    pthread_mutexattr_t mutex_attr;
+
     /* initialize the control structure */
     memset (base, 0, control_block_size);
     dataset->ds_shared_control = (hio_shared_control_t *) (intptr_t) base;
     dataset->ds_shared_control->s_master = context->c_rank;
-    atomic_init (&dataset->ds_shared_control->s_offset, 0);
-    pthread_mutex_init (&dataset->ds_shared_control->s_mutex, NULL);
+
+    pthread_mutexattr_init (&mutex_attr);
+    pthread_mutexattr_setpshared (&mutex_attr, PTHREAD_PROCESS_SHARED);
+
+    for (int i = 0 ; i < stripes ; ++i) {
+      pthread_mutex_init (&dataset->ds_shared_control->s_stripes[i].s_mutex, &mutex_attr);
+      atomic_init (&dataset->ds_shared_control->s_stripes[i].s_index, 0);
+    }
+
+    pthread_mutexattr_destroy (&mutex_attr);
     /* master base follows the control block */
     dataset->ds_buffer.b_base = (void *)((intptr_t) base + control_block_size);
   } else {
@@ -125,6 +136,16 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
   dataset->ds_shared_control = (hio_shared_control_t *) base;
 
   MPI_Barrier (context->c_shared_comm);
+
+  return HIO_SUCCESS;
+}
+
+int hioi_dataset_shared_fini (hio_dataset_t dataset) {
+  if (MPI_WIN_NULL == dataset->ds_shared_win) {
+    return HIO_SUCCESS;
+  }
+
+  MPI_Win_free (&dataset->ds_shared_win);
 
   return HIO_SUCCESS;
 }

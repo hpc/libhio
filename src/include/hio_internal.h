@@ -320,6 +320,15 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data,
 int hioi_manifest_load (hio_dataset_t dataset, const char *path);
 int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
 int hioi_manifest_merge_data2 (unsigned char **data1, size_t *data1_size, const unsigned char *data2, size_t data2_size);
+/**
+ * Determine what which ranks have data in the manifest
+ *
+ * @param[in]  manifest      serialized manifest
+ * @param[in]  manifest_size size of serialized manifest
+ * @param[out] ranks         ranks that have data in this manifest
+ * @param[out] rank_count    number of elements in the ranks array
+ */
+int hioi_manifest_ranks (const unsigned char *manifest, size_t manifest_size, int **ranks, int *rank_count);
 
 /**
  * Read header data from a manifest
@@ -367,14 +376,58 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *attri
 
 int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset);
 int hioi_dataset_close_internal (hio_dataset_t dataset);
+
+/**
+ * Add a file to the dataset file list
+ *
+ * @param[in] dataset dataset handle
+ * @param[in] filename data file to add (relative to manifest base path)
+ *
+ * @returns index for this file
+ *
+ * This function adds a filename to the list of files backing the dataset.
+ * The file list is used to relate element segments back to the file
+ * backing the segment. It is safe to call this function with the same
+ * filename argument multiple times. In this case the filename is added
+ * by the first call but subsequent calls just return the index returned
+ * by the first call.
+ */
 int hioi_dataset_add_file (hio_dataset_t dataset, const char *filename);
+
+/**
+ * Initialize dataset synchonization structures.
+ *
+ * @param[in] dataset dataset handle
+ *
+ * This function initialized the synchronization structures used for
+ * weak coordination with optimized mode. This function currently sets
+ * up a shared memory window and local structure that are used to hold
+ * available block offset(s) and mutex(es). In the future this may change
+ * if corrdination over several nodes improves performance.
+ */
+int hioi_dataset_shared_init (hio_dataset_t dataset);
+
+/**
+ * Finalize dataset synchronization structures.
+ *
+ * @param[in] dataset dataset handle
+ */
+int hioi_dataset_shared_fini (hio_dataset_t dataset);
+
+/**
+ * Flush dataset buffers to the backing store
+ *
+ * @param[in] dataset dataset handle
+ *
+ * This function flushes any data in the dataset buffers out the the backing
+ * store. This will make the data (but not the metadata) visible to all ranks.
+ */
+int hioi_dataset_buffer_flush (hio_dataset_t dataset);
 
 int hioi_element_open_internal (hio_dataset_t dataset, hio_element_t *element_out, const char *element_name,
                                 int flags, int rank);
 int hioi_element_close_internal (hio_element_t element);
 
-int hioi_dataset_shared_init (hio_dataset_t dataset);
-int hioi_dataset_buffer_flush (hio_dataset_t dataset);
 /**
  * Translate an application offset into a logical file and offset
  *
@@ -396,6 +449,59 @@ int hioi_element_translate_offset (hio_element_t element, uint64_t app_offset, i
 static inline bool hioi_dataset_doing_io (hio_dataset_t dataset) {
   return true;
 }
+
+/**
+ * Helper function to close an hio backing file
+ *
+ * @param[in] file
+ *
+ * This function is meant to close either the file descriptor or
+ * file handle associated with a backing file.
+ */
+int hioi_file_close (hio_file_t *file);
+
+/**
+ * Seek to the given offset from whence
+ *
+ * @param[in] file hio file pointer
+ * @param[in] offset relative offset from whence
+ * @param[in] whence (see man page for lseek or fseek)
+ *
+ * This is a wrapper around leek and fseek that uses the appropriate
+ * file based on how the file was opened (open/fopen/fdopen).
+ */
+int64_t hioi_file_seek (hio_file_t *file, int64_t offset, int whence);
+
+/**
+ * Write to an hio backing file
+ *
+ * @param[in] file hio file pointer
+ * @param[in] ptr data to write
+ * @param[in] count number of bytes to write
+ *
+ * This is a wrapper around write and fwrite that uses the appropriate
+ * file based on how the file was opened (open/fopen/fdopen).
+ */
+ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count);
+
+/**
+ * Read from an hio backing file
+ *
+ * @param[in] file hio file pointer
+ * @param[in] ptr data to read
+ * @param[in] count number of bytes to read
+ *
+ * This is a wrapper around read and fread that uses the appropriate
+ * file based on how the file was opened (open/fopen/fdopen).
+ */
+ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count);
+
+/**
+ * Flush file data to backing file
+ *
+ * @param[in] file hio file pointer
+ */
+void hioi_file_flush (hio_file_t *file);
 
 #if defined(DEBUG)
 #define hioi_timed_call(fn) {                   \

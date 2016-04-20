@@ -430,3 +430,76 @@ int hioi_string_scatter (hio_context_t context, char **string) {
 
   return HIO_SUCCESS;
 }
+
+int hioi_file_close (hio_file_t *file) {
+  int rc;
+
+  if (file->f_hndl) {
+    rc = fclose (file->f_hndl);
+  } else if (-1 != file->f_fd) {
+    rc = close (file->f_fd);
+  }
+
+  file->f_fd = -1;
+  file->f_hndl = NULL;
+
+  return rc;
+}
+
+int64_t hioi_file_seek (hio_file_t *file, int64_t offset, int whence) {
+  int64_t new_offset;
+
+  if (SEEK_SET == whence && offset == file->f_offset) {
+    return file->f_offset;
+  }
+
+  if (-1 != file->f_fd) {
+    file->f_offset = lseek (file->f_fd, offset, whence);
+  } else {
+    (void) fseek (file->f_hndl, offset, whence);
+    file->f_offset = ftell (file->f_hndl);
+  }
+
+  return file->f_offset;
+}
+
+ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
+  ssize_t actual;
+
+  if (-1 != file->f_fd) {
+    actual = write (file->f_fd, ptr, count);
+  } else {
+    actual = fwrite (ptr, 1, count, file->f_hndl);
+  }
+
+  if (actual > 0) {
+    file->f_offset += actual;
+  }
+
+  return actual;
+}
+
+ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
+  ssize_t actual;
+
+  if (-1 != file->f_fd) {
+    actual = read (file->f_fd, ptr, count);
+  } else {
+    actual = fread (ptr, 1, count, file->f_hndl);
+  }
+
+  if (actual > 0) {
+    file->f_offset += actual;
+  }
+
+  return actual;
+}
+
+void hioi_file_flush (hio_file_t *file) {
+  if (-1 != file->f_fd) {
+    fsync (file->f_fd);
+  } else if (NULL != file->f_hndl) {
+    fflush (file->f_hndl);
+    fsync (fileno (file->f_hndl));
+  }
+}

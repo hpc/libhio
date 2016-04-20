@@ -330,7 +330,12 @@ int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_ou
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   int rc;
 
-  rc = hioi_dataset_gather_manifest_comm (dataset, context->c_comm, data_out, data_size_out, compress_data);
+  if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode && HIO_SET_ELEMENT_UNIQUE == dataset->ds_mode) {
+    rc = hioi_dataset_gather_manifest_comm (dataset, context->c_shared_comm, data_out, data_size_out,
+                                            compress_data);
+  } else {
+    rc = hioi_dataset_gather_manifest_comm (dataset, context->c_comm, data_out, data_size_out, compress_data);
+  }
 
   return rc;
 #else
@@ -338,15 +343,12 @@ int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_ou
 #endif
 }
 
-int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
 #if HIO_USE_MPI
-  hio_context_t context = (hio_context_t) dataset->ds_object.parent;
+static int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsigned char *manifest, size_t manifest_size, int rc) {
+  int rank;
   long ar_data[5];
 
-  if (1 == context->c_size) {
-    /* nothing to do */
-    return rc;
-  }
+  MPI_Comm_rank (comm, &rank);
 
   ar_data[0] = rc;
   ar_data[1] = (long) manifest_size;
@@ -354,7 +356,7 @@ int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, 
   ar_data[3] = dataset->ds_fsattr.fs_scount;
   ar_data[4] = dataset->ds_fsattr.fs_ssize;
 
-  rc = MPI_Bcast (ar_data, 5, MPI_LONG, 0, context->c_comm);
+  rc = MPI_Bcast (ar_data, 5, MPI_LONG, 0, comm);
   if (MPI_SUCCESS != rc) {
     return hioi_err_mpi (rc);
   }
@@ -365,19 +367,19 @@ int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, 
 
   manifest_size = (size_t) ar_data[1];
 
-  if (0 != context->c_rank) {
+  if (0 != rank) {
     manifest = malloc (manifest_size);
     assert (NULL != manifest);
   }
 
-  rc = MPI_Bcast ((void *) manifest, manifest_size, MPI_BYTE, 0, context->c_comm);
+  rc = MPI_Bcast ((void *) manifest, manifest_size, MPI_BYTE, 0, comm);
   if (MPI_SUCCESS != rc) {
     return hioi_err_mpi (rc);
   }
 
   rc = hioi_manifest_deserialize (dataset, manifest, manifest_size);
 
-  if (0 != context->c_rank) {
+  if (0 != rank) {
     free ((void *) manifest);
   }
 
@@ -385,6 +387,106 @@ int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, 
   dataset->ds_flags = ar_data[2];
   dataset->ds_fsattr.fs_scount = ar_data[3];
   dataset->ds_fsattr.fs_ssize = ar_data[4];
+
+  return rc;
+}
+
+static int hioi_dataset_scatter_shared (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
+  hio_context_t context = (hio_context_t) dataset->ds_object.parent;
+
+  return hioi_dataset_scatter_comm (dataset, context->c_comm, manifest, manifest_size, rc);
+}
+
+static int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
+  hio_context_t context = (hio_context_t) dataset->ds_object.parent;
+  int *ranks = NULL, *all_ranks, rank_count = 0, io_leader, mpirc;
+  MPI_Comm io_comm;
+  long ar_data[5];
+
+  /* first reduce the current error code */
+  mpirc = MPI_Allreduce (MPI_IN_PLACE, &rc, 1, MPI_INT, MPI_MIN, context->c_comm);
+  if (MPI_SUCCESS != mpirc) {
+    return hioi_err_mpi (mpirc);
+  }
+
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  if (manifest) {
+    rc = hioi_manifest_ranks (manifest, manifest_size, &ranks, &rank_count);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+  }
+
+  all_ranks = malloc (context->c_size * sizeof (int));
+  if (NULL == all_ranks) {
+    free (ranks);
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  if (ranks) {
+    /* initialize all entries to undefined */
+    for (int i = 0 ; i < context->c_size ; ++i) {
+      all_ranks[i] = MPI_UNDEFINED;
+    }
+
+    for (int i = 0 ; i < rank_count ; ++i) {
+      if (ranks[i] >= context->c_size) {
+        free (all_ranks);
+        free (ranks);
+        return HIO_ERR_BAD_PARAM;
+      }
+
+      all_ranks[ranks[i]] = context->c_rank;
+    }
+  }
+
+  free (ranks);
+
+  rc = MPI_Allreduce (MPI_IN_PLACE, all_ranks, context->c_size, MPI_INT, MPI_MAX, context->c_comm);
+  if (MPI_SUCCESS != rc) {
+    free (all_ranks);
+    return hioi_err_mpi (rc);
+  }
+
+  io_leader = all_ranks[context->c_rank];
+  free (all_ranks);
+
+  rc = MPI_Comm_split (context->c_comm, io_leader, 0, &io_comm);
+  if (MPI_SUCCESS != rc) {
+    return hioi_err_mpi (rc);
+  }
+
+  if (MPI_COMM_NULL == io_comm) {
+    /* this rank has no data in the dataset */
+    return HIO_SUCCESS;
+  }
+
+  rc = hioi_dataset_scatter_comm (dataset, context->c_comm, manifest, manifest_size, rc);
+  MPI_Comm_free (&io_comm);
+
+  return rc;
+}
+
+#endif /* HIO_USE_MPI */
+
+int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
+#if HIO_USE_MPI
+  hio_context_t context = (hio_context_t) dataset->ds_object.parent;
+
+  if (1 == context->c_size) {
+    /* nothing to do */
+    return rc;
+  }
+
+  if (HIO_SET_ELEMENT_SHARED == dataset->ds_mode) {
+    rc = hioi_dataset_scatter_shared (dataset, manifest, manifest_size, rc);
+  } else {
+    rc = hioi_dataset_scatter_unique (dataset, manifest, manifest_size, rc);
+  }
+
 #endif
 
   return rc;
@@ -409,14 +511,6 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
               dataset->ds_object.identifier, dataset->ds_id, module->data_root);
     return rc;
   }
-
-#if HAVE_MPI_WIN_ALLOCATE_SHARED
-  hio_context_t context = hioi_object_context (&dataset->ds_object);
-
-  if (hioi_context_using_mpi (context)) {
-    hioi_dataset_shared_init (dataset);
-  }
-#endif
 
   dataset->ds_rotime = rotime;
 

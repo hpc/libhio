@@ -98,6 +98,8 @@ static hio_context_t hio_context_alloc (const char *identifier) {
 
 #if HAVE_MPI_COMM_SPLIT_TYPE
   new_context->c_shared_comm = MPI_COMM_NULL;
+  new_context->c_shared_size = 1;
+  new_context->c_shared_rank = 0;
 #endif
 
   hioi_config_list_init (&new_context->c_fconfig);
@@ -313,12 +315,6 @@ static int hioi_context_init_shared (hio_context_t context) {
 
   MPI_Comm_size (shared_comm, &shared_size);
   MPI_Comm_rank (shared_comm, &shared_rank);
-
-  if (1 == shared_size) {
-    /* no other ranks on this node */
-    MPI_Comm_free (&shared_comm);
-    return HIO_SUCCESS;
-  }
 
   if (0 == shared_rank) {
     context->c_shared_ranks = calloc (shared_size, sizeof (int));

@@ -32,6 +32,7 @@ hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name, const
   }
 
   element->e_rank = rank;
+  element->e_file.f_fd = -1;
 
   return element;
 }
@@ -103,10 +104,7 @@ int hioi_element_close_internal (hio_element_t element) {
     }
 
     rc = element->e_close (element);
-    if (element->e_file.f_hndl) {
-      fclose (element->e_file.f_hndl);
-      element->e_file.f_hndl = NULL;
-    }
+    hioi_file_close (&element->e_file);
   }
   hioi_object_unlock (&dataset->ds_object);
 

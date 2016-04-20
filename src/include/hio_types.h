@@ -156,34 +156,6 @@ typedef int (*hio_dataset_element_open_fn_t) (hio_dataset_t dataset, hio_element
 typedef int (*hio_dataset_process_requests_fn_t) (hio_dataset_t dataset, struct hio_internal_request_t **reqs,
                                                   int req_count);
 
-typedef int (*hio_element_write_strided_nb_fn_t) (hio_element_t element,
-                                                  hio_request_t *request,
-                                                  off_t offset, const void *ptr,
-                                                  size_t count, size_t size,
-                                                  size_t stride);
-
-/**
- * Read from an hio dataset element
- *
- * @param[in]  element      hio dataset element object
- * @param[out] request      new request object if requested (can be NULL)
- * @param[in]  offset       element offset to read from
- * @param[in]  ptr          data to write
- * @param[in]  count        number of blocks to read
- * @param[in]  size         size of blocks
- * @param[in]  stride       number of bytes between blocks
- *
- * @returns HIO_SUCCESS on success
- * @returns HIO_ERR_PERM if the element can not be written to
- * @returns hio error on other error
- *
- * This function schedules data to be read from a dataset element. Modules are free
- * to delay any reads from the dataset element until hio_element_complete().
- */
-typedef int (*hio_element_read_strided_nb_fn_t) (hio_element_t element, hio_request_t *request,
-                                                 off_t offset, void *ptr, size_t count,
-                                                 size_t size, size_t stride);
-
 /**
  * Flush writes to a dataset element
  *
@@ -439,10 +411,14 @@ typedef struct hio_buffer_t {
 typedef struct hio_shared_control_t {
   /** master rank in context */
   int32_t      s_master;
-  /** data file offset */
-  atomic_ulong s_offset;
-  /** shared lock */
-  pthread_mutex_t s_mutex;
+
+  /** stripe coordination structure */
+  struct {
+    /** coordination lock for this stripe */
+    pthread_mutex_t s_mutex;
+    /** current stripe index */
+    atomic_ulong s_index;
+  } s_stripes[];
 } hio_shared_control_t;
 
 struct hio_dataset {
@@ -531,6 +507,8 @@ struct hio_dataset {
 typedef struct hio_file_t {
   /** POSIX file handle */
   FILE     *f_hndl;
+  /** file descriptor */
+  int       f_fd;
   /** current offset in the file */
   uint64_t  f_offset;
 } hio_file_t;
@@ -564,7 +542,7 @@ typedef struct hio_internal_request_t {
   size_t        ir_transferred;
   int           ir_status;
   hio_request_type_t ir_type;
-  hio_request_t ir_urequest;
+  hio_request_t *ir_urequest;
 } hio_internal_request_t;
 
 typedef struct hio_manifest_segment_t {
@@ -601,12 +579,6 @@ struct hio_element {
   /** element file structure */
   hio_file_t        e_file;
 
-  /** function to write strided data */
-  hio_element_write_strided_nb_fn_t e_write_strided_nb;
-
-  /** function to read strided data */
-  hio_element_read_strided_nb_fn_t e_read_strided_nb;
-
   /** function to flush pending element writes */
   hio_element_flush_fn_t e_flush;
 
@@ -638,5 +610,8 @@ typedef struct hio_dataset_header_t hio_dataset_header_t;
  * second, and 0 otherwise.
  */
 typedef int (*hioi_dataset_header_compare_t) (hio_dataset_header_t *, hio_dataset_header_t *);
+
+#define max(x,y) (((x) > (y)) ? (x) : (y))
+#define min(x,y) (((x) < (y)) ? (x) : (y))
 
 #endif /* !defined(HIO_TYPES_H) */

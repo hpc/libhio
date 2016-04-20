@@ -1020,11 +1020,6 @@ static int hioi_manifest_merge_internal (json_object *object1, json_object *obje
       if (NULL != segments) {
         segment_count = json_object_array_length (segments);
 
-        /* remove the segments from the element in the object2. get a reference first
-         * so the array doesn't get freed before we are done with it */
-        json_object_get (segments);
-        json_object_object_del (element, "segments");
-
         if (file_index_reloc) {
           /* need to update the file indicies */
           for (int j = 0 ; j < segment_count ; ++j) {
@@ -1054,6 +1049,11 @@ static int hioi_manifest_merge_internal (json_object *object1, json_object *obje
         json_object *element1 = json_object_array_get_idx (elements1, rc);
         json_object *segments1 = hioi_manifest_find_object (element1, "segments");
         unsigned long element_size = 0, element1_size = 0;
+
+        /* remove the segments from the element in the object2. get a reference first
+         * so the array doesn't get freed before we are done with it */
+        json_object_get (segments);
+        json_object_object_del (element, "segments");
 
         if (NULL != segments1) {
           for (int j = 0 ; j < segment_count ; ++j) {
@@ -1161,6 +1161,108 @@ int hioi_manifest_merge_data2 (unsigned char **data1, size_t *data1_size, const 
   if (HIO_SUCCESS != rc) {
     return rc;
   }
+
+  return rc;
+}
+
+static int rank_compare (const void *a, const void *b) {
+  return (((const int *) a)[0] - ((const int *) b)[0]);
+}
+
+int hioi_manifest_ranks (const unsigned char *manifest, size_t manifest_size, int **ranks, int *rank_count) {
+  json_object *object = NULL, *elements;
+  int manifest_ranks, element_count;
+  unsigned char *rank_map = NULL;
+  bool free_manifest = false;
+  int rc = HIO_SUCCESS;
+  unsigned long size;
+
+  if ('B' == manifest[0] && 'Z' == manifest[1]) {
+    /* bz2 compressed */
+    rc = hioi_manifest_decompress ((unsigned char **) &manifest, manifest_size);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+
+    /* manifest was malloc'd by decompress so it needs to be freed */
+    free_manifest = true;
+  }
+
+  do {
+    object = json_tokener_parse ((char *) manifest);
+    if (NULL == object) {
+      rc = HIO_ERROR;
+      break;
+    }
+
+    elements = hioi_manifest_find_object (object, "elements");
+    element_count = elements ? json_object_array_length (elements) : 0;
+    if (0 == element_count) {
+      /* no elements */
+      *ranks = NULL;
+      *rank_count = 0;
+      break;
+    }
+
+    /* find out how many ranks were used to write the manifest */
+    rc = hioi_manifest_get_number (object, HIO_MANIFEST_KEY_COMM_SIZE, &size);
+    if (HIO_SUCCESS != rc) {
+      break;
+    }
+
+    rank_map = calloc (1, (size >> 3) + 1);
+    if (NULL == rank_map) {
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+
+    manifest_ranks = 0;
+
+    /* allocate enough space to hold the maximum number of ranks that
+     * can appear in the manifest. */
+    *ranks = (int *) calloc (element_count, sizeof (ranks[0][0]));
+    if (NULL == *ranks) {
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+
+    for (int i = 0 ; i < element_count ; ++i) {
+      json_object *element = json_object_array_get_idx (elements, i);
+      unsigned long rank;
+
+      assert (NULL != element);
+
+      rc = hioi_manifest_get_number (element, HIO_MANIFEST_PROP_RANK, &rank);
+      if (!(rank_map[rank >> 3] & (1 << (rank & 0x7)))) {
+        ranks[0][manifest_ranks++] = (int) rank;
+        rank_map[rank >> 3] |= 1 << (rank & 0x7);
+      }
+    }
+
+    /* shrink the array if there were fewer ranks than elements */
+    void *tmp = realloc (*ranks, sizeof (ranks[0][0]) * manifest_ranks);
+    if (NULL == tmp) {
+      free (*ranks);
+      *ranks = NULL;
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+    *ranks = (int *) tmp;
+
+    /* sort the rank array by rank */
+    (void) qsort (*ranks, manifest_ranks, sizeof (int), rank_compare);
+    *rank_count = manifest_ranks;
+  } while (0);
+
+  if (object) {
+    json_object_put (object);
+  }
+
+  if (free_manifest) {
+    free ((void *) manifest);
+  }
+
+  free (rank_map);
 
   return rc;
 }

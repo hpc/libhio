@@ -33,12 +33,25 @@ typedef struct builtin_posix_module_t {
 } builtin_posix_module_t;
 
 typedef struct builtin_posix_module_dataset_t {
+  /** base type */
   struct hio_dataset base;
-  pthread_mutex_t lock;
+
+  /** open backing files */
   builtin_posix_file_t files[HIO_POSIX_MAX_OPEN_FILES];
+
+  /** base path of this manifest */
   char *base_path;
+
+  /** start offset of reserved file region. for peformance this
+   * should be a multiple of the underlying filesystem's stripe
+   * size */
   uint64_t reserved_offset;
+
+  /** space left in reserved file region */
   uint64_t reserved_remaining;
+
+  /** stripe this rank should write */
+  int my_stripe;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;
