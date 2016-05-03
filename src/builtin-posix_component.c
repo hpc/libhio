@@ -270,9 +270,13 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       /* use group locking if available */
       fs_attr->fs_use_group_locking = true;
 
+#if HIO_USE_MPI
       /* if group locking is not available then each rank should attempt to write to
        * a different stripe to maximize the available IO bandwidth */
       fs_attr->fs_scount = min(context->c_shared_size, fs_attr->fs_smax_count);
+#else
+      fs_attr->fs_scount = 1;
+#endif
 
       posix_dataset->my_stripe = context->c_shared_rank % dataset->ds_fsattr.fs_scount;
     }
@@ -450,7 +454,10 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
         errno = 0;
         fd = open (path, O_CREAT | O_WRONLY, posix_module->access_mode);
         if (0 <= fd) {
-          (void) write (fd, manifest, manifest_size);
+          rc = write (fd, manifest, manifest_size);
+          if (rc < manifest_size) {
+            hioi_err_push (HIO_ERR_TRUNCATE, &dataset->ds_object, "posix: short write on manifest");
+          }
           close (fd);
         }
         free (manifest);
