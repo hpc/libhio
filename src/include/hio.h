@@ -79,15 +79,6 @@
  *   destination directories.
  * - Provide support for querying performance characteristics.
  *
- * @section timeline Release Timeline
- *
- * The initial beta release of libhio will be available on or around December 1, 2014.
- * This release will support the full API with PFS data roots. A version
- * supporting Trinity's burst buffer architecture will be available no later
- * than April 3, 2015. A 1.0 release will be available by the end of June, 2015. This
- * release will include support basic (n-1 and n-n) io on datawarp and POSIX
- * filesystems.
- *
  * @section iointerception IO Interception
  *
  * At this time libhio will not provide support for the interception and redirection
