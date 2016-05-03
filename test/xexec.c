@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <signal.h>
@@ -117,6 +118,7 @@ char * help =
   "  va <bytes>    malloc <bytes> of memory\n"
   "  vt <stride>   touch most recently allocated memory every <stride> bytes\n"
   "  vf            free most recently allocated memory\n"
+  "  imd <path> <mode> Issue mkdir(path, mode)\n"
   #ifdef __linux__
   "  dca           Display CPU Affinity\n"
   #endif
@@ -190,6 +192,7 @@ char * help =
   "  hvse <name> <value>  Set hio elementq variable\n"
   #if HIO_USE_DATAWARP
   "  dwds <directory> Issue dw_wait_directory_stage\n"
+  "  dsdo <dw_dir> <pfs_dir> <type> Issue dw_stage_directory_out\n"
   #if DW_PH_2
   "  dwws <file>   Issue dw_wait_sync_complete\n"
   #endif // DW_PH_2
@@ -935,6 +938,21 @@ ACTION_RUN(fctr_run) {
 }
 
 #endif // MPI
+
+//----------------------------------------------------------------------------
+// imd action handler
+//----------------------------------------------------------------------------
+ACTION_RUN(imd_run) {
+  char * path = V0.s;
+  I64 mode = V1.u;
+  int rc;
+
+  errno = 0;
+  rc = mkdir(path, mode);
+  if (rc || MY_MSG_CTX->verbose_level >= 3) {                                          
+    MSG("mkdir(%s, 0%llo) rc: %d errno: %d(%s)", path, mode, rc, errno, strerror(errno));
+  }
+}
 
 //----------------------------------------------------------------------------
 // fget action handler
@@ -1792,6 +1810,23 @@ ACTION_RUN(hvse_run) {
 }
 
 #if HIO_USE_DATAWARP
+ENUM_START(etab_dwst)  // DataWarp stage type
+ENUM_NAME("IMMEDIATE", DW_STAGE_IMMEDIATE)
+ENUM_NAME("JOB_END",   DW_STAGE_AT_JOB_END)
+ENUM_NAME("REVOKE",    DW_REVOKE_STAGE_AT_JOB_END)
+ENUM_NAME("ACTIVATE",  DW_ACTIVATE_DEFERRED_STAGE) 
+ENUM_END(etab_dwst, 0, NULL)
+
+ACTION_RUN(dsdo_run) {
+  char * dw_dir = V0.s;
+  char * pfs_dir = V1.s;
+  enum dw_stage_type type = V2.i;
+  int rc = dw_stage_directory_out(dw_dir, pfs_dir, type);
+  if (rc || MY_MSG_CTX->verbose_level >= 3) {                                          
+    MSG("dw_stage_directory_out(%s, %s, %s) rc: %d", dw_dir, pfs_dir, enum_name(MY_MSG_CTX, &etab_dwst, type), rc);
+  }
+}
+
 ACTION_RUN(dwds_run) {
   ETIMER tmr;
   ETIMER_START(&tmr);
@@ -1799,6 +1834,7 @@ ACTION_RUN(dwds_run) {
   if (rc) local_fails++;
   VERB1("dw_wait_directory_stage(%s) rc: %d (%s)  time: %f Sec", V0.s, rc, strerror(abs(rc)), ETIMER_ELAPSED(&tmr));
 }
+
 
 #if DW_PH_2
 ACTION_RUN(dwws_run) {
@@ -1890,7 +1926,7 @@ enum ptype {
   UINT = CVT_NNINT,
   PINT = CVT_PINT,
   DOUB = CVT_DOUB,
-  STR, HFLG, HDSM, HERR, HULM, HDSI, ONFF, NONE };
+  STR, HFLG, HDSM, HERR, HULM, HDSI, DWST, ONFF, NONE };
 
 struct parse {
   char * cmd;
@@ -1918,6 +1954,8 @@ struct parse {
   {"va",    {UINT, NONE, NONE, NONE, NONE}, va_check,      va_run      },
   {"vt",    {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
   {"vf",    {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
+  {"imd",   {STR,  SINT, NONE, NONE, NONE}, NULL,          imd_run     },
+
   #ifdef __linux__
   {"dca",   {NONE, NONE, NONE, NONE, NONE}, NULL,          dca_run     },
   #endif
@@ -1947,7 +1985,7 @@ struct parse {
   {"hdo",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdo_run     },
   {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
   {"heo",   {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
-  {"hso",   {UINT, NONE, NONE, NONE, NONE}, NULL,          hso_run      },
+  {"hso",   {UINT, NONE, NONE, NONE, NONE}, NULL,          hso_run     },
   {"hsega", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsega_run   },
   {"hsegr", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsegr_run   },
   {"hew",   {SINT, UINT, NONE, NONE, NONE}, hew_check,     hew_run     },
@@ -1967,9 +2005,10 @@ struct parse {
   {"hvsd",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsd_run    },
   {"hvse",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvse_run    },
   #if HIO_USE_DATAWARP
-  {"dwds",  {STR,  NONE,  NONE, NONE, NONE}, NULL,         dwds_run    },
+  {"dsdo",  {STR,  STR,  DWST, NONE, NONE}, NULL,          dsdo_run    },
+  {"dwds",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwds_run    },
   #if DW_PH_2
-  {"dwws",  {STR,  NONE,  NONE, NONE, NONE}, NULL,         dwws_run    },
+  {"dwws",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwws_run    },
   #endif  // DW_PH_2
   #endif  // HIO_USE_DATAWARP
   #endif  // HIO
@@ -2090,7 +2129,11 @@ void parse_action() {
                 break;
               case HDSI:
                 decode_int(&etab_hdsi, tokv[t], "hio dataset ID", nact.desc, &nact.v[j], &nact);
+              #if HIO_USE_DATAWARP
+              case DWST:
+                decode(&etab_dwst, tokv[t], "DataWarp stage type", nact.desc, &nact.v[j]);
                 break;
+              #endif
               #endif
               case ONFF:
                 decode(&etab_onff, tokv[t], "ON / OFF value", nact.desc, &nact.v[j]);
