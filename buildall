@@ -207,10 +207,10 @@ for v in $vers; do
     ct-cray  ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-cray  ;;
     ct-pgi   ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs                             ;;
 
-    ga-gnu   ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    ga-cray  ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
-    ga-intel ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
-    ga-pgi   ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
+    ga-gnu   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    ga-cray  ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
+    ga-intel ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    ga-pgi   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
     tt-gnu   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
     tt-cray  ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
