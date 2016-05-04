@@ -94,3 +94,4 @@ myrun .libs/xexec.x $cmdw
 myrun .libs/xexec.x $cmdr
 check_rc
 if [[ $max_rc -eq 0 && $after -gt 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi
+exit $max_rc

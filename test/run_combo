@@ -161,6 +161,7 @@ if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
 #----------------------------------------------------------------------------
 # Iterate through al combinations of specified parameters
 #----------------------------------------------------------------------------
+declare -a fails
 for r in "${ranks[@]}"; do
   for n in "${nodes[@]}"; do
     for p in "${ppn[@]}"; do
@@ -183,6 +184,8 @@ for r in "${ranks[@]}"; do
             if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi
 
             cmd $c
+            rc=$?
+            if [[ rc -ne 0 ]]; then fails=("${fails[@]}" "rc:$rc cmd:$c"); fi
           done
         done
       done
@@ -190,4 +193,6 @@ for r in "${ranks[@]}"; do
   done
 done
 
+msg "Failure count: ${#fails[@]}"
+for (( i=0; i<${#fails[@]}; i++ )); do msg ${fails[$i]}; done
 # --- end of run_combo ---

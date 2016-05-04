@@ -15,6 +15,7 @@
 //============================================================================
 #ifndef CW_MISC_H_INCLUDED
 #define CW_MISC_H_INCLUDED
+#include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <time.h>
@@ -67,7 +68,7 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...);
 
 #define ERRX(...) {                  \
   MSGE("Error: " __VA_ARGS__);       \
-  exit(12);                          \
+  exit(EXIT_FAILURE);                          \
 }
 
 //----------------------------------------------------------------------------

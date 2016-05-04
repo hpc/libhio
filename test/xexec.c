@@ -2129,6 +2129,7 @@ void parse_action() {
                 break;
               case HDSI:
                 decode_int(&etab_hdsi, tokv[t], "hio dataset ID", nact.desc, &nact.v[j], &nact);
+                break;
               #if HIO_USE_DATAWARP
               case DWST:
                 decode(&etab_dwst, tokv[t], "DataWarp stage type", nact.desc, &nact.v[j]);

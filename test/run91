@@ -36,3 +36,4 @@ cmd="
 
 myrun .libs/xexec.x $cmd
 check_rc
+exit $max_rc

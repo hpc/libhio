@@ -126,5 +126,4 @@ sleep $nfs_sleep
 myrun .libs/xexec.x $cmdrc
 myrun .libs/xexec.x $cmdrc
 check_rc
-#for q in; do
-#done
+exit $max_rc
