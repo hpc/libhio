@@ -326,7 +326,7 @@ static int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm co
 
 int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out,
                                   bool compress_data) {
-#if HIO_USE_MPI
+#if HAVE_MPI_COMM_SPLIT_TYPE
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   int rc;
 
