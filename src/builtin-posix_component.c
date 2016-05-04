@@ -274,11 +274,12 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       /* if group locking is not available then each rank should attempt to write to
        * a different stripe to maximize the available IO bandwidth */
       fs_attr->fs_scount = min(context->c_shared_size, fs_attr->fs_smax_count);
-#else
-      fs_attr->fs_scount = 1;
-#endif
 
       posix_dataset->my_stripe = context->c_shared_rank % dataset->ds_fsattr.fs_scount;
+#else
+      fs_attr->fs_scount = 1;
+      posix_dataset->my_stripe = 1;
+#endif
     }
   } else if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
       posix_dataset->my_stripe = 0;
