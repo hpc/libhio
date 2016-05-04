@@ -320,7 +320,7 @@ struct hio_dataset_data_t {
   uint64_t    dd_average_write_time;
 
   /** average dataset size */
-  size_t      dd_average_size;
+  uint64_t    dd_average_size;
 
   hio_list_t  dd_backend_data;
 };

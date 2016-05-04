@@ -264,11 +264,32 @@
  *   (stage at end of job), immediate (stage when the dataset is closed). Note: @b datawarp_stage_mode 
  *   is only valid for datasets opened for writing.
  *
- * - @b stripe_width - Filesystem striping width in bytes. This value will be passed along to the underlying
- *   file system if it is supported. Note: @b stripe_width is not yet supported.
+ * - @b dataset_file_mode - File mode to use when writing files on POSIX-like file systems. When set to
+ *   basic either a single file (@ref HIO_SET_ELEMENT_SHARED) or a file per rank (@ref HIO_SET_ELEMENT_UNIQUE)
+ *   are written for each dataset element. When set to optimized hio provides no guarantees on the file
+ *   structure. optimized mode is currently only supported when using an MPI-3 compliant MPI implementation.
  *
- * - @b expected_size - Expected global size of a dataset in bytes. This value will be used when calculating
- *   the appropriate output interval for the dataset. Note: @b expected_size is not yet supported.
+ * - @b dataset_block_size - Relevant to optimized mode only. This variable sets the internal block size and
+ *   the filesystem stipe size (when supported) when writing dataset elements in optimized mode.
+ *
+ * - @b dataset_filesystem_type - Read only variable describing the filesystem backing a dataset. Valid
+ *   values are "default" (posix-like), "lustre", and "gpfs". Additional types will be added in the
+ *   future.
+ *
+ * - @b dataset_use_bzip - Use bzip2 compression when writing dataset manifests. This will reduce the size
+ *   of large manifest files.
+ *
+ * - @b stripe_size - Filesystem stripe size in bytes. This value will be passed along to the underlying
+ *   filesystem if it is supported. Not valid for optimized file mode.
+ *
+ * - @b stripe_count - Number of filesystem IO servers to use with dataset files. This value will be passed
+ *   along to the underlying filesystem if supported. Not valid for optimized file mode.
+ *
+ * - @b raid_level - Filesystem RAID level. This value will be passed along to the underlying file system
+ *   if supported. Not valid for optimized file mode.
+ *
+ * - @b dataset_expected_size - Expected global size of a dataset in bytes. This value will be used when
+ *   calculating the appropriate output interval for the dataset.
  *
  * @page page_example Examples
  * @section sec_example_c C Example
