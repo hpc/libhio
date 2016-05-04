@@ -50,14 +50,13 @@ fails="
     hvp c. .
     hxrc ERR_NOT_FOUND
     hda NTN_DS 97 READ UNIQUE
-    hdo
     hf
 
   /@@ 5. HI, HDO invalid data root prefix @/
     hi MY_CTX WIERD:$PWD
     hvp c. .
     hxrc ERR_NOT_FOUND
-    hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
+    hda NTN_DS 97 WRITE,CREAT UNIQUE 
     hf
 
   /@@ 6. HEO without HDO @/
@@ -67,7 +66,6 @@ fails="
   /@@ 7. HI, HDA READ HDO non-existent DS ID  @/
     hi MY_CTX $HIO_TEST_ROOTS
     hvp c. .
-    hxrc ERR_NOT_FOUND
     hda NTN_DS 29 READ UNIQUE
     hxrc ERR_NOT_FOUND
     hdo
