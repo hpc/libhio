@@ -270,7 +270,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       /* use group locking if available */
       fs_attr->fs_use_group_locking = true;
 
-#if HIO_USE_MPI
+#if HAVE_MPI_COMM_SPLIT_TYPE
       /* if group locking is not available then each rank should attempt to write to
        * a different stripe to maximize the available IO bandwidth */
       fs_attr->fs_scount = min(context->c_shared_size, fs_attr->fs_smax_count);
