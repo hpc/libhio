@@ -176,7 +176,7 @@ batch_sub() {
 
     shopt -s nocasematch
     if [[ $msub_msg == *error* || $msub_msg == *warn* || $msub_msg = *fail* ]]; then
-      msg "run_setup: msub error: $msub_msg"
+      errx "msub error: $msub_msg"
     else
       jobid=${msub_msg#$'\n'}
       echo "$jobid" > $lastjob
@@ -184,7 +184,7 @@ batch_sub() {
     fi
     shopt -u nocasematch
     msglog=""
-    if [[ $batch -eq 1 ]]; then exit; fi
+    if [[ $batch -eq 1 ]]; then exit 0; fi
   fi
 }
 
