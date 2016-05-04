@@ -424,18 +424,13 @@ static int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned ch
     }
   }
 
-  all_ranks = malloc (context->c_size * sizeof (int));
+  all_ranks = calloc (context->c_size, sizeof (int));
   if (NULL == all_ranks) {
     free (ranks);
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
   if (ranks) {
-    /* initialize all entries to undefined */
-    for (int i = 0 ; i < context->c_size ; ++i) {
-      all_ranks[i] = MPI_UNDEFINED;
-    }
-
     for (int i = 0 ; i < rank_count ; ++i) {
       if (ranks[i] >= context->c_size) {
         free (all_ranks);
