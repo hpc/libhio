@@ -17,6 +17,11 @@
 
 #  hvsd datawarp_stage_mode immediate is set to force all datasets to be retained
 
+if [[ ${HIO_TEST_ROOTS/DataWarp//} == $HIO_TEST_ROOTS ]]; then
+  echo "Test $0 only valid valid with DataWarp.  Exiting."
+  exit 77
+fi
+
 batch_sub $(( 3 * $ranks * $blksz * $nblk ))
 
 cmdw="
