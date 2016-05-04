@@ -141,11 +141,13 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
 }
 
 int hioi_dataset_shared_fini (hio_dataset_t dataset) {
-  if (MPI_WIN_NULL == dataset->ds_shared_win) {
-    return HIO_SUCCESS;
-  }
+  if (hioi_context_using_mpi (hioi_object_context (&dataset->ds_object))) {
+    if (MPI_WIN_NULL == dataset->ds_shared_win) {
+      return HIO_SUCCESS;
+    }
 
-  MPI_Win_free (&dataset->ds_shared_win);
+    MPI_Win_free (&dataset->ds_shared_win);
+  }
 
   return HIO_SUCCESS;
 }
