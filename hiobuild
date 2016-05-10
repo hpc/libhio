@@ -11,7 +11,7 @@
 #
 
 #----------------------------------------------------------------------------
-# buildhio - build libhio from source tree 
+# hiobuild - build libhio from source tree 
 #
 # Change History: 
 #   20150428  cgw  Initial version
@@ -19,10 +19,10 @@
 synexit() {
   echo ""
   if [[ -n $* ]]; then echo $*; echo ""; fi
-  echo "buildhio - build libhio and check results"
+  echo "hiobuild - build libhio and check results"
   echo ""
   echo "  Syntax:"
-  echo "    buildhio [-acfx] [-d dir] [-n name]"
+  echo "    hiobuild [-acfx] [-d dir] [-n name]"
   echo "             [-l module]...  [-s oldmod,newmod]..."
   echo "             [-h]"
   echo ""
@@ -60,7 +60,7 @@ log="$tdir/$logfn"
 host=`hostname -s`
 
 args=$*
-msg "buildhio $args: Starting"
+msg "hiobuild $args: Starting"
 
 if [[ ${OSTYPE:0:6} != "darwin" ]]; then
   . $MODULESHOME/init/bash
@@ -155,7 +155,7 @@ fi
 #----------------------------------------------------------------------------
 
 msg "====[HIOBUILD_RESULT_START]===($name)==========================================="
-msg "buildhio $name: Checking $log for build problems"
+msg "hiobuild $name: Checking $log for build problems"
 sed1="s/error_test/err0r_test/g"
 sed2="s/-Werror/-Werr0r/g"
 sed3="s/-Wno-error/-Wno-err0r/g"
@@ -166,7 +166,7 @@ rc=$?
 cat $tmpfile 2>&1 | tee -a $log
 rm $tmpfile
 
-msg "buildhio $name: Checking for build target files"
+msg "hiobuild $name: Checking for build target files"
 for f in $files; do
   if [[ ! -e $f ]]; then
     msg "Error: $f does not exist"
@@ -174,12 +174,12 @@ for f in $files; do
   fi
 done
 
-if [[ $rc -eq 1 ]]; then msg "buildhio $name: Build OK." 
-else msg "buildhio $name: Build errors found, see above."
+if [[ $rc -eq 1 ]]; then msg "hiobuild $name: Build OK." 
+else msg "hiobuild $name: Build errors found, see above."
 fi
 msg "====[HIOBUILD_RESULT_END]===($name)============================================="
 msg $bar 
 
-msg "buildhio $name: Done at `date`"
+msg "hiobuild $name: Done at `date`"
 
-# --- end of buildhio ---
+# --- end of hiobuild ---
