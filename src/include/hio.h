@@ -1301,7 +1301,7 @@ hio_return_t hio_perf_get_count (hio_object_t object, int *count);
 
 /**
  * @ingroup performance
- * @brief Retrieve information about an hio configuration variable
+ * @brief Retrieve information about an hio performance variable
  *
  * @param[in]    object     hio object
  * @param[in]    index      performance variable index
