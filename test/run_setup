@@ -249,9 +249,11 @@ clean_roots() {
 
 # function to invoke mpi on various platforms - sets max_rc
 myrun() {
+  #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+  #cmd "$mympicmd -n $ranks echo \"LD_LIBRARY_PATH=\$LD_LIBRARY_PATH\""
+  #cmd "$mympicmd -n $ranks ls -l \${LD_LIBRARY_PATH%%:*}"
   #export LD_DEBUG=all
   #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
-  #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
   cmd "$mympicmd -n $ranks $*"
   rc=$?
   #unset LD_DEBUG
