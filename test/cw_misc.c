@@ -368,8 +368,8 @@ void fsleep(double seconds) {
   double seconds_only = floor(seconds);
   double microseconds = 1000000 * (seconds - seconds_only);
 
-  sleep((int) seconds);
-  usleep((int) microseconds);
+  sleep((unsigned int) seconds_only);
+  usleep((useconds_t) microseconds);
 }
 
 /*-
