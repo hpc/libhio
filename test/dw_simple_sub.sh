@@ -15,7 +15,8 @@
 # DataWarp functionality at small scale.
 #
 # Can only be run on a system with Moab/DataWarp integration with a scratch
-# filesystem (PFS) that is visible by DataWarp for stage-in and stage-out.
+# filesystem (PFS) that is visible by DataWarp for stage-in and stage-out
+# or for caching.
 #
 # How it works:
 #
@@ -37,7 +38,7 @@
 #
 #   h) Outputs messages describing the needed verification steps
 #
-# 2) The submitted job:
+# 2) The submitted job (if striped mode):
 #
 #   a) Allocates a shared scratch DataWarp area (#DW jobdw directive)
 #
@@ -51,19 +52,48 @@
 #   e) Performs a stage-out back to the scratch run directory (#DW stage_out
 #      directive)
 #
+# 2) The submitted job (if cached mode):
+#
+#   a) Allocates a cached DataWarp area (#DW jobdw directive)
+#
+#   b) Launches the compute part of the job
+#
+#   c) Issues various file modification commands against the DataWarp
+#      cached area
+#
 # 3) The user follows the messages (step 1h) to verify the results:
 #
 #   a) Check the job output for error messages
 #
-#   b) Compare (via diff) the actual stage-out destination directory with the
-#      expected stage out destination directory
+#   b) Compare (via diff) the actual destination directory with the
+#      expected destination directory
 #
-# Last update: 20160405  Cornell Wright
+# Last update: 20160524  Cornell Wright
 #=============================================================================
 
 #-----------------------------------------------------------------------------
 # Convenience functions
 #-----------------------------------------------------------------------------
+synexit() {
+  echo ""
+  if [[ -n $* ]]; then echo $*; echo ""; fi
+  echo "dw_simple_sub.sh - submit a simple DataWarp test job"
+  echo ""
+  echo "  Syntax:"
+  echo "    dw_simple_sub.sh [-c] [-t]"
+  echo "                     [-h]"
+  echo ""
+  echo "  Options:"   
+  echo "    -c                  Use DataWarp transparent cache mode"
+  echo "                        (Default is striped mode)"
+  echo "    -t                  Test mode - bypass issuing msub"
+  echo "    -h                  Display this help"
+  echo ""
+  echo "  Cornell Wright  cornell@lanl.gov"
+  
+  exit 8
+}
+
 msg_log=""
 msg() {
   echo "$HOST $*"
@@ -93,10 +123,27 @@ find_scratch () {
 # Start up
 #-----------------------------------------------------------------------------
 pkg="dw_simple"
-ver="20160405"
+ver="20160524"
 dashes="---------------------------------------------------------------------"
+
+dw_cache=0
+mode="striped mode"
+test_mode=0
+while getopts "hct" optname; do
+  case $optname in
+    h ) synexit;;
+    c ) dw_cache=1;;
+    t ) test_mode=1;;
+   \? ) synexit "Error: invalid option";;
+  esac
+done
+shift $((OPTIND - 1 ))
+if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
+if [[ $dw_cache -eq 1 ]]; then mode="cached mode"; fi
+
 msg "$dashes"
-msg "$pkg version $ver starting"
+
+msg "$pkg version $ver starting ($mode)"
 
 #-----------------------------------------------------------------------------
 # Find a usable scratch directory
@@ -105,6 +152,8 @@ msg "Finding scratch directory"
 find_scratch /scratch1/users/$LOGNAME
 find_scratch /lustre/scratch4/$LOGNAME
 find_scratch /lustre/scratch5/$LOGNAME
+find_scratch /lscratch1/$LOGNAME
+find_scratch ~/scratch-tmp
 
 # Add additional find_scratch calls (above) as needed for various systems
 
@@ -128,7 +177,12 @@ msg "Run directory is $dir"
 msg "These messages now logged to $msg_log"
 
 dir_si="$dir/stage_in"
-dir_so="$dir/stage_out"
+if [[ $dw_cache -eq 0 ]]; then 
+  dir_so="$dir/stage_out"
+  dw_env="\$DW_JOB_STRIPED"
+else
+  dw_env="\$DW_JOB_STRIPED_CACHED"
+fi 
 dir_ex="$dir/expect"
 job_file="$dir/${pkg}_job.sh"
 job_out="$dir/${pkg}_job.out"
@@ -137,30 +191,32 @@ newdata="New file $(date)."
 #-----------------------------------------------------------------------------
 # Build job script
 #-----------------------------------------------------------------------------
-job='#! /bin/bash
-#MSUB -l nodes=1:ppn=1,walltime=10:00
-#MSUB -o '$job_out' -joe
-#DW jobdw access_mode=striped type=scratch capacity=1GiB
-#DW stage_in destination=$DW_JOB_STRIPED/dest source='$dir_si' type=directory
-#DW stage_out source=$DW_JOB_STRIPED/dest destination='$dir_so' type=directory
-echo "$(date) '$pkg' version '$ver' start"
-set | egrep "^PBS|^DW|^HOST"
-echo "'$dashes'"
-echo "CHECK: The following commands should complete without error"
-echo "CHECK: The next find command should show 3 files: change_me, delete_me, keep_me"
-aprun -n 1 -b bash -xc "find $DW_JOB_STRIPED -ls"
-aprun -n 1 -b bash -xc "diff -r $DW_JOB_STRIPED/dest '$dir_si'"
-aprun -n 1 -b bash -xc "rm $DW_JOB_STRIPED/dest/delete_me"
-aprun -n 1 -b bash -xc "dd bs=1000 seek=128 count=256 status=none if=/dev/zero of=$DW_JOB_STRIPED/dest/change_me"
-aprun -n 1 -b bash -xc "echo \"'$newdata'\" > $DW_JOB_STRIPED/dest/new_file"
-echo "CHECK: The next find command should show 3 files: change_me, keep_me, new_file"
-aprun -n 1 -b bash -xc "find $DW_JOB_STRIPED -ls"
-aprun -n 1 -b bash -xc "diff -r $DW_JOB_STRIPED/dest '$dir_ex'"
-echo "'$dashes'"
-echo "$(date) '$pkg' version '$ver' end"
-'
+echo "#! /bin/bash" > $job_file
+echo "#MSUB -l nodes=1:ppn=1,walltime=10:00" >> $job_file
+echo "#MSUB -o $job_out -joe" >> $job_file
+if [[ $dw_cache -eq 0 ]]; then
+  echo "#DW jobdw type=scratch access_mode=striped capacity=1GiB" >> $job_file
+  echo "#DW stage_in destination=\$DW_JOB_STRIPED/dest source=$dir_si type=directory" >> $job_file
+  echo "#DW stage_out source=\$DW_JOB_STRIPED/dest destination=$dir_so type=directory" >> $job_file
+else
+  echo "#DW jobdw type=cache access_mode=striped pfs=$dir capacity=1GiB" >> $job_file
+fi
+echo "echo \"\$(date) $pkg version $ver ($mode) start\"" >> $job_file
+echo "set | egrep \"^PBS|^DW|^HOST\"" >> $job_file
+echo "echo \"$dashes\"" >> $job_file
+echo "echo \"CHECK: The following commands should complete without error\"" >> $job_file
+echo "echo \"CHECK: The next find command should show 3 files: change_me, delete_me, keep_me\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"find $dw_env -ls\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"diff -r $dw_env/dest $dir_si\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"rm $dw_env/dest/delete_me\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"dd bs=1000 seek=128 count=256 status=none if=/dev/zero of=$dw_env/dest/change_me\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"echo \\\"$newdata\\\" > $dw_env/dest/new_file\"" >> $job_file
+echo "echo \"CHECK: The next find command should show 3 files: change_me, keep_me, new_file\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"find $dw_env -ls\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"diff -r $dw_env/dest $dir_ex\"" >> $job_file
+echo "echo \"$dashes\"" >> $job_file
+echo "echo \"\$(date) $pkg version $ver ($mode) end\"" >> $job_file
 
-echo "$job" > $job_file
 msg "Job script is $job_file"
 
 #-----------------------------------------------------------------------------
@@ -181,7 +237,12 @@ cmd "echo \"$newdata\" > $dir_ex/new_file"
 # Submit job and advise user on results checking
 #-----------------------------------------------------------------------------
 msg "Submitting job"
-cmd "msub $job_file"
+if [[ $test_mode -eq 0 ]]; then
+  cmd "msub $job_file"
+else
+  msg "msub $job_file"
+  cmd_msg="dummy-1001 dummy-1002 dummy-1003"
+fi
 jobid=${cmd_msg#$'\n'}         # Strip leading newline
 msg "msub returns: \"$jobid\""
 if [[ -z $jobid ]]; then errx "msub failed; no job ID returned"; fi
@@ -191,8 +252,12 @@ msg "DataWarp job submitted"
 msg "$dashes"
 msg "When job ${jobid[1]} completes, check for error messages in $job_out"
 msg "When job ${jobid[2]} completes, compare directories stage_out and expect via:"
-msg "     diff -r $dir_so $dir_ex"
+if [[ $dw_cache -eq 0 ]]; then
+  msg "     diff -r $dir_so $dir_ex"
+else
+  msg "     diff -r $dir_si $dir_ex"
+fi
 msg "$dashes"
 msg "$pkg version $ver done"
-
+if [[ $test_mode -eq 1 ]]; then cat $job_file; fi
 # --- end of dw_simple_sub.sh ---
