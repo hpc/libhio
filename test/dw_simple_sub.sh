@@ -180,8 +180,10 @@ dir_si="$dir/stage_in"
 if [[ $dw_cache -eq 0 ]]; then 
   dir_so="$dir/stage_out"
   dw_env="\$DW_JOB_STRIPED"
+  dw_work="\$DW_JOB_STRIPED/dest"
 else
   dw_env="\$DW_JOB_STRIPED_CACHED"
+  dw_work="\$DW_JOB_STRIPED_CACHED/stage_in"
 fi 
 dir_ex="$dir/expect"
 job_file="$dir/${pkg}_job.sh"
@@ -196,8 +198,8 @@ echo "#MSUB -l nodes=1:ppn=1,walltime=10:00" >> $job_file
 echo "#MSUB -o $job_out -joe" >> $job_file
 if [[ $dw_cache -eq 0 ]]; then
   echo "#DW jobdw type=scratch access_mode=striped capacity=1GiB" >> $job_file
-  echo "#DW stage_in destination=\$DW_JOB_STRIPED/dest source=$dir_si type=directory" >> $job_file
-  echo "#DW stage_out source=\$DW_JOB_STRIPED/dest destination=$dir_so type=directory" >> $job_file
+  echo "#DW stage_in destination=$dw_work source=$dir_si type=directory" >> $job_file
+  echo "#DW stage_out source=$dw_work destination=$dir_so type=directory" >> $job_file
 else
   echo "#DW jobdw type=cache access_mode=striped pfs=$dir capacity=1GiB" >> $job_file
 fi
@@ -207,13 +209,15 @@ echo "echo \"$dashes\"" >> $job_file
 echo "echo \"CHECK: The following commands should complete without error\"" >> $job_file
 echo "echo \"CHECK: The next find command should show 3 files: change_me, delete_me, keep_me\"" >> $job_file
 echo "aprun -n 1 -b bash -xc \"find $dw_env -ls\"" >> $job_file
-echo "aprun -n 1 -b bash -xc \"diff -r $dw_env/dest $dir_si\"" >> $job_file
-echo "aprun -n 1 -b bash -xc \"rm $dw_env/dest/delete_me\"" >> $job_file
-echo "aprun -n 1 -b bash -xc \"dd bs=1000 seek=128 count=256 status=none if=/dev/zero of=$dw_env/dest/change_me\"" >> $job_file
-echo "aprun -n 1 -b bash -xc \"echo \\\"$newdata\\\" > $dw_env/dest/new_file\"" >> $job_file
+if [[ $dw_cache -eq 0 ]]; then
+  echo "aprun -n 1 -b bash -xc \"diff -r $dw_work $dir_si\"" >> $job_file
+fi
+echo "aprun -n 1 -b bash -xc \"rm $dw_work/delete_me\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"dd bs=1000 seek=128 count=256 status=none if=/dev/zero of=$dw_work/change_me\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"echo \\\"$newdata\\\" > $dw_work/new_file\"" >> $job_file
 echo "echo \"CHECK: The next find command should show 3 files: change_me, keep_me, new_file\"" >> $job_file
 echo "aprun -n 1 -b bash -xc \"find $dw_env -ls\"" >> $job_file
-echo "aprun -n 1 -b bash -xc \"diff -r $dw_env/dest $dir_ex\"" >> $job_file
+echo "aprun -n 1 -b bash -xc \"diff -r $dw_work $dir_ex\"" >> $job_file
 echo "echo \"$dashes\"" >> $job_file
 echo "echo \"\$(date) $pkg version $ver ($mode) end\"" >> $job_file
 
