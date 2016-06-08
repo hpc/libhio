@@ -68,7 +68,7 @@
 #   b) Compare (via diff) the actual destination directory with the
 #      expected destination directory
 #
-# Last update: 20160524  Cornell Wright
+# Last update: 20160608  Cornell Wright
 #=============================================================================
 
 #-----------------------------------------------------------------------------
