@@ -47,7 +47,9 @@ synexit() {
   echo "        [-b] [-c] [-a]"
   echo "        [-w <dw_alloc>]"
   echo "        [-x <dw_alloc_pct>]"
+  echo "        [-k knl|haswell]" 
   echo "        [-m <msub args>]"
+  echo "        [-u <uber command and args>]"
   echo ""
   echo "  Options:"
   echo "    -s <size>         Per rank run size t|s|m|l|x|y|z  (default s)"
@@ -67,7 +69,9 @@ synexit() {
   echo "    -a                Clean dirs After running"
   echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
   echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
-  echo "    -m                Additional arguments for msub (use with -b)"
+  echo "    -k knl|haswell    Adds :<type> to msub -l option, influences -p default"
+  echo "    -m <msub_args>    Additional arguments for msub (use with -b)"
+  echo "    -u <uber command and args>  Use to invoke a debugger (not to call a taxi)"
   echo ""
   echo "  Cornell Wright  cornell@lanl.gov"
 
@@ -136,7 +140,9 @@ batch_sub() {
     msg "run_setup: `date \"$datefmt\"` Job $jobname $args"
 
     echo "#! /bin/bash" > $jobsh
-    echo "#MSUB -l nodes=$nodes:ppn=$ppn" >> $jobsh
+    proc_parm=""
+    if [[ -n $proc_type ]]; then proc_parm=":$proc_type"; fi
+    echo "#MSUB -l nodes=$nodes$proc_parm:ppn=$ppn" >> $jobsh
     echo "#MSUB -l walltime=4:00:00" >> $jobsh
     echo "#MSUB -o $jobout -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
@@ -222,6 +228,10 @@ clean_roots() {
   for r in "${root[@]}"; do
     shopt -s nocasematch
     if [[ "$r" == "dw" || "$r" == "datawarp" ]]; then
+
+    # Not the right place for this, need a location that will run only on cluster
+    cmd "aprun -n 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo|sort|uniq -c\""
+
       clean=""
       if [[ -n $DW_JOB_STRIPED    ]]; then clean=$DW_JOB_STRIPED; fi
       if [[ -n $HIO_datawarp_root ]]; then clean=$HIO_datawarp_root; fi
@@ -254,7 +264,7 @@ myrun() {
   #cmd "$mympicmd -n $ranks ls -l \${LD_LIBRARY_PATH%%:*}"
   #export LD_DEBUG=all
   #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
-  cmd "$mympicmd -n $ranks $*"
+  cmd "$uber_cmd $mympicmd -n $ranks $*"
   rc=$?
   #unset LD_DEBUG
   #unset LD_DEBUG_OUTPUT
@@ -276,6 +286,8 @@ batch=0
 chain=0
 after=0
 dw_alloc_pct=100
+proc_type=""
+uber_cmd=""
 
 size="s"
 job_dir=""
@@ -312,17 +324,15 @@ else
       job_dir="/$SLURM_JOB_ID"
     fi
   fi
-  if [[ $hostpre == "ga-" || $hostpre == "tr-" ]]; then
+  if [[ $hostpre == "ga-" || $hostpre == "tt-" || $hostpre == "tr-" ]]; then
     dw_alloc_mode=2
-  elif [[ $hostpre == "tt-" ]]; then
-    dw_alloc_mode=1
   else
     dw_alloc_mode=0
   fi
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:v:d:bcw:ax:m:" optname; do
+while getopts "hs:r:n:p:v:d:bcw:ax:k:m:u:" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
@@ -336,12 +346,22 @@ while getopts "hs:r:n:p:v:d:bcw:ax:m:" optname; do
     w ) dw_alloc_mode=$OPTARG;;
     a ) after=1;;
     x ) dw_alloc_pct=$OPTARG;;
+    k ) proc_type=$OPTARG;;
     m ) msub_arg=$OPTARG;;
+    u ) uber_cmd=$OPTARG;;
    \? ) synexit "invalid option";;
   esac
 done
 shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "extra parameters"; fi
+
+case $proc_type in
+  ""      ) ppn_def=2;;
+  knl     ) ppn_def=68;;
+  haswell ) ppn_def=32;;
+  *       ) ppn_def=3;
+            msg "Warning: processor type \"$proc_type\" not recognized, using anyway";;
+esac
 
 # Figure out nodes, ranks and ppn
 until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
@@ -354,7 +374,7 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
     if   [[ -n $PBS_NUM_PPN ]]; then ppn=$PBS_NUM_PPN
     elif [[ -n $SLURM_NTASKS_PER_NODE ]]; then ppn=$SLURM_NTASKS_PER_NODE
     elif [[ ${OSTYPE:0:6} == "darwin" ]]; then ppn=2
-    else                                       ppn=2
+    else                                       ppn=$ppn_def
     fi
   # Ranks only specified, determine nodes and iterate
   elif [[ -n ranks ]]; then
@@ -497,6 +517,7 @@ if [[ $batch -eq 0 ]]; then
     msg "Buffy with size > tiny, disabling datawarp staging"
     export HIO_datawarp_stage_mode="disable"
   fi
+
 
   # Display results of run_setup
   msg "run_setup:                      Args: \"$args\""
