@@ -108,7 +108,8 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
     pthread_mutexattr_init (&mutex_attr);
     pthread_mutexattr_setpshared (&mutex_attr, PTHREAD_PROCESS_SHARED);
 
-    for (int i = 0 ; i < stripes ; ++i) {
+    /* fixme - not sure this is the right way to ensure stripe 0 mutex gets init'd */
+    for (int i = 0 ; i < max(1, stripes) ; ++i) {
       pthread_mutex_init (&dataset->ds_shared_control->s_stripes[i].s_mutex, &mutex_attr);
       atomic_init (&dataset->ds_shared_control->s_stripes[i].s_index, 0);
     }
@@ -147,9 +148,7 @@ int hioi_dataset_shared_fini (hio_dataset_t dataset) {
       return HIO_SUCCESS;
     }
 
-    hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "calling MPI_Win_free%s", "");
     MPI_Win_free (&dataset->ds_shared_win);
-    hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "return from MPI_Win_free%s", "");
   }
 
   return HIO_SUCCESS;
