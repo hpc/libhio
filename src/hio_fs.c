@@ -298,7 +298,7 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "filesystem query: path: %s, type: %d, flags: 0x%x, block size: %" PRIu64
-              " block count: %" PRIu64 " blocks free: %" PRIu64 " stripe count: %" PRIu64 " stripe max count: %" PRIu64
+              " block count: %" PRIu64 " blocks free: %" PRIu64 " stripe count: %" PRIu32 " stripe max count: %" PRIu32
               " stripe unit: %" PRIu64 " stripe size: %" PRIu64 " stripe max size: %" PRIu64, tmp, fs_attr->fs_type,
               fs_attr->fs_flags, fs_attr->fs_bsize, fs_attr->fs_btotal, fs_attr->fs_bavail, fs_attr->fs_scount,
               fs_attr->fs_smax_count, fs_attr->fs_sunit, fs_attr->fs_ssize, fs_attr->fs_smax_size);
