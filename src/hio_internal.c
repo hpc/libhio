@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <ctype.h>
 
 typedef struct hio_error_stack_item_t {
   struct hio_error_stack_item_t *next;
@@ -42,6 +43,78 @@ char * hioi_msg_time(char * time_buf, size_t len) {
   current_time = time (NULL);
   strftime(time_buf, len, "%Y-%m-%d %H:%M:%S", localtime(&current_time));
   return time_buf;
+}
+
+/**
+ * hioi_dump_writer - in collaboration with macro hioi_dump will dump memory
+ * to stderr with output lines like: 
+ * YYYY-MM-DD hh:mm:ss [<msg_id>] [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
+ */ 
+void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t size) {
+    char time_buf[32];
+    char hdr_buf[128];
+    unsigned char *p = data;
+    unsigned char c;
+    int n;
+    char bytestr[4] = {0};
+    char addrstr[10] = {0};
+    char hexstr[ 16*3 + 5] = {0};
+    char hexprev[ 16*3 + 5] = {0};
+    char charstr[16*1 + 5] = {0};
+    int skipped = 0;
+
+    hioi_msg_time(time_buf, sizeof(time_buf)); 
+    snprintf(hdr_buf, sizeof(hdr_buf), header, time_buf, context->c_msg_id);
+
+    for(n=1;n<=size;n++) {
+        if (n%16 == 1) {
+            /* store address for this line */
+            snprintf(addrstr, sizeof(addrstr), "%.4lx", p-(unsigned char *)data);
+        }
+
+        c = *p;
+        if (isalnum(c) == 0) {
+            c = '.';
+        }
+
+        /* store hex str (for left side) */
+        snprintf(bytestr, sizeof(bytestr), "%02X ", *p);
+        strncat(hexstr, bytestr, sizeof(hexstr)-strlen(hexstr)-1);
+
+        /* store char str (for right side) */
+        snprintf(bytestr, sizeof(bytestr), "%c", c);
+        strncat(charstr, bytestr, sizeof(charstr)-strlen(charstr)-1);
+
+        if(n%16 == 0) {
+            /* line completed */
+            if (!strcmp(hexstr, hexprev) && n< size) {
+              skipped++;
+            } else {
+              if (skipped > 0) {
+                fprintf(stderr, "%s        %d identical lines skipped\n", hdr_buf,skipped);
+                skipped = 0;
+              }
+              fprintf(stderr, "%s[%4.4s]   %-50.50s  %s\n", hdr_buf, addrstr, hexstr, charstr);
+              strcpy(hexprev, hexstr);
+            }
+            hexstr[0] = 0;
+            charstr[0] = 0;
+        } else if(n%8 == 0) {
+            /* half line: add whitespaces */
+            strncat(hexstr, "  ", sizeof(hexstr)-strlen(hexstr)-1);
+            strncat(charstr, " ", sizeof(charstr)-strlen(charstr)-1);
+        }
+        p++; /* next byte */
+    }
+
+    if (strlen(hexstr) > 0) {
+        if (skipped > 0) {
+           fprintf(stderr, "%s        %d identical lines skipped\n", hdr_buf, skipped);
+           skipped = 0;
+        }
+        /* print rest of buffer if not empty */
+        fprintf(stderr, "%s[%4.4s]   %-50.50s  %s\n", hdr_buf, addrstr, hexstr, charstr);
+    }
 }
 
 int hioi_err_errno (int err) {

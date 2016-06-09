@@ -33,6 +33,7 @@
  * the value can be resolved to a numeric sring at compile time.
  */
 #define HIO_VERBOSE_ERROR      0
+#define HIO_VERBOSE_DEBUG_XLOW 5
 #define HIO_VERBOSE_WARN       10
 #define HIO_VERBOSE_DEBUG_LOW  20
 #define HIO_VERBOSE_DEBUG_MED  50
@@ -105,12 +106,26 @@ char * hioi_msg_time(char * time_buf, size_t len);
 #define STRINGIFY(n) STRINGIFY_HELPER(n)
 #define STRINGIFY_HELPER(n) #n
 
-#define hioi_log(context, level,  format, ...)                                \
-  if ((context)->c_verbose >= level) {                                        \
-    char time_buf[32];                                                        \
-    fprintf ( stderr, "%s [hio:" STRINGIFY(level) " %s] " format "\n",        \
-              hioi_msg_time(time_buf, sizeof(time_buf)), (context)->c_msg_id, \
-              __VA_ARGS__);                                                   \
+/* MSG_LINE defines extra text to be inserted into log messages and dumps.
+   Normally should be empty, uncomment a different line for debugging.         */
+#define MSG_LINE
+//#define MSG_LINE STRINGIFY(__LINE__) " "
+//#define MSG_LINE __FILE__ ":" STRINGIFY(__LINE__) " "
+
+#define hioi_log(context, level,  format, ...)                                    \
+  if ((context)->c_verbose >= level) {                                            \
+    char time_buf[32];                                                            \
+    fprintf ( stderr, "%s [hio:" STRINGIFY(level) " %s] " MSG_LINE format "\n",   \
+              hioi_msg_time(time_buf, sizeof(time_buf)), (context)->c_msg_id,     \
+              __VA_ARGS__);                                                       \
+  }
+
+void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t size);
+
+#define hioi_dump(context, level, pointer, length)                                \
+  if ((context)->c_verbose >= level) {                                            \
+    hioi_dump_writer ( context, "%s [hio:" STRINGIFY(level) " %s] " MSG_LINE,     \
+                       pointer, length);                                          \
   }
 
 /**
