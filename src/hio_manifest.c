@@ -844,7 +844,7 @@ int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
   size_t manifest_size;
   int rc;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%lu from %s",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%llu from %s",
 	    dataset->ds_object.identifier, dataset->ds_id, path);
 
   rc = hioi_manifest_read (path, &manifest, &manifest_size);

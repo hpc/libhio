@@ -77,7 +77,7 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
     return hioi_err_errno (errno);
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: successfully created dataset directories");
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: successfully created dataset directories %s", posix_dataset->base_path);
 
   return HIO_SUCCESS;
 }
@@ -335,7 +335,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
           assert (0 < rc);
           if (access (path, F_OK)) {
             /* this shouldn't happen on a valid dataset. rank 0 is always an IO master rank. */
-            hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: could not find top-level manifest");
+            hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: could not find top-level manifest %s", path);
             rc = HIO_ERR_NOT_FOUND;
             break;
           }
@@ -379,7 +379,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       /* no point in using optimized mode in this case */
       posix_dataset->base.ds_fmode = HIO_FILE_MODE_BASIC;
       hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: optimized file mode requested but not supported in this "
-                "dataset mode. falling back to basic file mode.");
+                "dataset mode. falling back to basic file mode, path: %s", posix_dataset->base_path);
     }
   }
 
@@ -394,7 +394,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   stop = hioi_gettime ();
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully %s posix dataset %s:%llu on data root %s. "
-            "open time %lu usec", (dataset->ds_flags & HIO_FLAG_CREAT) ? "created" : "opened", hioi_object_identifier(dataset),
+            "open time %llu usec", (dataset->ds_flags & HIO_FLAG_CREAT) ? "created" : "opened", hioi_object_identifier(dataset),
             dataset->ds_id, module->data_root, stop - start);
 
   return HIO_SUCCESS;
@@ -487,7 +487,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
   stop = hioi_gettime ();
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully closed posix dataset %s:%llu on data root %s. "
-            "close time %lu usec", hioi_object_identifier(dataset), dataset->ds_id, module->data_root, stop - start);
+            "close time %llu usec", hioi_object_identifier(dataset), dataset->ds_id, module->data_root, stop - start);
 
   return rc;
 }
@@ -692,7 +692,7 @@ static int builtin_posix_element_translate_opt_old (builtin_posix_module_t *posi
   block_offset = offset - block_base;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin_posix_element_translate: element: %s, offset: %lu, block_id: %lu, "
-            "block_offset: %lu, block_size: %lu", hioi_object_identifier(element), (unsigned long) offset,
+            "block_offset: %lu, block_size: %llu", hioi_object_identifier(element), (unsigned long) offset,
             block_id, block_offset, posix_dataset->base.ds_bs);
 
   if (offset + *size > block_bound) {
@@ -753,12 +753,12 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
   char *path;
   int rc;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "translating element %s offset %ld size %lu",
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "translating element %s offset %lld size %lu",
             hioi_object_identifier (&element->e_object), offset, *size);
   rc = hioi_element_translate_offset (element, offset, &file_index, &file_offset, size);
   if (HIO_SUCCESS != rc) {
     if (reading) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset not found");
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset %lld not found", offset);
       /* not found */
       return rc;
     }
@@ -780,7 +780,7 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
     file_index = hioi_dataset_add_file (&posix_dataset->base, strrchr (path, '/') + 1);
     hioi_element_add_segment (element, file_index, file_offset, offset, *size);
   } else {
-    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset found in file @ index %d, offset %lu, size %lu", file_index,
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset found in file @ index %d, offset %llu, size %lu", file_index,
               file_offset, *size);
     rc = asprintf (&path, "%s/%s", posix_dataset->base_path, posix_dataset->base.ds_flist[file_index].f_name);
     if (0 > rc) {
@@ -869,7 +869,7 @@ static ssize_t builtin_posix_module_element_write_strided_internal (builtin_posi
       }
 
       hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
-                "posix: writing %lu bytes to file offset %lu", actual, file->f_offset);
+                "posix: writing %lu bytes to file offset %llu", actual, file->f_offset);
 
       ret = hioi_file_write (file, ptr, actual);
       if (ret > 0) {

@@ -93,7 +93,7 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
   rc = MPI_Win_allocate_shared (data_size, 1, MPI_INFO_NULL,
                                 context->c_shared_comm, &base, &shared_win);
   if (MPI_SUCCESS != rc) {
-    hioi_log (context, HIO_VERBOSE_WARN, "could not allocate shared memory window");
+    hioi_log (context, HIO_VERBOSE_WARN, "could not allocate shared memory window, size: %td", data_size);
     return HIO_ERR_NOT_AVAILABLE;
   }
 
@@ -127,7 +127,7 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
 
   rc = MPI_Win_shared_query (shared_win, 0, &data_size, &disp_unit, &base);
   if (MPI_SUCCESS != rc) {
-    hioi_log (context, HIO_VERBOSE_WARN, "error querying shared memory window");
+    hioi_log (context, HIO_VERBOSE_WARN, "error querying shared memory window, rc: %d", rc);
     MPI_Win_free (&shared_win);
     return HIO_ERROR;
   }
@@ -141,12 +141,15 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
 }
 
 int hioi_dataset_shared_fini (hio_dataset_t dataset) {
-  if (hioi_context_using_mpi (hioi_object_context (&dataset->ds_object))) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
+  if (hioi_context_using_mpi (context)) {
     if (MPI_WIN_NULL == dataset->ds_shared_win) {
       return HIO_SUCCESS;
     }
 
+    hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "calling MPI_Win_free%s", "");
     MPI_Win_free (&dataset->ds_shared_win);
+    hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "return from MPI_Win_free%s", "");
   }
 
   return HIO_SUCCESS;

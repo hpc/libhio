@@ -37,20 +37,11 @@ static pthread_mutex_t hio_error_stack_mutex = PTHREAD_MUTEX_INITIALIZER;
  * @file Internal hio functions
  */
 
-void hioi_log_unconditional (hio_context_t context, int level, char *format, ...) {
+char * hioi_msg_time(char * time_buf, size_t len) {
   time_t current_time;
-  char time_buf[20];
-  va_list vargs;
-
   current_time = time (NULL);
-  strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", localtime(&current_time));
-
-  va_start (vargs, format);
-  fprintf (stderr, "%s [hio:%d] (context: %s): ", time_buf, level, 
-           context->c_object.identifier);
-  vfprintf (stderr, format, vargs);
-  fputs ("\n", stderr);
-  va_end (vargs);
+  strftime(time_buf, len, "%Y-%m-%d %H:%M:%S", localtime(&current_time));
+  return time_buf;
 }
 
 int hioi_err_errno (int err) {

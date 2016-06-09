@@ -277,12 +277,12 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
   }
 
   if (NULL == next_data_root) {
-    hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: using datawarp without file staging support");
+    hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: using datawarp without file staging support%s", "");
   }
 
   if (NULL == context->c_dw_root) {
     hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempted to use datawarp without specifying "
-              "the mount point of the datawarp file system");
+              "the mount point of the datawarp file system%s", "");
     return HIO_ERR_NOT_AVAILABLE;
   }
 
@@ -292,7 +292,7 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
 
     if (NULL == datawarp_tmp) {
       hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: neither DW_JOB_STRIPED nor HIO_datawarp_root "
-                "set. disabling datawarp support");
+                "set. disabling datawarp support%s", "");
       return HIO_ERR_NOT_AVAILABLE;
     }
 

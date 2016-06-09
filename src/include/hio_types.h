@@ -257,7 +257,8 @@ struct hio_context {
   MPI_Comm          c_comm;
   bool              c_use_mpi;
 #endif
-
+  /** node:rank:context ID string for messages */
+  char *            c_msg_id; 
   /** my rank in the context */
   int               c_rank;
   /** number of ranks using this context */

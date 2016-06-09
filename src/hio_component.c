@@ -54,7 +54,7 @@ static int hioi_dynamic_component_init (hio_context_t context) {
   char *path;
   DIR *dir;
 
-  hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Looking for plugins in %s...", module_dir);
+  hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "Looking for plugins in %s ...", module_dir);
 
   dir = opendir (module_dir);
   if (NULL != dir) {
@@ -67,7 +67,7 @@ static int hioi_dynamic_component_init (hio_context_t context) {
 
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Checking file %s", entry->d_name);
       if (strncmp (entry->d_name, "hio_plugin_", 11)) {
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "File does not match expected name pattern. Skipping...");
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "File %s does not match expected name pattern. Skipping...", entry->d_name);
         continue;
       }
       sscanf (entry->d_name, "hio_plugin_%128s", component_name);
@@ -97,14 +97,14 @@ static int hioi_dynamic_component_init (hio_context_t context) {
       }
 
       if (NULL == component_ptr->init) {
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Component does not define the required init() function");
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Component %s does not define the required init() function", component_name);
         dlclose (dl_ctx);
         continue;
       }
 
       rc = component_ptr->init (context);
       if (HIO_SUCCESS != rc) {
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Component initialize function failed");
+        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Component %s initialize function failed", component_name);
         dlclose (dl_ctx);
         continue;
       }

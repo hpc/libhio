@@ -80,6 +80,38 @@ static void hioi_context_release (hio_object_t object) {
   }
 }
 
+/* Init or update the msg_id string.  The msg_id string is a preformatted
+ * value (to reduce logging overhead) consisting of:
+ *   <hostname>:<rank> <context_name>  (:<rank> only if MPI active)
+ */
+void hio_context_msg_id(hio_context_t context, int include_rank) {
+  char tmp_id[256];
+  char * p;
+  int rc;
+
+  /* Free any existing msg_id */
+  free (context->c_msg_id);
+
+  /* Get the hostname and truncate it at the first period */
+  rc = gethostname(tmp_id, sizeof(tmp_id));
+  if (0 != rc) strcpy(tmp_id, "<unknown>");
+  p = strchr(tmp_id, '.');
+  if (p) *p = '\0';
+  p = tmp_id + strlen(tmp_id);
+
+  /* Add the optional :rank string */
+  if (include_rank) p += snprintf(p, sizeof(tmp_id) - (p - tmp_id), ":%d", context->c_rank);
+ 
+  /* Add the context name */
+  *p++ = ' '; 
+  strncpy(p, context->c_object.identifier, sizeof(tmp_id) - (p - tmp_id));
+  tmp_id[sizeof(tmp_id)-1] = '\0';
+  
+  /* Copy it into the context object */
+  context->c_msg_id = strdup(tmp_id);
+}
+
+
 static hio_context_t hio_context_alloc (const char *identifier) {
   hio_context_t new_context;
 
@@ -95,6 +127,7 @@ static hio_context_t hio_context_alloc (const char *identifier) {
   new_context->c_print_stats = false;
   new_context->c_rank = 0;
   new_context->c_size = 1;
+  hio_context_msg_id(new_context, 0); 
 
 #if HAVE_MPI_COMM_SPLIT_TYPE
   new_context->c_shared_comm = MPI_COMM_NULL;
@@ -183,8 +216,9 @@ int hioi_context_create_modules (hio_context_t context) {
     }
 
     context->c_modules[num_modules++] = module;
-    if (HIO_MAX_DATA_ROOTS == num_modules) {
-      hioi_log (context, HIO_VERBOSE_WARN, "Maximum number of IO modules reached for this context");
+    if (HIO_MAX_DATA_ROOTS <= num_modules) {
+      hioi_log (context, HIO_VERBOSE_WARN,
+                "Maximum number of IO (%d) modules reached for this context", HIO_MAX_DATA_ROOTS);
       break;
     }
     data_root = next_data_root;
@@ -371,6 +405,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 
   MPI_Comm_rank (context->c_comm, &context->c_rank);
   MPI_Comm_size (context->c_comm, &context->c_size);
+  hio_context_msg_id(context, 1); 
 
   rc = hio_init_common (context, config_file, config_file_prefix, context_name);
   if (HIO_SUCCESS != rc) {
@@ -402,7 +437,8 @@ int hio_fini (hio_context_t *context) {
 
   hioi_log (*context, HIO_VERBOSE_DEBUG_LOW, "Destroying context with identifier %s",
             (*context)->c_object.identifier);
-
+  
+  free((*context)->c_msg_id); 
   hioi_object_release (&(*context)->c_object);
   *context = HIO_OBJECT_NULL;
 
