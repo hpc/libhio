@@ -44,5 +44,6 @@ AC_DEFUN([HIO_CHECK_CVERSION],[
     fi
 
     AC_DEFINE_UNQUOTED([HIO_ATOMICS_C11], [$hio_check_cversion_c11_atomics], [Whether to use C11 atomics])
+    AC_DEFINE_UNQUOTED([HIO_ATOMICS_BUILTIN], [$hio_check_cversion_builtin_atomics], [Whether to use __atomic atomics])
     AC_DEFINE_UNQUOTED([HIO_ATOMICS_SYNC], [$hio_check_cversion_sync_atomics], [Whether to use __sync atomics])
 ])
