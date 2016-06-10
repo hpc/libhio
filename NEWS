@@ -1,7 +1,13 @@
 HIO NEWS
 ========
 
-Last updated 2016-05-03
+Last updated 2016-06-10
+
+Release hio.1.3.0.1
+
+Fixes for getting incorrect stripe count, some logging related improvements
+and performance enhancements.  runxx and run_combo tests now support
+-k (processor type) and -u (debugger) options. 
 
 Release hio.1.3.0.0
 

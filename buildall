@@ -208,6 +208,7 @@ for v in $vers; do
     ct-pgi   ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs                             ;;
 
     ga-gnu   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    ga-gnuk  ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;
     ga-cray  ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
     ga-intel ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs                              ;;
     ga-pgi   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
@@ -217,11 +218,8 @@ for v in $vers; do
     tt-intel ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs                              ;;
     tt-pgi   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
-    tr-gnu   ) build_r wtrw    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tr-intel ) build_r wtrw    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
-
-    tc-gnu   ) build_r none    tr-compile "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tc-intel ) build_r none    tr-compile "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    tr-gnu   ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tr-intel ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
 
     bu-gnu   ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-cray,PrgEnv-gnu  -l craype-sandybridge ;;
     bu-cray  ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs                             -l craype-sandybridge ;;
