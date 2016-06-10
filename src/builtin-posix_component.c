@@ -236,6 +236,13 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   }
 
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_STRIPING) {
+    if (HIO_SET_ELEMENT_UNIQUE == dataset->ds_mode) {
+      /* set defaults striping count */
+      fs_attr->fs_scount = 1;
+    } else {
+      fs_attr->fs_scount = max (1, (unsigned) ((float) fs_attr->fs_smax_count * 0.9));
+    }
+
     hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_scount,
                      "stripe_count", HIO_CONFIG_TYPE_UINT32, NULL, "Stripe count for all dataset "
                      "data files", 0);

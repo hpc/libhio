@@ -74,7 +74,7 @@ int hioi_dataset_buffer_flush (hio_dataset_t dataset) {
 
 int hioi_dataset_shared_init (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  int stripes = dataset->ds_fsattr.fs_scount;
+  int stripes = max (1, dataset->ds_fsattr.fs_scount);
   size_t ds_buffer_size = 512 * 1024;
   size_t control_block_size;
   MPI_Win shared_win;
@@ -109,7 +109,7 @@ int hioi_dataset_shared_init (hio_dataset_t dataset) {
     pthread_mutexattr_setpshared (&mutex_attr, PTHREAD_PROCESS_SHARED);
 
     /* fixme - not sure this is the right way to ensure stripe 0 mutex gets init'd */
-    for (int i = 0 ; i < max(1, stripes) ; ++i) {
+    for (int i = 0 ; i < stripes ; ++i) {
       pthread_mutex_init (&dataset->ds_shared_control->s_stripes[i].s_mutex, &mutex_attr);
       atomic_init (&dataset->ds_shared_control->s_stripes[i].s_index, 0);
     }

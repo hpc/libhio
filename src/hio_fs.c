@@ -218,7 +218,7 @@ static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {
     }
   }
 
-  fs_attr->fs_scount = lum->lmm_stripe_count;
+  fs_attr->fs_scount = lum->lmm_stripe_count ? lum->lmm_stripe_count : 1;
   fs_attr->fs_ssize  = lum->lmm_stripe_size;
 
   switch (lum->lmm_pattern) {
@@ -275,6 +275,10 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
     fs_attr->fs_bavail  = fsinfo.f_bavail;
     fs_attr->fs_btotal  = fsinfo.f_blocks;
     fs_attr->fs_bsize   = fsinfo.f_bsize;
+
+    /* set some reasonable defaults for striping parameters */
+    fs_attr->fs_scount = 1;
+    fs_attr->fs_ssize = fs_attr->fs_bsize;
 
     /* get filesytem specific data */
     switch (fsinfo.f_type) {
