@@ -27,6 +27,15 @@
 
 #include <stdatomic.h>
 
+#elif HIO_ATOMICS_BUILTIN
+
+
+typedef unsigned long atomic_ulong;
+
+#define atomic_init(p, v) (*(p) = v)
+#define atomic_fetch_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_SEQ_CST)
+#define atomic_load(v) (*(v))
+
 #elif HIO_ATOMICS_SYNC
 
 typedef unsigned long atomic_ulong;
