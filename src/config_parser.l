@@ -21,9 +21,11 @@
    strdup() and fileno() not being defined.  It ought to be relatively
    safe to declare them here, they are unlikely to change.  But, if the
    underlying problem is fixed, these will need to be removed.
-*/
+
+   20160610 - no longer seem to be needed.  Leave here commented out for a while.
 char * strdup(const char *s1);
 int fileno(FILE *stream);
+*/
 
 int   config_parser_section_type = HIO_OBJECT_TYPE_ANY;
 char *config_parser_section_identifier = NULL;
