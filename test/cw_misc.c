@@ -516,10 +516,79 @@ I64 GetCPUaffinity(void) {
 }
 #endif
 
+//-------------------------------------------------------------------------------
+// eng_not - format a double in engineering notation.
+// Format format: D|B <printf flags, fieldwidth, precision> 
+// Numbers are scaled by either 2^(10N) or 10^(3N) to the 10.0 > value >= 1.0
+// Binary scaling not used for values < 1.0.
+// Examples: 
+//    eng_not(buf, sizeof(buf), 1234.56, "D5.4", "Sec") returns "1.2346 kSec" 
+//    eng_not(buf, sizeof(buf), 1536.00, "B5.4", "Sec") returns "1.5000 kiSec"" 
+//    eng_not(buf, sizeof(buf), 0.00835, "D5.4", "Sec") returns "8.3500 mSec" 
+//-------------------------------------------------------------------------------
+char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
+  static const char *pref[] = {"y", "z", "a", "f", "p", "n", "u", "m", "", 
+                               "k", "M", "G", "T", "P", "E", "Z", "Y"};
+  int zofs = 8; // pref[8] is the empty prefix "" 
+  double lval, mant, base;
+  int negative = 0, binary = 0;
+  int exp, expinc, maxexp, minexp;
 
+  if (val < 0.0) {
+    lval = fabs(val);
+    negative = 1;
+  } else {
+    lval = val;
+    negative = 0;
+  }
+
+  // binary style prefixes don't make sense for small numbers
+  if (format[0] == 'B' && lval >= 1.0) binary = 1; 
+  char fmt[32] = "%";
+  strcat(fmt, format+1);
+  strcat(fmt, "lg %s%s%s"); // 3 %s's: prefix, optional "i", unit
+
+  if (binary) {
+    base = 2.0;
+    expinc = 10;
+    maxexp = expinc * (DIM1(pref) - zofs - 1);
+    minexp = expinc * (- zofs);
+  } else {
+    base = 10.0;
+    expinc = 3;
+    maxexp = expinc * (DIM1(pref) - zofs - 1);
+    minexp = expinc * (- zofs);
+  }
+
+  mant = lval;
+  exp = 0; 
+  while (mant >= 1000.0 && exp < maxexp) {
+    exp += expinc;
+    mant = lval / pow(base, (double)exp);
+  }
+ 
+  if (0 == exp) { 
+    while (mant < 1.0 && exp > minexp) {
+      exp -= expinc;
+      mant = lval / pow(base, (double)exp);
+    }
+  }
+  
+  
+  int pindex = exp/expinc + zofs;
+  if (0 == pindex && mant < 0.001) {
+    mant = 0.0;   // Make really small look like 0, not "0 y"
+    pindex = zofs;
+  }
+
+  if (negative) mant = - mant;
+  snprintf(buf, len, fmt, mant, pref[pindex], (binary)?"i":"",  unit); 
+
+  return buf;
+}  
 
 //-------------------------------------------------------------------------------
-// cvt_num - converts a string to 64 bit integer or float. Generates an error
+// ct_num - converts a string to 64 bit integer or float. Generates an error
 // message on failure if msgp not null.  The string can have a suffix such as
 // k, ki, M, Mi, G, Gi, etc.  Limited value checking based on enum cvt_num_type.
 //-----------------------------------------------------------------------------

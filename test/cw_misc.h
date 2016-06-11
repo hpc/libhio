@@ -239,6 +239,18 @@ I64 GetCPUaffinity(void);
 #endif
 
 //-------------------------------------------------------------------------------
+// eng_not - format a double in engineering notation.
+// Format format: D|B <printf flags, fieldwidth, precision> 
+// Numbers are scaled by either 2^(10N) or 10^(3N) to the 10.0 > value >= 1.0
+// Binary scaling not used for values < 1.0.
+// Examples: 
+//    eng_not(buf, sizeof(buf), 1234.56, "D5.4", "Sec") returns "1.2346 kSec" 
+//    eng_not(buf, sizeof(buf), 1536.00, "B5.4", "Sec") returns "1.5000 kiSec"" 
+//    eng_not(buf, sizeof(buf), 0.00835, "D5.4", "Sec") returns "8.3500 mSec" 
+//-------------------------------------------------------------------------------
+char * eng_not(char * buf, size_t len, double val, char * format, char * unit); 
+
+//-------------------------------------------------------------------------------
 // cvt_num - converts a string to 64 bit integer or float. Generates an error
 // message on failure if msgp not null.  The string can have a suffix such as
 // k, ki, M, Mi, G, Gi, etc.  Limited value checking based on enum cvt_num_type.

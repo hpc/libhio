@@ -247,7 +247,8 @@ int global_fails = 0;  // Count of fails on all ranks
 int gather_fails = 0;  // local fails have been gathered into global fails
 char * test_name = "<unnamed>";
 #ifdef MPI
-int myrank, mpi_size = 0;
+// If MPI not init or finalized, myrank and size = 0
+int myrank = 0, mpi_size = 0;
 static MPI_Comm mpi_comm;
 #else
 const int myrank = 0;
@@ -443,10 +444,53 @@ void lfsr_test(void) {
   #endif
 }
 
+//----------------------------------------------------------------------------
+// If MPI & Rank 0, VERB1 message with collective min/mean/max/stddev/total
+// Always VERB2 local value message
+//----------------------------------------------------------------------------
+void prt_mmmst(double val, char * desc, char * unit) {
+  #ifdef MPI
+    if (mpi_size > 0) {
+      double sum, mean, min, max, diff, sumdiff, sd;
+      // Use two pass method to calculate variance
+      MPI_CK(MPI_Allreduce(&val, &sum, 1, MPI_DOUBLE, MPI_SUM, mpi_comm));
+      mean = sum/(double)mpi_size;
+      diff = (val - mean) * (val - mean);
+      MPI_CK(MPI_Reduce(&diff, &sumdiff, 1, MPI_DOUBLE, MPI_SUM, 0, mpi_comm));
+      sd = sqrt(sumdiff / mpi_size);
+      // Get min, max
+      MPI_CK(MPI_Reduce(&val, &min, 1, MPI_DOUBLE, MPI_MIN, 0, mpi_comm));
+      MPI_CK(MPI_Reduce(&val, &max, 1, MPI_DOUBLE, MPI_MAX, 0, mpi_comm));
+      char b1[32], b2[32], b3[32], b4[32], b5[32];
+      if (0 == myrank) VERB1("%s mean/min/max/s/tot %s %s %s %s %s %s", desc,
+                             eng_not(b1, sizeof(b1), mean, "D6.4", ""),
+                             eng_not(b2, sizeof(b2), min,  "D6.4", ""),
+                             eng_not(b3, sizeof(b3), max,  "D6.4", ""),
+                             eng_not(b4, sizeof(b4), sd,   "D6.4", ""),
+                             eng_not(b5, sizeof(b5), sum,  "D6.4", ""), unit);
+    }
+  #endif
+
+  char b1[32];  
+  VERB2("%s %s %s", desc, eng_not(b1, sizeof(b1), val, "D6.4", unit)); 
+}
 
 //----------------------------------------------------------------------------
 // Action handler routines
 //----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// ztest action handler - for misc testing, modify as needed
+//----------------------------------------------------------------------------
+ACTION_RUN(ztest_run) {
+  I64 i0 = V0.u;
+  double d1 = V1.d;
+  char * s2 = V2.s; 
+  char * s3 = V3.s; 
+
+  char buf[32];
+  VERB0("eng_not(%lf, \"%s\", \"%s\"): \"%s\"", d1, s2, s3, eng_not(buf, sizeof(buf), d1, s2, s3));
+}
+
 //----------------------------------------------------------------------------
 // v, d (verbose, debug) action handlers
 //----------------------------------------------------------------------------
@@ -751,6 +795,7 @@ ACTION_RUN(va_run) {
   }
 }
 
+
 ACTION_RUN(vt_run) {
   U64 stride = V0.u;
   char *p, *end_p1;
@@ -767,7 +812,8 @@ ACTION_RUN(vt_run) {
     }
     double delta_t = ETIMER_ELAPSED(&tmr);
     U64 count = memptr->size / stride;
-    VERB2("vt done; touches: %ld  time: %f Seconds, MTpS: %e", count, delta_t, (double)count / delta_t / 1E6);
+    prt_mmmst((double)count/delta_t, "vt rate", "TpS");
+
   } else {
     VERB0("mem_hand - Warning: no memory allocation to touch");
   }
@@ -1638,18 +1684,20 @@ ACTION_RUN(hdf_run) {
   HRC_TEST(hio_dataset_close)
   double una_time = hdaf_time - (hio_hda_time + hio_hdo_time + hio_heo_time + hio_hew_time +
                                  hio_her_time + hio_hec_time + hio_hdc_time + hio_hdf_time + hio_exc_time);
+  VERB2("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
+  VERB2("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
   if (myrank == 0) {
-    VERB1("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
-    VERB1("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
     hdaf_time -= hio_exc_time;
-    VERB1("hda-hdf R/W GiB: %f %f  time: %f S  R/W speed: %f %f GiB/S",
-          (double)rw_count_sum[0]/GIGBIN, (double)rw_count_sum[1]/GIGBIN, hdaf_time,
-           rw_count_sum[0] / hdaf_time / GIGBIN, rw_count_sum[1] / hdaf_time / GIGBIN );
+    char b1[32], b2[32], b3[32], b4[32], b5[32];
+    VERB1("hda-hdf R/W Size: %s %s  Time: %s  R/W Speed: %s %s",
+          eng_not(b1, sizeof(b1), (double)rw_count_sum[0],     "B6.4", "B"),
+          eng_not(b2, sizeof(b2), (double)rw_count_sum[1],     "B6.4", "B"),
+          eng_not(b3, sizeof(b3), (double)hdaf_time,           "D6.4", "S"),
+          eng_not(b4, sizeof(b4), rw_count_sum[0] / hdaf_time, "B6.4", "B/S"),
+          eng_not(b5, sizeof(b5), rw_count_sum[1] / hdaf_time, "B6.4", "B/S"));
+
     printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / hdaf_time / GIGBIN );
     printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / hdaf_time / GIGBIN );
-  } else {
-    VERB2("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
-    VERB2("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
   }
 }
 
@@ -1935,6 +1983,7 @@ struct parse {
   action_run * runner;
 } parse[] = {
 // Command  V0    V1    V2    V3    V4    Check          Run
+  {"ztest", {SINT, DOUB, STR,  STR,  NONE}, NULL,          ztest_run   },   // For testing code fragments  
   {"v",     {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
   {"d",     {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
   {"qof",   {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
