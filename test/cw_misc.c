@@ -519,7 +519,7 @@ I64 GetCPUaffinity(void) {
 //-------------------------------------------------------------------------------
 // eng_not - format a double in engineering notation.
 // Format format: D|B <printf flags, fieldwidth, precision> 
-// Numbers are scaled by either 2^(10N) or 10^(3N) to the 10.0 > value >= 1.0
+// Numbers are scaled by either 2^(10N) or 10^(3N) so that 1.0 <= value < 1000
 // Binary scaling not used for values < 1.0.
 // Examples: 
 //    eng_not(buf, sizeof(buf), 1234.56, "D5.4", "Sec") returns "1.2346 kSec" 
@@ -529,13 +529,14 @@ I64 GetCPUaffinity(void) {
 char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
   static const char *pref[] = {"y", "z", "a", "f", "p", "n", "u", "m", "", 
                                "k", "M", "G", "T", "P", "E", "Z", "Y"};
-  int zofs = 8; // pref[8] is the empty prefix "" 
-  double lval, mant, base;
-  int negative = 0, binary = 0;
+  int zofs = 8; // pref[8] is the empty prefix "" for multiplier 1.0 
+  double lval, mant;
+  int negative, binary;
   int exp, expinc, maxexp, minexp;
+  double mult, multinc;
 
   if (val < 0.0) {
-    lval = fabs(val);
+    lval = -val;
     negative = 1;
   } else {
     lval = val;
@@ -544,40 +545,43 @@ char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
 
   // binary style prefixes don't make sense for small numbers
   if (format[0] == 'B' && lval >= 1.0) binary = 1; 
+  else binary = 0;
+
   char fmt[32] = "%";
   strcat(fmt, format+1);
   strcat(fmt, "lg %s%s%s"); // 3 %s's: prefix, optional "i", unit
 
   if (binary) {
-    base = 2.0;
     expinc = 10;
-    maxexp = expinc * (DIM1(pref) - zofs - 1);
-    minexp = expinc * (- zofs);
+    multinc = 1024.0;
   } else {
-    base = 10.0;
     expinc = 3;
-    maxexp = expinc * (DIM1(pref) - zofs - 1);
-    minexp = expinc * (- zofs);
+    multinc = 1000.0;
   }
+  maxexp = expinc * (DIM1(pref) - zofs - 1);
+  minexp = expinc * (- zofs);
 
+  // The iterative approach used here may seem to be more complex than
+  // directly calculating exp using log10() and floor() and so forth, but
+  // experiments show this method is up to 2x faster.
   mant = lval;
-  exp = 0; 
+  exp = 0;
+  mult = 1.0; 
   while (mant >= 1000.0 && exp < maxexp) {
     exp += expinc;
-    mant = lval / pow(base, (double)exp);
+    mult *= multinc;
+    mant = lval / mult;
   }
  
-  if (0 == exp) { 
-    while (mant < 1.0 && exp > minexp) {
-      exp -= expinc;
-      mant = lval / pow(base, (double)exp);
-    }
+  while (mant < 1.0 && exp > minexp) {
+    exp -= expinc;
+    mult /= multinc;
+    mant = lval * mult;
   }
-  
   
   int pindex = exp/expinc + zofs;
   if (0 == pindex && mant < 0.001) {
-    mant = 0.0;   // Make really small look like 0, not "0 y"
+    mant = 0.0;   // Make really small produce "0", not "0 y"
     pindex = zofs;
   }
 
@@ -588,7 +592,7 @@ char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
 }  
 
 //-------------------------------------------------------------------------------
-// ct_num - converts a string to 64 bit integer or float. Generates an error
+// cvt_num - converts a string to 64 bit integer or float. Generates an error
 // message on failure if msgp not null.  The string can have a suffix such as
 // k, ki, M, Mi, G, Gi, etc.  Limited value checking based on enum cvt_num_type.
 //-----------------------------------------------------------------------------

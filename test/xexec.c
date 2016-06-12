@@ -462,7 +462,7 @@ void prt_mmmst(double val, char * desc, char * unit) {
       MPI_CK(MPI_Reduce(&val, &min, 1, MPI_DOUBLE, MPI_MIN, 0, mpi_comm));
       MPI_CK(MPI_Reduce(&val, &max, 1, MPI_DOUBLE, MPI_MAX, 0, mpi_comm));
       char b1[32], b2[32], b3[32], b4[32], b5[32];
-      if (0 == myrank) VERB1("%s mean/min/max/s/tot %s %s %s %s %s %s", desc,
+      if (0 == myrank) VERB1("%s mean/min/max/s/tot: %s %s %s %s %s %s", desc,
                              eng_not(b1, sizeof(b1), mean, "D6.4", ""),
                              eng_not(b2, sizeof(b2), min,  "D6.4", ""),
                              eng_not(b3, sizeof(b3), max,  "D6.4", ""),
@@ -472,7 +472,7 @@ void prt_mmmst(double val, char * desc, char * unit) {
   #endif
 
   char b1[32];  
-  VERB2("%s %s %s", desc, eng_not(b1, sizeof(b1), val, "D6.4", unit)); 
+  VERB2("%s: %s %s", desc, eng_not(b1, sizeof(b1), val, "D6.4", unit)); 
 }
 
 //----------------------------------------------------------------------------
@@ -487,8 +487,7 @@ ACTION_RUN(ztest_run) {
   char * s2 = V2.s; 
   char * s3 = V3.s; 
 
-  char buf[32];
-  VERB0("eng_not(%lf, \"%s\", \"%s\"): \"%s\"", d1, s2, s3, eng_not(buf, sizeof(buf), d1, s2, s3));
+  VERB0("nothing to see here, move along");
 }
 
 //----------------------------------------------------------------------------
