@@ -176,6 +176,11 @@ batch_sub() {
         msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
       fi
     fi
+    echo "----------------------------------------------------------------------" >> $msglog 
+    echo "$host run_setup: $jobsh:" >> $msglog
+    cat $jobsh >> $msglog
+    echo "----------------------------------------------------------------------" >> $msglog 
+
     mcmd="$mcmd $jobsh"
     msg "run_setup: ---> $mcmd"
     msub_msg=`$mcmd 2>&1`
@@ -505,6 +510,8 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lustre/scratch3/$LOGNAME"
     addifd "/lustre/scratch4/$LOGNAME"
     addifd "/lustre/scratch5/$LOGNAME"
+    addifd "/lustre/trscratch1/$LOGNAME"
+    addifd "/lustre/trscratch2/$LOGNAME"
     addifd "/scratch1/$LOGNAME"
     addifd "/scratch1/users/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"

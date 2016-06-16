@@ -66,8 +66,9 @@ Send eMail to hiouser@lanl.gov.  Sample:
 
   To: hiouser@lanl.gov
   Subject: HIO Version 1.3.0.0 available
-  
-  See /usr/projects/hio/user/rel/libhio-1.3.0.0.tar.gz
+
+  See /usr/projects/hio/user/rel/libhio-1.3.0.1.tar.gz 
+  or https://github.com/hpc/libhio/releases/tag/hio.1.3.0.1 .
 
   File NEWS contains a description of changes.
 

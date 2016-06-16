@@ -1,0 +1,2 @@
+#! /bin/bash
+showq -v -u $USER | grep $USER |  awk '{print $1}' | awk -F'/' '{print $1}' | xargs -t -n 1 mjobctl -c $*

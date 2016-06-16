@@ -1,0 +1,3 @@
+#! /bin/bash
+dwstat sessions | grep -v "sess" | awk '{print $1}' | xargs -tn1 -I{} dwcli rm session -i {} 
+dwstat registrations  | grep -v reg | awk '{print $1}' | xargs -tn1 -I {} dwcli update registration -i {} --no-wait

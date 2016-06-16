@@ -21,7 +21,7 @@ synexit() {
   echo "(-t, -s, -r, -n, -p, -x are iterated, other options are not.)"
   echo "  Syntax:"
   echo "    $0"
-  echo "        [-t <test> [<test>...] ]"
+  echo "        -t <test> [<test>...]"
   echo "        [-s <size> [<size>...] ]"
   echo "        [-r <num_ranks> [<num_ranks>...] ]"
   echo "        [-n <num_nodes> [<num_nodes>...] ]"
@@ -34,8 +34,10 @@ synexit() {
   echo "        [-k knl|haswell]" 
   echo "        [-m <msub args>]"
   echo "        [-u <uber command and args>]"
+  echo "        [-o <output_file>]"
   echo ""
   echo "  Options:"
+  echo "    -t <test> [<test>...]  Tests to invoke"
   echo "    -s <size>         Per rank run sizes t|s|m|l|x|y|z  (default s)"
   echo "    -r <num_ranks>    Number of ranks parameters"
   echo "    -n <num_nodes>    Number of nodes parameters."
@@ -50,6 +52,7 @@ synexit() {
   echo "    -k knl|haswell    Adds :<type> to msub -l option, influences -p default"
   echo "    -m <msub_args>    Additional arguments for msub (use with -b)"
   echo "    -u <uber command and args>  Use to invoke a debugger"
+  echo "    -o <output_file>  Instead of invoking, writes test commands to file"
   echo ""
   echo "Example: run_combo -t ./run02 ./run03 -r 2 4 -s x"
   echo "  Will run:"
@@ -84,13 +87,15 @@ is_not_flag() {
 #----------------------------------------------------------------------------
 # Parse arguments
 #----------------------------------------------------------------------------
+args=$*
 host=`hostname -s`
 batch=0
 chain=0
 proc_type=""
 uber_cmd=""
+output_file=""
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpxv:d:bcaw:k:m:u:" optname; do
+while getopts "htsrnpxv:d:bcaw:k:m:u:o:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -145,6 +150,10 @@ while getopts "htsrnpxv:d:bcaw:k:m:u:" optname; do
     k ) proc_type=$OPTARG;;
     m ) msub_arg=$OPTARG;;
     u ) uber_cmd=$OPTARG;;
+    o ) output_file=$OPTARG
+        echo "# $(date) Generated on $host by run_combo $args" > $output_file
+        echo "# $(date) Generated on $host by run_combo $args" 
+        ;;
    \? ) synexit "Error: invalid option";;
   esac
 done
@@ -193,9 +202,14 @@ for r in "${ranks[@]}"; do
             if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi
             if [[ -n $uber_cmd ]];    then c="$c -u \"$uber_cmd\""; fi
 
-            cmd $c
-            rc=$?
-            if [[ rc -ne 0 ]]; then fails=("${fails[@]}" "rc:$rc cmd:$c"); fi
+            if [[ -z $output_file ]]; then  
+              cmd $c
+              rc=$?
+              if [[ rc -ne 0 ]]; then fails=("${fails[@]}" "rc:$rc cmd:$c"); fi
+            else
+              echo $c >> $output_file
+              echo $c
+            fi 
           done
         done
       done
