@@ -5,9 +5,9 @@ grep -i err run/*.jobid
 echo "          *.sh: $(ls run/*.sh  | wc)"
 echo "       *.jobid: $(ls run/*.jobid | wc)"
 echo "         *.out: $(ls run/*.out | wc)"
-echo "showq  cornell: $(showq -u cornell | grep cornell | wc)"
-echo "showq  running: $(showq -u cornell | grep "cornell.*Running" | wc)"
-echo "showq stageout: $(showq -v -u cornell | grep "stageout.*Running" | wc)"
+echo "showq  $LOGNAME: $(showq -u $LOGNAME | grep $LOGNAME | wc)"
+echo "showq  running: $(showq -u $LOGNAME | grep "$LOGNAME.*Running" | wc)"
+echo "showq stageout: $(showq -v -u $LOGNAME | grep "stageout.*Running" | wc)"
 showq -v | grep active
 echo "*.out non-run90 && non-success:"
 egrep -L "run90|RESULT: SUCCESS" run/*.out | xargs ls -ld run/.  

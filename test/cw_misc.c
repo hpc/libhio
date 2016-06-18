@@ -576,16 +576,18 @@ char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
   while (mant < 1.0 && exp > minexp) {
     exp -= expinc;
     mult /= multinc;
-    mant = lval * mult;
+    mant = lval / mult;
   }
   
   int pindex = exp/expinc + zofs;
+  //printf("val: %lg format: %s, mant: %lg exp: %d pindex: %d \n", val, format, mant, exp, pindex);
   if (0 == pindex && mant < 0.001) {
     mant = 0.0;   // Make really small produce "0", not "0 y"
     pindex = zofs;
   }
 
   if (negative) mant = - mant;
+  //printf("val: %lg format: %s, mant: %lg exp: %d pindex: %d \n", val, format, mant, exp, pindex);
   snprintf(buf, len, fmt, mant, pref[pindex], (binary)?"i":"",  unit); 
 
   return buf;
