@@ -44,7 +44,7 @@ synexit() {
   echo "        [-p <ppn>]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
-  echo "        [-b] [-c] [-a]"
+  echo "        [-b] [-c] [-a] [-q]"
   echo "        [-w <dw_alloc>]"
   echo "        [-x <dw_alloc_pct>]"
   echo "        [-k knl|haswell]" 
@@ -67,6 +67,7 @@ synexit() {
   echo "    -b                Submit batch job with these options"
   echo "    -c                Chain jobs - make this job dependant on previous job"
   echo "    -a                Clean dirs After running"
+  echo "    -q                Query data size. Output value like \"32GiB\" and exit"
   echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
   echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
   echo "    -k knl|haswell    Adds :<type> to msub -l option, influences -p default"
@@ -121,6 +122,10 @@ check_rc(){
 batch_sub() {
   # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
   dw_cap="$(( (($1 * 21 / 20 * $dw_alloc_pct / 100) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
+  if [[ $query_size -eq 1 ]]; then
+    echo $dw_cap
+    exit 0
+  fi
   msg "DataWarp Capacity: $dw_cap"
   if [[ $batch -gt 0 ]]; then
     rundir="$PWD/run"
@@ -293,6 +298,7 @@ after=0
 dw_alloc_pct=100
 proc_type=""
 uber_cmd=""
+query_size=0
 
 size="s"
 job_dir=""
@@ -337,7 +343,7 @@ else
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:v:d:bcw:ax:k:m:u:" optname; do
+while getopts "hs:r:n:p:v:d:bcw:ax:k:m:u:q" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
@@ -354,6 +360,7 @@ while getopts "hs:r:n:p:v:d:bcw:ax:k:m:u:" optname; do
     k ) proc_type=$OPTARG;;
     m ) msub_arg=$OPTARG;;
     u ) uber_cmd=$OPTARG;;
+    q ) query_size=1;;
    \? ) synexit "invalid option";;
   esac
 done
@@ -503,6 +510,7 @@ if [[ $batch -eq 0 ]]; then
       root_count=$(($root_count + 1))
     fi
 
+    addifd "/lus/snx11004/$LOGNAME"
     addifd "/lscratch1/$LOGNAME"
     addifd "/lscratch2/$LOGNAME"
     addifd "/lscratch3/$LOGNAME"
@@ -525,25 +533,26 @@ if [[ $batch -eq 0 ]]; then
     export HIO_datawarp_stage_mode="disable"
   fi
 
+  if [[ $query_size -eq 0 ]]; then
+    # Display results of run_setup
+    msg "run_setup:                      Args: \"$args\""
+    msg "run_setup:                       PWD: \"$PWD\""
+    msg "run_setup:                     build: \"$build\""
+    msg "run_setup:                      libs: \"$libs\""
+    msg "run_setup:                    mpicmd: \"$mympicmd\""
+    msg "run_setup:           nodes/ranks/ppn: $nodes / $ranks / $ppn"
+    msg "run_setup:                      size: \"$size\""
+    msg "run_setup:               totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
+    msg "run_setup:        nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"
+    msg "run_setup:    verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
 
-  # Display results of run_setup
-  msg "run_setup:                      Args: \"$args\""
-  msg "run_setup:                       PWD: \"$PWD\""
-  msg "run_setup:                     build: \"$build\""
-  msg "run_setup:                      libs: \"$libs\""
-  msg "run_setup:                    mpicmd: \"$mympicmd\""
-  msg "run_setup:           nodes/ranks/ppn: $nodes / $ranks / $ppn"
-  msg "run_setup:                      size: \"$size\""
-  msg "run_setup:               totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
-  msg "run_setup:        nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"
-  msg "run_setup:    verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
+    # Pretty print all HIO_ variables
+    for var in ${!HIO_*}; do
+      msg "run_setup: $(printf '%*s: "%s"' 25 $var ${!var})"
+    done
 
-  # Pretty print all HIO_ variables
-  for var in ${!HIO_*}; do
-    msg "run_setup: $(printf '%*s: "%s"' 25 $var ${!var})"
-  done
-
-  if [[ -z $HIO_TEST_ROOTS ]]; then msg "Warning: HIO_TEST_ROOTS not set or defaulted"; fi
+    if [[ -z $HIO_TEST_ROOTS ]]; then msg "Warning: HIO_TEST_ROOTS not set or defaulted"; fi
+  fi
 
 fi
 
