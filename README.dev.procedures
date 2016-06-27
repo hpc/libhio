@@ -57,8 +57,8 @@ Rename and publish tarball:
 
 Update github release
 
-  Add libhio-$HIOVER.tar.gz to release
-  Add design/libhio_api.pdf to release 
+  Add libhio-$HIOVER.tar.gz to release as a binary
+  Add design/libhio_api.pdf to release as a binary
   Add comment to release
   Publish
 

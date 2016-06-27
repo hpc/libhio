@@ -314,7 +314,7 @@ else
     mympicmd="aprun"
     size="m"
     if [[ -n $PBS_JOBID ]]; then
-      set | egrep "^PBS|^DW|^HOST|^HIO"
+      set | egrep "^PBS|^MOAB|^DW|^HOST|^HIO"
       job_dir="/${PBS_JOBID%%.*}"
     fi
     if [[ -n $PBS_NODEFILE ]]; then
