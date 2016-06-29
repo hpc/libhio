@@ -528,35 +528,55 @@ int64_t hioi_file_seek (hio_file_t *file, int64_t offset, int whence) {
 }
 
 ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
-  ssize_t actual;
+  ssize_t actual, total = 0;
 
-  if (-1 != file->f_fd) {
-    actual = write (file->f_fd, ptr, count);
-  } else {
-    actual = fwrite (ptr, 1, count, file->f_hndl);
+  do {
+    if (-1 != file->f_fd) {
+      actual = write (file->f_fd, ptr, count);
+    } else {
+      actual = fwrite (ptr, 1, count, file->f_hndl);
+    }
+
+    if (actual > 0) {
+      total += actual;
+      count -= actual;
+      ptr = (void *) ((intptr_t) ptr + actual);
+    } else if (0 == total) {
+      total = actual;
+    }
+  } while (actual > 0 && count > 0);
+
+  if (total > 0) {
+    file->f_offset += total;
   }
 
-  if (actual > 0) {
-    file->f_offset += actual;
-  }
-
-  return actual;
+  return total;
 }
 
 ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
-  ssize_t actual;
+  ssize_t actual, total = 0;
 
-  if (-1 != file->f_fd) {
-    actual = read (file->f_fd, ptr, count);
-  } else {
-    actual = fread (ptr, 1, count, file->f_hndl);
+  do {
+    if (-1 != file->f_fd) {
+      actual = read (file->f_fd, ptr, count);
+    } else {
+      actual = fread (ptr, 1, count, file->f_hndl);
+    }
+
+    if (actual > 0) {
+      total += actual;
+      count -= actual;
+      ptr = (void *) ((intptr_t) ptr + actual);
+    } else if (0 == total) {
+      total = actual;
+    }
+  } while (actual > 0 && count > 0);
+
+  if (total > 0) {
+    file->f_offset += total;
   }
 
-  if (actual > 0) {
-    file->f_offset += actual;
-  }
-
-  return actual;
+  return total;
 }
 
 void hioi_file_flush (hio_file_t *file) {
