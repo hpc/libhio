@@ -174,7 +174,6 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
               "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  hioi_object_identifier(dataset),
               dataset->ds_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
-    stage_mode = datawarp_dataset->stage_mode;
     if (-1 == datawarp_dataset->stage_mode) {
       stage_mode = DW_STAGE_AT_JOB_END;
     }
@@ -187,7 +186,8 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
     }
 
     rc = dw_stage_directory_out (dataset_path, pfs_path, stage_mode);
-
+    free (pfs_path);
+    free (dataset_path);
     if (0 != rc) {
       hioi_err_push (HIO_ERROR, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
                     "data stage on dataset %s::%lld. DWRC: %d", hioi_object_identifier (dataset), dataset->ds_id, rc);
@@ -204,11 +204,9 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
  
       free (pfs_path);
       free (dataset_path);
+
       return HIO_ERROR;
     }
-
-    free (pfs_path);
-    free (dataset_path);
 
 
     if (DW_STAGE_AT_JOB_END == stage_mode) {

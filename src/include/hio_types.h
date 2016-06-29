@@ -100,6 +100,23 @@ static inline bool hioi_list_empty (hio_list_t *list) {
   return list->next == list;
 }
 
+
+static size_t hioi_list_length (hio_list_t *list) {
+  hio_list_t *item = list;
+  size_t count = 0;
+
+  if (hioi_list_empty (list)) {
+    return 0;
+  }
+
+  do {
+    ++count;
+    item = item->next;
+  } while (item != list);
+
+  return count;
+}
+
 /* dataset function types */
 
 /* forward declaration for internal request structure */
@@ -309,6 +326,10 @@ struct hio_context {
   int                c_shared_size;
   int                c_shared_rank;
   int               *c_shared_ranks;
+
+  MPI_Comm           c_node_leader_comm;
+  int                c_node_count;
+  int               *c_node_leaders;
 #endif
 
   hio_list_t         c_ds_data;
@@ -403,11 +424,6 @@ struct hio_fs_attr_t {
 };
 typedef struct hio_fs_attr_t hio_fs_attr_t;
 
-typedef struct hio_manifest_file_t {
-  /** file name */
-  char *f_name;
-} hio_manifest_file_t;
-
 /**
  * hio buffer descriptor
  */
@@ -418,6 +434,27 @@ typedef struct hio_buffer_t {
   size_t     b_size;
   size_t     b_remaining;
 } hio_buffer_t;
+
+/**
+ * Data structure for hio dataset maps
+ */
+typedef struct hio_dataset_map_data_t {
+  /** global number of entries */
+  size_t  md_global_size;
+  /** number of entries on each leader process */
+  size_t  md_local_size;
+  /** size of a map element */
+  size_t  md_element_size;
+  /** MPI window backing the map */
+  MPI_Win md_win;
+} hio_dataset_map_data_t;
+
+typedef struct hio_dataset_map_t {
+  /** element window */
+  hio_dataset_map_data_t map_elements;
+  /** segment window */
+  hio_dataset_map_data_t map_segments;
+} hio_dataset_map_t;
 
 /**
  * Data structure for control block in shared memory
@@ -456,13 +493,6 @@ struct hio_dataset {
 
   /** list of elements */
   hio_list_t          ds_elist;
-
-  /** list of files */
-  unsigned int        ds_file_count;
-
-  unsigned int        ds_file_size;
-
-  hio_manifest_file_t *ds_flist;
 
   /** dataset file modes */
   hio_dataset_fmode_t ds_fmode;
@@ -505,6 +535,7 @@ struct hio_dataset {
 
 #if HAVE_MPI_WIN_ALLOCATE_SHARED
   MPI_Win             ds_shared_win;
+  hio_dataset_map_t   ds_map;
 #endif
   hio_shared_control_t *ds_shared_control;
 
@@ -584,13 +615,16 @@ struct hio_element {
   size_t            e_ssize;
   hio_manifest_segment_t *e_sarray;
 
+  /** global element identifier (shared dataset only) used
+   * to uniquely identify this element in the global map */
+  uint32_t          e_index;
+
   /** element is currently open */
   int32_t           e_open_count;
 
   /** first invalid offset after the last valid block */
   int64_t           e_size;
 
-  /** element file structure */
   hio_file_t        e_file;
 
   /** function to flush pending element writes */

@@ -418,6 +418,13 @@ typedef struct hio_object *hio_object_t;
 #define HIO_DATASET_ID_NEWEST (int64_t) -0x10000002
 
 /**
+ * @ingroup API
+ * @brief Maximum length of an element name not including the
+ *        terminator.
+ */
+#define HIO_ELEMENT_NAME_MAX 115
+
+/**
  * @ingroup errorhandling
  * @brief Error codes that may be returned by libhio routines
  *

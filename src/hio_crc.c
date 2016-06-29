@@ -13,7 +13,7 @@
 #include "hio_internal.h"
 
 #define CRC32POLY 0x04C11DB7l
-#define CRC64POLY 0xd800000000000000ll
+#define CRC64POLY 0xC96C5795D7870F42ul
 
 static uint32_t crc32_table[256];
 static uint64_t crc64_table[256];

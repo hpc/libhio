@@ -58,6 +58,11 @@ static void hioi_context_release (hio_object_t object) {
   }
 
   free (context->c_shared_ranks);
+  free (context->c_node_leaders);
+
+  if (MPI_COMM_NULL != context->c_node_leader_comm) {
+    MPI_Comm_free (&context->c_node_leader_comm);
+  }
 #endif
 
   free (context->c_droots);
@@ -133,6 +138,9 @@ static hio_context_t hio_context_alloc (const char *identifier) {
   new_context->c_shared_comm = MPI_COMM_NULL;
   new_context->c_shared_size = 1;
   new_context->c_shared_rank = 0;
+  new_context->c_node_leader_comm = MPI_COMM_NULL;
+  new_context->c_node_leaders = NULL;
+  new_context->c_node_count = 0;
 #endif
 
   hioi_config_list_init (&new_context->c_fconfig);
@@ -180,6 +188,58 @@ static int hioi_context_scatter (hio_context_t context) {
 
   return HIO_SUCCESS;
 }
+
+#if HAVE_MPI_COMM_SPLIT_TYPE
+int hioi_context_generate_leader_list (hio_context_t context) {
+  int color = (0 == context->c_shared_rank) ? 0 : MPI_UNDEFINED;
+  MPI_Comm leader_comm;
+  int my_rank, rc;
+
+  if (NULL != context->c_node_leaders) {
+    return HIO_SUCCESS;
+  }
+
+  hioi_object_lock (&context->c_object);
+  if (NULL != context->c_node_leaders) {
+    hioi_object_unlock (&context->c_object);
+    return HIO_SUCCESS;
+  }
+
+  rc = MPI_Comm_split (context->c_comm, color, 0, &leader_comm);
+  if (MPI_SUCCESS != rc) {
+    hioi_object_unlock (&context->c_object);
+    return hioi_err_mpi (rc);
+  }
+
+  if (MPI_COMM_NULL != leader_comm) {
+    MPI_Comm_size (leader_comm, &context->c_node_count);
+    MPI_Comm_rank (leader_comm, &my_rank);
+  }
+
+  if (1 < context->c_shared_size) {
+    MPI_Bcast (&context->c_node_count, 1, MPI_INT, 0, context->c_shared_comm);
+  }
+
+  context->c_node_leaders = malloc (sizeof (int) * context->c_node_count);
+
+  if (MPI_COMM_NULL != leader_comm) {
+    context->c_node_leaders[my_rank] = context->c_rank;
+    MPI_Allgather (MPI_IN_PLACE, 1, MPI_INT, context->c_node_leaders, 1, MPI_INT,
+                   leader_comm);
+  }
+
+  if (1 < context->c_shared_size) {
+    MPI_Bcast (context->c_node_leaders, context->c_node_count, MPI_INT, 0,
+               context->c_shared_comm);
+  }
+
+  context->c_node_leader_comm = leader_comm;
+
+  hioi_object_unlock (&context->c_object);
+
+  return HIO_SUCCESS;
+}
+#endif
 
 int hioi_context_create_modules (hio_context_t context) {
   char *data_roots, *data_root, *next_data_root, *last;
