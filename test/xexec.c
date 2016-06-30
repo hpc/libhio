@@ -488,6 +488,10 @@ ACTION_RUN(ztest_run) {
   char * s3 = V3.s; 
 
   VERB0("nothing to see here, move along");
+
+  //char buf[32];
+  //printf("eng_not(%lg, %s, %s) --> \"%s\"\n", d1, s2, s3, eng_not(buf, sizeof(buf), d1, s2, s3));
+
 }
 
 //----------------------------------------------------------------------------

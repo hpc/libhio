@@ -588,7 +588,7 @@ char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
 
   if (negative) mant = - mant;
   //printf("val: %lg format: %s, mant: %lg exp: %d pindex: %d \n", val, format, mant, exp, pindex);
-  snprintf(buf, len, fmt, mant, pref[pindex], (binary)?"i":"",  unit); 
+  snprintf(buf, len, fmt, mant, pref[pindex], (binary&&exp>0)?"i":"",  unit); 
 
   return buf;
 }  
