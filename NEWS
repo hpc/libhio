@@ -3,6 +3,13 @@ HIO NEWS
 
 Last updated 2016-06-18
 
+Release hio.1.3.0.3
+
+Some small test improvements, a fix for partial read and write handling and
+improved diagnostic and debug messages related to dw_stage_directory_out calls.
+Additionally, an early version of an HDF5 plugin has been added. It is untested
+and is not included in the distribution tarball.
+
 Release hio.1.3.0.2
 
 A few minor updates, all related to testing.

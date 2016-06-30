@@ -541,16 +541,14 @@ ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
       total += actual;
       count -= actual;
       ptr = (void *) ((intptr_t) ptr + actual);
-    } else if (0 == total) {
-      total = actual;
-    }
-  } while (actual > 0 && count > 0);
+    } 
+  } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
 
   if (total > 0) {
     file->f_offset += total;
   }
 
-  return total;
+  return (actual < 0) ? actual: total;
 }
 
 ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
@@ -567,16 +565,14 @@ ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
       total += actual;
       count -= actual;
       ptr = (void *) ((intptr_t) ptr + actual);
-    } else if (0 == total) {
-      total = actual;
     }
-  } while (actual > 0 && count > 0);
+  } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
 
   if (total > 0) {
     file->f_offset += total;
   }
 
-  return total;
+  return (actual < 0) ? actual: total;
 }
 
 void hioi_file_flush (hio_file_t *file) {

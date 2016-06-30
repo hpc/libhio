@@ -158,8 +158,8 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
       hioi_err_push (HIO_ERROR, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
                     "data stage on dataset %s::%lld. DWRC: %d", hioi_object_identifier (dataset), dataset->ds_id, rc);
       
-      hioi_log (context, HIO_VERBOSE_DEBUG_XLOW, "dw_stage_directory_out(%s, %s, %d) returns %d errno: %d",
-                dataset_path, pfs_path, stage_mode, rc, errno); 
+      hioi_err_push (HIO_ERROR, &dataset->ds_object, "dw_stage_directory_out(%s, %s, %d) "
+                     "rc: %d errno: %d", dataset_path, pfs_path, stage_mode, rc, errno); 
 
       rc = access(dataset_path, R_OK | W_OK | X_OK);
       hioi_log (context, HIO_VERBOSE_DEBUG_XLOW, "access(%s, R_OK|W_OK|X_OK) returns %d errno: %d",
@@ -167,7 +167,6 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
       rc = access(pfs_path, R_OK | W_OK | X_OK);
       hioi_log (context, HIO_VERBOSE_DEBUG_XLOW, "access(%s, R_OK|W_OK|X_OK) returns %d errno: %d",
                 pfs_path, rc, errno);    
-
  
       free (pfs_path);
       free (dataset_path);
@@ -213,13 +212,22 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
 
       /* revoke the end of job stage for the previous dataset */
       rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
-      free (dataset_path);
       if (0 != rc) {
         hioi_err_push (HIO_ERROR, &dataset->ds_object, "builtin-datawarp/dataset_close: error revoking prior "
                       "end-of-job stage of dataset %s::%lld. errno: %d", hioi_object_identifier (dataset),
                       last_stage_id, errno);
+
+        hioi_err_push (HIO_ERROR, &dataset->ds_object, "dw_stage_directory_out(%s, NULL, %d) "
+                       "rc: %d errno: %d", dataset_path, stage_mode, rc, errno); 
+
+        rc = access(dataset_path, R_OK | W_OK | X_OK);
+        hioi_log (context, HIO_VERBOSE_DEBUG_XLOW, "access(%s, R_OK|W_OK|X_OK) returns %d errno: %d",
+                  dataset_path, rc, errno);    
+ 
+        free (dataset_path);
         return HIO_ERROR;
       }
+      free (dataset_path);
 
       ds_data->last_scheduled_stage_id = dataset->ds_id;
 
