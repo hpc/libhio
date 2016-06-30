@@ -354,6 +354,7 @@ void H5FD_hio_settings_init(hio_settings_t *settings) {
     settings->stride_size = 1;
     settings->comm = MPI_COMM_NULL;
     settings->setid = 0;
+    settings->flags = 0;
 }
 
 /*
@@ -450,6 +451,78 @@ void H5FD_hio_set_dataset_mode(hio_settings_t *settings, H5FD_hio_io_t mode) {
 }
 
 
+hio_return_t hio_open(const char *name, const char *element_name, 
+		      int hio_flags, int dataset_mode, 
+		      int64_t set_id, hio_context_t *context, 
+		      hio_dataset_t *dataset, hio_element_t *elem) {
+    int new_flags = hio_flags;
+    hio_return_t ret;
+
+    if(HIO_SUCCESS != (ret = hio_dataset_alloc (*context, dataset, "hdf5hio", set_id, 
+						new_flags, dataset_mode))) {
+        HHIO_GOTO_ERROR(*context)
+        goto error;
+    }
+
+    ret = hio_dataset_open (*dataset);
+    if (HIO_ERR_EXISTS == ret) {
+	  hio_dataset_unlink (*context, "hdf5hio", set_id, HIO_UNLINK_MODE_FIRST);
+	  ret = hio_dataset_open (*dataset);
+    }
+    if(HIO_SUCCESS != ret) {
+        HHIO_GOTO_ERROR(*context)
+        hio_dataset_free(dataset);
+	goto error;
+    }
+    if (HIO_SUCCESS != (ret = hio_element_open(*dataset, elem, element_name, hio_flags))) {
+	HHIO_GOTO_ERROR(*context)
+        hio_dataset_close(*dataset);
+        hio_dataset_free(dataset);
+	goto error;
+    }
+
+    return HIO_SUCCESS;
+
+ error:
+    return HIO_ERROR;
+}
+
+hio_return_t hio_reopen(H5FD_t *_file, int flag) {
+  H5FD_hio_t  *file = (H5FD_hio_t*)_file;
+  hio_return_t hio_code = HIO_SUCCESS;
+
+  HDassert(file);
+  
+  if (file->settings->flags & flag)
+      goto done;
+
+  if (flag == HIO_FLAG_WRITE) {
+      file->settings->flags = HIO_FLAG_WRITE;
+  } else {
+      file->settings->flags = HIO_FLAG_READ;
+  }
+  /* Close the element if it exists */
+  if (file->element != HIO_OBJECT_NULL &&
+      HIO_SUCCESS != (hio_code=hio_element_close(&(file->element)/*in,out*/)))
+      HHIO_GOTO_ERROR(file->context)
+
+  if (HIO_SUCCESS != (hio_code=hio_dataset_close(file->dataset/*in,out*/)))
+      HHIO_GOTO_ERROR(file->context)
+  if (HIO_SUCCESS != (hio_code=hio_dataset_free(&(file->dataset)/*in,out*/)))
+      HHIO_GOTO_ERROR(file->context)
+
+  hio_code = hio_open(file->settings->name, file->settings->element_name, 
+		      file->settings->flags, file->settings->dataset_mode, 
+		      file->settings->setid, &file->context, 
+		      &file->dataset, &file->element);
+
+  /* Set the size of the file */
+  H5FD_hio_set_eof(file);
+
+ done:
+  return hio_code;
+}
+
 /*-------------------------------------------------------------------------
  * Function:    H5FD_hio_open
  *
@@ -479,7 +552,7 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
     const H5FD_hio_fapl_t  *fa=NULL;
     H5FD_hio_fapl_t    _fa;
     H5P_genplist_t *plist;      /* Property list pointer */
-    H5FD_t      *ret_value;     /* Return value */
+    H5FD_t      *ret_value=NULL;     /* Return value */
     hio_return_t rc;
     char *config_file;
     char *config_prefix;
@@ -509,43 +582,42 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
     if (fa->settings->comm != MPI_COMM_NULL) {
       MPI_Barrier(fa->settings->comm);
       if (HIO_SUCCESS != (rc = hio_init_mpi(&context, &fa->settings->comm, 
-					    config_file, config_prefix, "hdf5_context"))) {
+					    config_file, config_prefix, name))) {
 	    HGOTO_ERROR(H5E_RESOURCE, H5E_BADVALUE, NULL, "Error intitializing hio")
       }
     } else if (HIO_SUCCESS != (rc = hio_init_single(&context, 
-						    config_file, config_prefix, "hdf5_context"))) {
+						    config_file, config_prefix, name))) {
 	    HGOTO_ERROR(H5E_RESOURCE, H5E_BADVALUE, NULL, "Error intitializing hio")
     }
     /* convert HDF5 flags to HIO flags */
     /* some combinations are illegal; let HIO figure it out */
     hio_flags  = (flags&H5F_ACC_RDWR) ? HIO_FLAG_WRITE : HIO_FLAG_READ;
-    if (flags&H5F_ACC_CREAT)  hio_flags |= HIO_FLAG_CREAT;
-    if (flags&H5F_ACC_TRUNC)  hio_flags |= HIO_FLAG_TRUNC;
+    if (flags&H5F_ACC_RDONLY)
+	hio_flags |= HIO_FLAG_READ;
+
+    if (hio_flags&HIO_FLAG_WRITE) { 
+	hio_flags |= HIO_FLAG_CREAT;
+	hio_flags |= HIO_FLAG_TRUNC;
+    }
 
     //Use the user defined setid if it was set. Otherwise, use the fapl_id as the set_id
     if (fa->settings->setid)
       set_id = fa->settings->setid;
-    else
+    else {
       set_id = fapl_id;
+      fa->settings->setid = set_id;
+    }
 
-    dataset = HIO_OBJECT_NULL;  
+    dataset = HIO_OBJECT_NULL;
     dataset_mode = (fa->settings->dataset_mode == H5FD_HIO_DATASET_SHARED) ?
 	HIO_SET_ELEMENT_SHARED : HIO_SET_ELEMENT_UNIQUE;
-    if(HIO_SUCCESS != (rc = hio_dataset_alloc (context, &dataset, "hdf5hio", set_id, 
-					       hio_flags, dataset_mode))) 
-        HHIO_GOTO_ERROR(context)
+    if (HIO_SUCCESS != (rc = hio_open(name, fa->settings->element_name,
+				      hio_flags, dataset_mode,
+				      set_id, &context, &dataset, &element)))
+	goto done;
 
-    rc = hio_dataset_open (dataset);
-    if (HIO_ERR_EXISTS == rc) {
-	  hio_dataset_unlink (context, "hdf5hio", set_id, HIO_UNLINK_MODE_FIRST);
-	  rc = hio_dataset_open (dataset);
-    }
-    if(HIO_SUCCESS != rc)
-        HHIO_GOTO_ERROR(context)
-
-    if (HIO_SUCCESS != (rc = hio_element_open(dataset, &element, fa->settings->element_name, hio_flags)))
-	HHIO_GOTO_ERROR(context)
-
+    fa->settings->flags = hio_flags;
+    snprintf(fa->settings->name, HIO_FILE_NAME_SIZE, "%s", name);
     file_opened=1;
 
     /* Build the return value and initialize it */
@@ -569,6 +641,7 @@ done:
 	if(file_opened) {
             hio_dataset_close(dataset);
             hio_dataset_free(&dataset);
+            hio_element_close(&element);
 	}
 	if (file)
 	    H5MM_xfree(file);
@@ -726,7 +799,6 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
 		    ret_value = FAIL;
 		goto done;
 	    }
-	    file->eof = total_size;
 	} else {
 	    recvsize = num_ranks * sizeof(int64_t);
 	    if (NULL == (recvbuf = (int64_t *)H5MM_calloc(recvsize)))
@@ -745,11 +817,13 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
 	    }
     
 	    H5MM_xfree(recvbuf);
-	    file->eof = total_size;
 	}
+
+	file->eof = total_size;
     } else {
 	file->eof = elem_size;
     }
+
  done:
 
     FUNC_LEAVE_NOAPI(ret_value)
@@ -882,6 +956,7 @@ H5FD_hio_read(H5FD_t *_file, H5FD_mem_t H5_ATTR_UNUSED type, hid_t dxpl_id, hadd
     HDassert(TRUE==H5P_isa_class(dxpl_id,H5P_DATASET_XFER));
     HDassert(buf);
 
+    hio_reopen(_file, HIO_FLAG_READ);
     /* some numeric conversions */
     hio_off = (off_t) addr;
     if (H5FD_hio_haddr_to_HIOOff(addr, &hio_off/*out*/)<0)
@@ -958,6 +1033,7 @@ H5FD_hio_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
     HDassert(TRUE==H5P_isa_class(dxpl_id,H5P_DATASET_XFER));
     HDassert(buf);
 
+    hio_reopen(_file, HIO_FLAG_WRITE);
     /* some numeric conversions */
     if(H5FD_hio_haddr_to_HIOOff(addr, &hio_off) < 0)
         HGOTO_ERROR(H5E_INTERNAL, H5E_BADRANGE, FAIL, "can't convert from haddr to HIO off")
@@ -1003,6 +1079,8 @@ H5FD_hio_flush(H5FD_t *_file, hid_t H5_ATTR_UNUSED dxpl_id, unsigned closing)
 
     HDassert(file);
     HDassert(H5FD_HIO_g == file->pub.driver_id);
+
+    hio_reopen(_file, HIO_FLAG_WRITE);
 
     if(HIO_SUCCESS != (hio_code = hio_element_flush(file->element, HIO_FLUSH_MODE_COMPLETE)))
 	HHIO_GOTO_ERROR(file->context)
