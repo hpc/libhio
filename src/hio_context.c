@@ -290,7 +290,14 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   context->c_dw_root = strdup ("auto");
   hioi_config_add (context, &context->c_object, &context->c_dw_root,
                    "datawarp_root", HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
-                   "for datawarp (burst-buffer) (default: auto-detect)", 0);
+                   "for datawarp (burst-buffer) (default: auto-detect)", HIO_VAR_FLAG_DEFAULT);
+  #ifdef HIO_DATAWARP_DEBUG_LOG
+    context->c_dw_debug_mask = 0;
+    context->c_dw_debug_installed = false;
+    hioi_config_add (context, &context->c_object, &context->c_dw_debug_mask,
+                     "datawarp_debug_mask", HIO_CONFIG_TYPE_UINT64, NULL, "Mask for"
+                     "datawarp debug log messages (default: 0)", HIO_VAR_FLAG_DEFAULT);
+  #endif
 #endif
 
   hioi_perf_add (context, &context->c_object, &context->c_bread,

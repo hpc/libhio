@@ -250,6 +250,17 @@
  * - @b datawarp_root - Overide the root directory for DataWarp.  If not set, the value of system provided
  *   environment variable DW_JOB_STRIPED is used.
  *
+ * - @b datawarp_debug_mask - this 64 bit unsigned value is used to enable classes of DataWarp debug log
+ *   messages. The default value is 0. Specific classes and their related mask bits wil be provided
+ *   as needed by DataWarp development. The DataWarp debug logger is activated at hio_dataset_open with
+ *   the current value of the mask (if non-zero).  The logger is deactivated at hio_fini for any context
+ *   in which the logger was activated.  If an application has multiple HIO contexts active,
+ *   this could cause premature deactivation of the logger. This will not cause a functional problem
+ *   but could supress log entries. Premature deactivation might be avoided by delaying hio_fini on
+ *   one of the contexts. 
+ *   Note: This function is currently experimental, it requires a pre-release version of DataWarp and
+ *   compile time enablement via -DHIO_DATAWARP_DEBUG_LOG.
+ *
  * - @b print_statistics - Print IO statistics when hio_dataset_free() is called. This value is only meaningful
  *   on the first IO rank.
  *
