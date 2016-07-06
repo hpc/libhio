@@ -299,7 +299,7 @@ struct hio_context {
   /** path to datawarp root */
   char              *c_dw_root;
   #ifdef HIO_DATAWARP_DEBUG_LOG
-    uint64_t          *c_dw_debug_mask;
+    uint64_t          c_dw_debug_mask;
     bool              c_dw_debug_installed;
   #endif
 #endif
