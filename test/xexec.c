@@ -1625,12 +1625,12 @@ ACTION_RUN(her_run) {
     void * expected =  wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
     void * mis_comp;
     // Force error for unit test
-    //*(char *)(rbuf+27) = '\0';
+    // *(char *)(rbuf+27) = '\0';
     if ((mis_comp = memdiff(rbuf, expected, hreq))) {
       local_fails++;
       I64 offset = (char *)mis_comp - (char *)rbuf;
       I64 dump_start = MAX(0, offset - 16);
-      VERB0("Error: hio_element_read data check miscompare; read ofs:%lld read size:%lld miscompare ofs: %lld",
+      VERB0("Error: hio_element_read data check miscompare; read ofs: %lld read size: %lld miscompare ofs: %lld",
              ofs_abs, hreq, offset);
 
       VERB0("Miscompare expected data at offset %lld follows:", dump_start);
@@ -1639,7 +1639,7 @@ ACTION_RUN(her_run) {
       VERB0("Miscompare actual data at offset %lld follows:", dump_start);
       hex_dump( rbuf + dump_start, 32);
 
-      VERB0("Read addr: 0x%p  miscompare addr: 0x%p;  expected ^ actual follows:", rbuf, mis_comp);
+      VERB0("Read addr: 0x%lX  miscompare addr: 0x%lX;  expected ^ actual follows:", rbuf, mis_comp);
       char * xorbuf = MALLOCX(hreq);
       for (int i=0; i<hreq; i++) {
         ((char *)xorbuf)[i] = ((char *)rbuf)[i] ^ ((char *)expected)[i];
