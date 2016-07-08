@@ -283,7 +283,7 @@ void hex_dump(void *data, int size) {
     unsigned char c;
     int n;
     char bytestr[4] = {0};
-    char addrstr[10] = {0};
+    char addrstr[12] = {0};
     char hexstr[ 16*3 + 5] = {0};
     char hexprev[ 16*3 + 5] = {0};
     char charstr[16*1 + 5] = {0};
@@ -291,7 +291,7 @@ void hex_dump(void *data, int size) {
     for(n=1;n<=size;n++) {
         if (n%16 == 1) {
             /* store address for this line */
-            snprintf(addrstr, sizeof(addrstr), "%.4lx", p-(unsigned char *)data);
+            snprintf(addrstr, sizeof(addrstr), "%.6lx", p-(unsigned char *)data);
         }
 
         c = *p;
@@ -316,7 +316,7 @@ void hex_dump(void *data, int size) {
                 printf("        %d identical lines skipped\n", skipped);
                 skipped = 0;
               }
-              printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
+              printf("[%6.6s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
               strcpy(hexprev, hexstr);
             }
             hexstr[0] = 0;

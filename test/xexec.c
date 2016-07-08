@@ -1622,10 +1622,11 @@ ACTION_RUN(her_run) {
   rw_count[0] += hcnt;
 
   if (hio_check) {
+    void * expected =  wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
     void * mis_comp;
     // Force error for unit test
-    // *(char *)(rbuf+27) = '\0';
-    if ((mis_comp = memdiff(rbuf, wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE), hreq))) {
+    //*(char *)(rbuf+27) = '\0';
+    if ((mis_comp = memdiff(rbuf, expected, hreq))) {
       local_fails++;
       I64 offset = (char *)mis_comp - (char *)rbuf;
       I64 dump_start = MAX(0, offset - 16);
@@ -1634,8 +1635,17 @@ ACTION_RUN(her_run) {
 
       VERB0("Miscompare expected data at offset %lld follows:", dump_start);
       hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 32);
+
       VERB0("Miscompare actual data at offset %lld follows:", dump_start);
       hex_dump( rbuf + dump_start, 32);
+
+      VERB0("Read addr: 0x%p  miscompare addr: 0x%p;  expected ^ actual follows:", rbuf, mis_comp);
+      char * xorbuf = MALLOCX(hreq);
+      for (int i=0; i<hreq; i++) {
+        ((char *)xorbuf)[i] = ((char *)rbuf)[i] ^ ((char *)expected)[i];
+      }
+      hex_dump( xorbuf, hreq);
+      FREEX(xorbuf);
     } else {
       VERB3("hio_element_read data check successful");
     }
