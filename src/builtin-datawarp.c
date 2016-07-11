@@ -81,7 +81,7 @@ static void datawarp_debug_logger(uint64_t flags, void *data, char *file,
   va_start(args, fmt);
   vsnprintf(buf, sizeof(buf), fmt, args); 
   va_end(args);
-  hioi_log (context, HIO_VERBOSE_ERROR, "DataWarp debug: %s/%s:%u %s",
+  hioi_log (context, HIO_VERBOSE_ERROR, "DataWarp debug: %s/%s/%u %s",
             file, func, line, buf);
   return;
 }
