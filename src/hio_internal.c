@@ -50,10 +50,10 @@ char * hioi_msg_time(char * time_buf, size_t len) {
  * to stderr with output lines like: 
  * YYYY-MM-DD hh:mm:ss [<msg_id>] [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
  */ 
-void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t size) {
+void hioi_dump_writer(hio_context_t context, const char * header, const void * data, size_t size) {
     char time_buf[32];
     char hdr_buf[128];
-    unsigned char *p = data;
+    const unsigned char *p = data;
     unsigned char c;
     int n;
     char bytestr[4] = {0};
@@ -64,7 +64,7 @@ void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t 
     int skipped = 0;
 
     hioi_msg_time(time_buf, sizeof(time_buf)); 
-    snprintf(hdr_buf, sizeof(hdr_buf), header, time_buf, context->c_msg_id);
+    snprintf(hdr_buf, sizeof(hdr_buf), header, time_buf, (context) ? context->c_msg_id: "No Context");
 
     for(n=1;n<=size;n++) {
         if (n%16 == 1) {
@@ -541,7 +541,7 @@ ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
       total += actual;
       count -= actual;
       ptr = (void *) ((intptr_t) ptr + actual);
-    } 
+    }
   } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
 
   if (total > 0) {

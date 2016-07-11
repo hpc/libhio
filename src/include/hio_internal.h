@@ -120,7 +120,7 @@ char * hioi_msg_time(char * time_buf, size_t len);
               __VA_ARGS__);                                                       \
   }
 
-void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t size);
+void hioi_dump_writer(hio_context_t context, const char * header, const void * data, size_t size);
 
 #define hioi_dump(context, level, pointer, length)                                \
   if ((context)->c_verbose >= level) {                                            \
