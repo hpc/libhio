@@ -3,6 +3,11 @@ HIO NEWS
 
 Last updated 2016-06-18
 
+Release hio.1.3.0.4
+
+Multiple test enhancements, better messages on certain failures, job specific
+DataWarp information logged.
+
 Release hio.1.3.0.3
 
 Some small test improvements, a fix for partial read and write handling and
