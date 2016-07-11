@@ -393,6 +393,14 @@ void lfsr_22_byte(unsigned char * p, U64 len) {
   }
 }
 
+#if 0
+void lfsr_22_byte_init(void) {
+  srandom(15485863); // The 1 millionth prime
+  for (int i = 1; i<sizeof(lfsr_state); ++i) {
+    lfsr_state[i] = random() % 256;
+  }
+}
+#else
 void lfsr_22_byte_init(void) {
   // Use a very simple PRNG to initialize lfsr_state
   int prime = 15485863; // The 1 millionth prime
@@ -405,7 +413,9 @@ void lfsr_22_byte_init(void) {
   unsigned char t[1000];
   lfsr_22_byte(t, sizeof(t));
 }
+#endif
 
+# if 1
 void lfsr_test(void) {
   // A few tests for lfsr properties
   U64 size = 8 * 1024 * 1024;
@@ -419,12 +429,28 @@ void lfsr_test(void) {
   lfsr_22_byte(buf, size);
 
   printf("buf:\n");
-  hex_dump(buf, 64);
+  hex_dump(buf, 256);
 
   printf("buf + %d:\n", LFSR_22_CYCLE);
-  hex_dump(buf+LFSR_22_CYCLE, 64);
+  hex_dump(buf+LFSR_22_CYCLE, 256);
 
-  #if 0
+  int b[8] = {0,0,0,0,0,0,0,0};
+  int j = 0;
+  for (int i = 0; i<256; ++i) {
+    int n = ((unsigned char *)buf)[i];
+    j += n;
+    for (int k=0; k<8; ++k) {
+      unsigned char m = 1 << k;
+      if (m & n) b[k]++;
+    }
+       
+  }
+  VERB0("j: %d", j);
+  for (int k=0; k<8; ++k) {
+    VERB0("b[%d]: %d", k, b[k]);
+  } 
+
+
   for (int j=0; j<100; ++j) {
     int sum = 0;
     for (int i=0; i<100; ++i) {
@@ -441,8 +467,8 @@ void lfsr_test(void) {
       }
      }
   }
-  #endif
 }
+#endif
 
 //----------------------------------------------------------------------------
 // If MPI & Rank 0, VERB1 message with collective min/mean/max/stddev/total
@@ -492,6 +518,7 @@ ACTION_RUN(ztest_run) {
   //char buf[32];
   //printf("eng_not(%lg, %s, %s) --> \"%s\"\n", d1, s2, s3, eng_not(buf, sizeof(buf), d1, s2, s3));
 
+  //lfsr_test(); 
 }
 
 //----------------------------------------------------------------------------
@@ -1526,7 +1553,9 @@ ACTION_RUN(heo_run) {
   HRC_TEST(hio_element_open)
 
   ETIMER_START(&hio_api_tmr);
-  wbuf = MALLOCX(bufsz + LFSR_22_CYCLE);
+
+  int rc = posix_memalign((void * *)&wbuf, 4096, bufsz + LFSR_22_CYCLE);
+  if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", bufsz + LFSR_22_CYCLE, strerror(rc));
   lfsr_22_byte_init();
   lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE);
 
@@ -1630,7 +1659,7 @@ ACTION_RUN(her_run) {
       local_fails++;
       I64 offset = (char *)mis_comp - (char *)rbuf;
       I64 dump_start = MAX(0, offset - 16);
-      VERB0("Error: hio_element_read data check miscompare; read ofs: %lld read size: %lld miscompare ofs: %lld",
+      VERB0("Error: hio_element_read data check miscompare; Read ofs: %lld Read size: %lld Miscomp ofs: %lld",
              ofs_abs, hreq, offset);
 
       VERB0("Miscompare expected data at offset %lld follows:", dump_start);
@@ -1639,7 +1668,8 @@ ACTION_RUN(her_run) {
       VERB0("Miscompare actual data at offset %lld follows:", dump_start);
       hex_dump( rbuf + dump_start, 32);
 
-      VERB0("Read addr: 0x%lX  miscompare addr: 0x%lX;  expected ^ actual follows:", rbuf, mis_comp);
+      VERB0("Read addr: 0x%lX  Exp addr: 0x%lX  Miscomp addr: 0x%lX", rbuf, expected, mis_comp);
+      VERB0("Expected ^ Actual follows:");
       char * xorbuf = MALLOCX(hreq);
       for (int i=0; i<hreq; i++) {
         ((char *)xorbuf)[i] = ((char *)rbuf)[i] ^ ((char *)expected)[i];
@@ -2284,6 +2314,22 @@ int main(int argc, char * * argv) {
            test_name, local_fails + global_fails);
   }
 
-  return (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
+  int rc = (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
+
+  #ifdef MPI
+  if (rc != EXIT_SUCCESS) {
+    int mpi_init_flag, mpi_final_flag;
+    MPI_Initialized(&mpi_init_flag);
+    if (mpi_init_flag) {
+      MPI_Finalized(&mpi_final_flag);
+      if (! mpi_final_flag) {
+        VERB0("MPI_abort due to error exit from main with MPI active rc: %d", rc);
+        MPI_CK(MPI_Abort(mpi_comm, rc));
+      }
+    }
+  }
+  #endif // MPI
+
+  return rc;
 }
 // --- end of xexec.c ---
