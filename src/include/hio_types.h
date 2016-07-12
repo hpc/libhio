@@ -368,14 +368,6 @@ struct hio_dataset_backend_data_t {
 };
 typedef struct hio_dataset_backend_data_t hio_dataset_backend_data_t;
 
-typedef enum hio_dataset_fmode {
-  /** use basic mode. unique address space results in a single file per element per rank.
-   * shared address space results in a single file per element */
-  HIO_FILE_MODE_BASIC,
-  /** use optimized mode. there is no guarantee about file structure in this mode */
-  HIO_FILE_MODE_OPTIMIZED,
-} hio_dataset_fmode_t;
-
 struct hio_fs_attr_t;
 
 typedef int (*hio_fs_open_fn_t) (hio_context_t context, const char *path, struct hio_fs_attr_t *fs_attr, int flags, int mode);
@@ -490,14 +482,8 @@ struct hio_dataset {
   /** module in use */
   hio_module_t       *ds_module;
 
-  /** block size to use for optimized file mode */
-  uint64_t            ds_bs;
-
   /** list of elements */
   hio_list_t          ds_elist;
-
-  /** dataset file modes */
-  hio_dataset_fmode_t ds_fmode;
 
   /** open time */
   struct timeval      ds_otime;
@@ -532,8 +518,6 @@ struct hio_dataset {
   hio_fs_attr_t       ds_fsattr;
 
   hio_buffer_t        ds_buffer;
-
-  bool                ds_use_bzip;
 
 #if HAVE_MPI_WIN_ALLOCATE_SHARED
   MPI_Win             ds_shared_win;

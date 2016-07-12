@@ -260,15 +260,16 @@ void hioi_object_release (hio_object_t object);
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
                                   int flags, hio_dataset_mode_t mode);
 
-/**
- * @brief scatter dataset configuration to all processes
- *
- * @param[in] dataset     dataset to scatter
- * @param[in] rc          current return code
- */
-int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc);
-
 #if HIO_USE_MPI
+/**
+ * @brief scatter dataset configuration to all processes in a communicator
+ *
+ * @param[in] dataset       dataset to scatter
+ * @param[in] comm          MPI communicator
+ * @param[in] manifest      manifest data to scatter
+ * @param[in] manifest_size size of manifest data
+ * @param[in] rc            current return code for consensus
+ */
 int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsigned char *manifest, size_t manifest_size, int rc);
 #endif
 

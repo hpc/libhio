@@ -15,15 +15,6 @@
 #include <string.h>
 #include <assert.h>
 
-static hio_var_enum_value_t hioi_dataset_file_mode_values[] = {
-  {.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
-  {.string_value = "optimized", .value = HIO_FILE_MODE_OPTIMIZED}};
-
-static hio_var_enum_t hioi_dataset_file_modes = {
-  .count  = 2,
-  .values = hioi_dataset_file_mode_values,
-};
-
 static hio_var_enum_value_t hioi_dataset_fs_type_enum_values[] = {
   {.string_value = "default", .value = HIO_FS_TYPE_DEFAULT},
   {.string_value = "lustre", .value = HIO_FS_TYPE_LUSTRE},
@@ -133,25 +124,10 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   new_dataset->ds_map.map_segments.md_win = MPI_WIN_NULL;
 #endif
 
-  new_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
-  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_fmode,
-                   "dataset_file_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
-                   "Modes for writing dataset files. Valid values: (0: basic, 1: optimized)", 0);
-
-  new_dataset->ds_bs = 1ul << 23;
-  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_bs,
-                   "dataset_block_size", HIO_CONFIG_TYPE_INT64, NULL,
-                   "Block size to use when writing in optimized mode (default: 8M)", 0);
-
   new_dataset->ds_fsattr.fs_type = HIO_FS_TYPE_DEFAULT;
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_fsattr.fs_type,
                    "dataset_filesystem_type", HIO_CONFIG_TYPE_INT32, &hioi_dataset_fs_type_enum,
                    "Type of filesystem this dataset resides on", HIO_VAR_FLAG_READONLY);
-
-  new_dataset->ds_use_bzip = (HIO_FILE_MODE_OPTIMIZED == new_dataset->ds_fmode);
-  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_use_bzip,
-                   "dataset_use_bzip", HIO_CONFIG_TYPE_BOOL, NULL,
-                   "Use bzip2 compression for dataset manifests", 0);
 
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_data->dd_average_size,
                    "dataset_expected_size", HIO_CONFIG_TYPE_INT64, NULL,
@@ -300,18 +276,10 @@ int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, uns
 
 int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out,
                                   bool compress_data, bool simple) {
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_USING_MPI
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  int rc;
 
-  if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
-    rc = hioi_dataset_gather_manifest_comm (dataset, context->c_shared_comm, data_out, data_size_out,
-                                            compress_data, simple);
-  } else {
-    rc = hioi_dataset_gather_manifest_comm (dataset, context->c_comm, data_out, data_size_out, compress_data, simple);
-  }
-
-  return rc;
+  return hioi_dataset_gather_manifest_comm (dataset, context->c_comm, data_out, data_size_out, compress_data, simple);
 #else
   return hioi_manifest_serialize (dataset, data_out, data_size_out, compress_data, simple);
 #endif
@@ -374,23 +342,6 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsig
   dataset->ds_fsattr.fs_ssize = ar_data[4];
 
   return rc;
-}
-
-static int hioi_dataset_scatter_shared (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
-  hio_context_t context = (hio_context_t) dataset->ds_object.parent;
-
-#if HAVE_MPI_COMM_SPLIT_TYPE
-  if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
-    int rc = hioi_dataset_scatter_comm (dataset, context->c_shared_comm, manifest, manifest_size, rc);
-    if (HIO_SUCCESS != rc) {
-      return rc;
-    }
-
-    return hioi_dataset_scatter_comm (dataset, context->c_comm, NULL, 0, rc);
-  }
-#endif
-
-  return hioi_dataset_scatter_comm (dataset, context->c_comm, manifest, manifest_size, rc);
 }
 
 static int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
@@ -463,26 +414,6 @@ static int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned ch
 
 #endif /* HIO_USE_MPI */
 
-int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
-#if HIO_USE_MPI
-  hio_context_t context = (hio_context_t) dataset->ds_object.parent;
-
-  if (1 == context->c_size) {
-    /* nothing to do */
-    return rc;
-  }
-
-  if (HIO_SET_ELEMENT_SHARED == dataset->ds_mode) {
-    rc = hioi_dataset_scatter_shared (dataset, manifest, manifest_size, rc);
-  } else {
-    rc = hioi_dataset_scatter_unique (dataset, manifest, manifest_size, rc);
-  }
-
-#endif
-
-  return rc;
-}
-
 int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
   /* get timestamp before open call */
   uint64_t rotime = hioi_gettime ();
@@ -502,12 +433,6 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
               dataset->ds_object.identifier, dataset->ds_id, module->data_root);
     return rc;
   }
-
-#if HAVE_MPI_COMM_SPLIT_TYPE
-  if (HIO_SET_ELEMENT_SHARED == dataset->ds_mode && HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
-    hioi_timed_call (rc = hioi_dataset_generate_map (dataset));
-  }
-#endif
 
   dataset->ds_rotime = rotime;
 

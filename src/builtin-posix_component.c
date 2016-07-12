@@ -33,6 +33,18 @@
 #include <sys/stat.h>
 #endif
 
+
+static hio_var_enum_value_t hioi_dataset_file_mode_values[] = {
+  {.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
+  {.string_value = "file_per_node", .value = HIO_FILE_MODE_OPTIMIZED},
+  {.string_value = "strided", .value = HIO_FILE_MODE_STRIDED},
+};
+
+static hio_var_enum_t hioi_dataset_file_modes = {
+  .count  = 3,
+  .values = hioi_dataset_file_mode_values,
+};
+
 /** static functions */
 static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id);
 static int builtin_posix_module_dataset_close (hio_dataset_t dataset);
@@ -300,6 +312,24 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
     posix_dataset->files[i].f_file.f_fd = -1;
   }
 
+  /* default to strided output mode */
+  posix_dataset->ds_fmode = HIO_FILE_MODE_STRIDED;
+  hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_fmode,
+                   "dataset_file_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
+                   "Modes for writing dataset files. Valid values: (0: basic, 1: file_per_node, 2: strided)", 0);
+
+  if (HIO_FILE_MODE_STRIDED == posix_dataset->ds_fmode && HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
+    /* strided mode only applies to shared datasets */
+    posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
+  }
+
+  if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode) {
+    posix_dataset->ds_bs = 1ul << 23;
+    hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_bs,
+                     "dataset_block_size", HIO_CONFIG_TYPE_INT64, NULL,
+                     "Block size to use when writing in optimized mode (default: 8M)", 0);
+  }
+
   return HIO_SUCCESS;
 }
 
@@ -322,7 +352,7 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
   fs_attr->fs_scount = 1;
 
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_STRIPING) {
-    if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
+    if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
       /* pick a reasonable default stripe size */
       fs_attr->fs_ssize = 1 << 24;
 
@@ -367,8 +397,8 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
       fs_attr->fs_ssize = fs_attr->fs_smax_size;
     }
 
-    if (posix_dataset->base.ds_bs < fs_attr->fs_ssize) {
-      posix_dataset->base.ds_bs = fs_attr->fs_ssize;
+    if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode && posix_dataset->ds_bs < fs_attr->fs_ssize) {
+      posix_dataset->ds_bs = fs_attr->fs_ssize;
     }
   }
 
@@ -521,15 +551,15 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
 
 #if HAVE_MPI_WIN_ALLOCATE_SHARED
   /* if possible set up a shared memory window for this dataset */
-  if (hioi_context_using_mpi (context)) {
+  if (hioi_context_using_mpi (context) && HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     hioi_dataset_shared_init (dataset);
   }
 #endif
 
-  if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
+  if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     if (2 > context->c_size || NULL == dataset->ds_shared_control) {
       /* no point in using optimized mode in this case */
-      posix_dataset->base.ds_fmode = HIO_FILE_MODE_BASIC;
+      posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
       hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: optimized file mode requested but not supported in this "
                 "dataset mode. falling back to basic file mode, path: %s", posix_dataset->base_path);
 #if HAVE_MPI_COMM_SPLIT_TYPE
@@ -620,16 +650,18 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
       }
     }
 
-    if (HIO_FILE_MODE_OPTIMIZED == dataset->ds_fmode) {
-      /* write data manifest */
-      rc = hioi_dataset_gather_manifest (dataset, &manifest, &manifest_size, dataset->ds_use_bzip, false);
+#if HIO_USE_MPI
+    if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
+      /* optimized mode requires a data manifest to describe how the data landed on the filesystem */
+      rc = hioi_dataset_gather_manifest_comm (dataset, context->c_shared_comm, &manifest, &manifest_size,
+                                              posix_dataset->ds_use_bzip, false);
       if (HIO_SUCCESS != rc) {
         dataset->ds_status = rc;
       }
 
       if (NULL != manifest) {
         rc = asprintf (&path, "%s/manifest.%x.json%s", posix_dataset->base_path, context->c_rank,
-                       dataset->ds_use_bzip ? ".bz2" : "");
+                       posix_dataset->ds_use_bzip ? ".bz2" : "");
         if (0 > rc) {
           return hioi_err_errno (errno);
         }
@@ -642,6 +674,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
         }
       }
     }
+#endif
   }
 
 #if HIO_USE_MPI
@@ -783,7 +816,7 @@ static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   int rc;
 
-  if (HIO_FILE_MODE_BASIC == dataset->ds_fmode) {
+  if (HIO_FILE_MODE_BASIC == posix_dataset->ds_fmode) {
     rc = builtin_posix_module_element_open_basic (posix_module, posix_dataset, element);
     if (HIO_SUCCESS != rc) {
       hioi_object_release (&element->e_object);
@@ -810,7 +843,7 @@ static int builtin_posix_module_element_close (hio_element_t element) {
 static unsigned long builtin_posix_reserve (builtin_posix_module_dataset_t *posix_dataset, size_t *requested) {
   /* NTH: this value should be changed to be non-0 if stripe exclusivity is re-enabled */
   uint32_t stripe_count = 1;
-  uint64_t block_size = posix_dataset->base.ds_bs;
+  uint64_t block_size = posix_dataset->ds_bs;
   const int stripe = posix_dataset->my_stripe;
   unsigned long new_offset, to_use, space;
   int nstripes;
@@ -829,15 +862,15 @@ static unsigned long builtin_posix_reserve (builtin_posix_module_dataset_t *posi
 
   space = *requested;
 
-  if (space % posix_dataset->base.ds_bs) {
-    space += posix_dataset->base.ds_bs - (space % posix_dataset->base.ds_bs);
+  if (space % posix_dataset->ds_bs) {
+    space += posix_dataset->ds_bs - (space % posix_dataset->ds_bs);
   }
 
-  if (1 < stripe_count && space > posix_dataset->base.ds_bs) {
-    *requested = space = posix_dataset->base.ds_bs;
+  if (1 < stripe_count && space > posix_dataset->ds_bs) {
+    *requested = space = posix_dataset->ds_bs;
     nstripes = 1;
   } else {
-    nstripes = space / posix_dataset->base.ds_bs;
+    nstripes = space / posix_dataset->ds_bs;
   }
 
   unsigned long s_index = atomic_fetch_add (&posix_dataset->base.ds_shared_control->s_stripes[stripe].s_index, nstripes);
@@ -1222,7 +1255,7 @@ static int builtin_posix_module_element_flush (hio_element_t element, hio_flush_
     return HIO_SUCCESS;
   }
 
-  if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->base.ds_fmode) {
+  if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     for (int i = 0 ; i < HIO_POSIX_MAX_OPEN_FILES ; ++i) {
       hioi_file_flush (&posix_dataset->files[i].f_file);
     }
