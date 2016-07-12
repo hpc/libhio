@@ -71,6 +71,7 @@ static int builtin_posix_dataset_path (struct hio_module_t *module, char **path,
 static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset) {
   mode_t access_mode = posix_module->access_mode;
   hio_context_t context = posix_module->base.context;
+  char *path;
   int rc;
 
   if (context->c_rank > 0) {
@@ -79,14 +80,29 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
 
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix: creating dataset directory @ %s", posix_dataset->base_path);
 
-  rc = hio_mkpath (context, posix_dataset->base_path, access_mode);
+  rc = asprintf (&path, "%s/data", posix_dataset->base_path);
+  if (0 > rc) {
+    return hioi_err_errno (errno);
+  }
+
+  rc = hio_mkpath (context, path, access_mode);
   if (0 > rc || EEXIST == errno) {
     if (EEXIST != errno) {
       hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: error creating context directory: %s",
-                    posix_dataset->base_path);
+                    path);
     }
+    free (path);
 
     return hioi_err_errno (errno);
+  }
+
+  if (posix_dataset->base.ds_fsattr.fs_flags & HIO_FS_SUPPORTS_STRIPING) {
+    rc = hioi_fs_set_stripe (path, &posix_dataset->base.ds_fsattr);
+    if (HIO_SUCCESS != rc) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: could not set file system striping on %s", path);
+      /* re-check the striping parameters */
+      (void) hioi_fs_query (context, path, &posix_dataset->base.ds_fsattr);
+    }
   }
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: successfully created dataset directories %s", posix_dataset->base_path);
@@ -377,10 +393,12 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
                      "stripe_size", HIO_CONFIG_TYPE_UINT64, NULL, "Stripe size for all dataset "
                      "data files", 0);
 
-    hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_raid_level,
-                     "raid_level", HIO_CONFIG_TYPE_UINT64, NULL, "RAID level for dataset "
-                     "data files. Keep in mind that some filesystems only support 1/2 RAID "
-                     "levels", 0);
+    if (fs_attr->fs_flags & HIO_FS_SUPPORTS_RAID) {
+      hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_raid_level,
+                       "raid_level", HIO_CONFIG_TYPE_UINT64, NULL, "RAID level for dataset "
+                       "data files. Keep in mind that some filesystems only support 1/2 RAID "
+                       "levels", 0);
+    }
 
     /* ensure stripe count is sane */
     if (fs_attr->fs_scount > fs_attr->fs_smax_count) {
@@ -751,7 +769,7 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
   /* it is not possible to get open with create without truncation using fopen so use a
    * combination of open and fdopen to get the desired effect */
   //hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "posix: calling open; path: %s open_flags: %i", path, open_flags);
-  fd = fs_attr->fs_open (path, fs_attr, open_flags, posix_module->access_mode);
+  fd = open (path, open_flags, posix_module->access_mode);
   if (fd < 0) {
     hioi_err_push (fd, hio_object, "posix: error opening element path %s. "
                   "errno: %d", path, errno);
@@ -782,14 +800,24 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
   int rc;
 
   if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
-    rc = asprintf (&path, "%s/element_data.%s.%05d", posix_dataset->base_path, element_name,
+    rc = asprintf (&path, "%s/data/element_data.%s.%08d", posix_dataset->base_path, element_name,
                    element->e_rank);
   } else {
-    rc = asprintf (&path, "%s/element_data.%s", posix_dataset->base_path, element_name);
+    rc = asprintf (&path, "%s/data/element_data.%s", posix_dataset->base_path, element_name);
   }
 
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  if (access (path)) {
+    /* fall back on old naming scheme */
+    if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
+      rc = asprintf (&path, "%s/element_data.%s.%08d", posix_dataset->base_path, element_name,
+                     element->e_rank);
+    } else {
+      rc = asprintf (&path, "%s/element_data.%s", posix_dataset->base_path, element_name);
+    }
   }
 
   rc = builtin_posix_open_file (posix_module, posix_dataset, path, &element->e_file);
@@ -976,28 +1004,31 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
     file_offset = builtin_posix_reserve (posix_dataset, size);
 
     if (hioi_context_using_mpi (context)) {
-      rc = asprintf (&path, "%s/data.%x", posix_dataset->base_path, posix_dataset->base.ds_shared_control->s_master);
-      if (0 > rc) {
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-
       file_index = posix_dataset->base.ds_shared_control->s_master;
-
-      hioi_element_add_segment (element, posix_dataset->base.ds_shared_control->s_master, file_offset, offset, *size);
     } else {
-      rc = asprintf (&path, "%s/data", posix_dataset->base_path);
-      if (0 > rc) {
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-
-      hioi_element_add_segment (element, -1, file_offset, offset, *size);
+      file_index = 0;
     }
+
+    rc = asprintf (&path, "%s/data/data.%x", posix_dataset->base_path, file_index);
+    if (0 > rc) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    hioi_element_add_segment (element, file_index, file_offset, offset, *size);
   } else {
     hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset found in file @ rank %d, offset %llu, size %lu", file_index,
               file_offset, *size);
-    rc = asprintf (&path, "%s/data.%x", posix_dataset->base_path, file_index);
+    rc = asprintf (&path, "%s/data/data.%x", posix_dataset->base_path, file_index);
     if (0 > rc) {
       return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    if (access (path, O_RDONLY)) {
+      free (path);
+      rc = asprintf (&path, "%s/data.%x", posix_dataset->base_path, file_index);
+      if (0 > rc) {
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
     }
   }
 
