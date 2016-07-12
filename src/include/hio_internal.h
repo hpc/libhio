@@ -558,9 +558,14 @@ void hioi_file_flush (hio_file_t *file);
 #define hioi_timed_call(call) call
 #endif
 
+/* functions to build/search the manifest map */
 int hioi_dataset_generate_map (hio_dataset_t dataset);
 int hioi_dataset_map_release (hio_dataset_t dataset);
 int hioi_dataset_map_translate_offset (hio_element_t element, uint64_t app_offset, int *file_index,
                                        uint64_t *offset, size_t *length);
+
+/* internal version of hio_config_get_info that doesn't strdup the name */
+int hioi_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+                          bool *read_only);
 
 #endif /* !defined(HIO_INTERNAL_H) */

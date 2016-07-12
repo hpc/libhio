@@ -662,8 +662,8 @@ int hio_config_get_count (hio_object_t object, int *count) {
   return HIO_SUCCESS;
 }
 
-int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
-                         bool *read_only) {
+int hioi_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+                          bool *read_only) {
   hio_var_t *var;
 
   if (NULL == object || index < 0) {
@@ -677,7 +677,7 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
   var = object->configuration.vars + index;
 
   if (name) {
-    *name = strdup (var->var_name);
+    *name = var->var_name;
   }
 
   if (type) {
@@ -695,6 +695,21 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
   return HIO_SUCCESS;
 }
 
+int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+                         bool *read_only) {
+  int rc;
+
+  rc = hioi_config_get_info (object, index, name, type, read_only);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  if (NULL != name && NULL != *name) {
+    *name = strdup (*name);
+  }
+
+  return HIO_SUCCESS;
+}
 
 /* performance variables */
 int hio_perf_get_count (hio_object_t object, int *count) {

@@ -22,8 +22,8 @@
 
 #include <json.h>
 
-#define HIO_MANIFEST_VERSION "2.1"
-#define HIO_MANIFEST_COMPAT  "2.0"
+#define HIO_MANIFEST_VERSION "3.0"
+#define HIO_MANIFEST_COMPAT  "3.0"
 
 #define HIO_MANIFEST_PROP_VERSION     "hio_manifest_version"
 #define HIO_MANIFEST_PROP_COMPAT      "hio_manifest_compat"
@@ -36,6 +36,7 @@
 #define HIO_MANIFEST_KEY_DATASET_MODE "hio_dataset_mode"
 #define HIO_MANIFEST_KEY_FILE_MODE    "hio_file_mode"
 #define HIO_MANIFEST_KEY_BLOCK_SIZE   "block_size"
+#define HIO_MANIFEST_KEY_FILE_COUNT   "file_count"
 #define HIO_MANIFEST_KEY_MTIME        "hio_mtime"
 #define HIO_MANIFEST_KEY_COMM_SIZE    "hio_comm_size"
 #define HIO_MANIFEST_KEY_STATUS       "hio_status"
@@ -130,12 +131,12 @@ static int hioi_manifest_get_signed_number (json_object *parent, const char *nam
   return HIO_SUCCESS;
 }
 
-static json_object *hio_manifest_generate_simple_2_0 (hio_dataset_t dataset) {
+static json_object *hio_manifest_generate_simple_3_0 (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_object_t hio_object = &dataset->ds_object;
-  json_object *top;
+  json_object *top, *config;
+  int rc, config_count;
   char *string_tmp;
-  int rc;
 
   top = json_object_new_object ();
   if (NULL == top) {
@@ -154,11 +155,46 @@ static json_object *hio_manifest_generate_simple_2_0 (hio_dataset_t dataset) {
     hioi_manifest_set_string (top, HIO_MANIFEST_KEY_DATASET_MODE, "shared");
   }
 
-  rc = hio_config_get_value (&dataset->ds_object, "dataset_file_mode", &string_tmp);
+  config = json_object_new_object ();
+  assert (NULL != config);
+
+  json_object_object_add (top, "config", config);
+
+
+  rc = hio_config_get_count (&dataset->ds_object, &config_count);
   assert (HIO_SUCCESS == rc);
 
-  hioi_manifest_set_string (top, HIO_MANIFEST_KEY_FILE_MODE, string_tmp);
-  free (string_tmp);
+  for (int i = 0 ; i < config_count ; ++i) {
+    hio_config_type_t type;
+    char *name, *value;
+    uint64_t usint;
+    int64_t sint;
+
+    rc = hioi_config_get_info (&dataset->ds_object, i, &name, &type, NULL);
+    assert (HIO_SUCCESS == rc);
+
+    rc = hio_config_get_value (&dataset->ds_object, name, &value);
+    assert (HIO_SUCCESS == rc);
+
+    switch (type) {
+    case HIO_CONFIG_TYPE_INT32:
+    case HIO_CONFIG_TYPE_INT64:
+      sint = strtol (value, NULL, 0);
+      hioi_manifest_set_signed_number (config, name, sint);
+      break;
+    case HIO_CONFIG_TYPE_UINT32:
+    case HIO_CONFIG_TYPE_UINT64:
+      usint = strtoul (value, NULL, 0);
+      hioi_manifest_set_number (config, name, usint);
+      break;
+    case HIO_CONFIG_TYPE_BOOL:
+    case HIO_CONFIG_TYPE_STRING:
+      hioi_manifest_set_string (config, name, value);
+      break;
+    }
+
+    free (value);
+  }
 
   hioi_manifest_set_number (top, HIO_MANIFEST_KEY_COMM_SIZE, (unsigned long) context->c_size);
   hioi_manifest_set_signed_number (top, HIO_MANIFEST_KEY_STATUS, (long) dataset->ds_status);
@@ -174,15 +210,15 @@ static json_object *hio_manifest_generate_simple_2_0 (hio_dataset_t dataset) {
  *
  * @returns json object representing the dataset's manifest
  */
-static json_object *hio_manifest_generate_2_0 (hio_dataset_t dataset) {
+static json_object *hio_manifest_generate_3_0 (hio_dataset_t dataset) {
   json_object *elements, *top;
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_element_t element;
   int rc;
 
-  top = hio_manifest_generate_simple_2_0 (dataset);
-  if (NULL == top || HIO_FILE_MODE_BASIC == dataset->ds_fmode) {
-    /* NTH: for now do not write elements for basic mode. this may change in future versions */
+  top = hio_manifest_generate_simple_3_0 (dataset);
+  if (NULL == top || 0 == hioi_list_length (&dataset->ds_elist)) {
+    /* nothing more to write */
     return top;
   }
 
@@ -298,9 +334,9 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
   int rc;
 
   if (simple) {
-    json_object = hio_manifest_generate_simple_2_0 (dataset);
+    json_object = hio_manifest_generate_simple_3_0 (dataset);
   } else {
-    json_object = hio_manifest_generate_2_0 (dataset);
+    json_object = hio_manifest_generate_3_0 (dataset);
   }
 
   if (NULL == json_object) {
@@ -476,7 +512,7 @@ static int hioi_manifest_parse_elements_2_0 (hio_dataset_t dataset, json_object 
 static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   json_object *elements_object;
-  unsigned long mode = 0, size;
+  unsigned long mode = 0, size, value;
   const char *tmp_string;
   long status;
   int rc;
@@ -566,6 +602,100 @@ static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object) 
   return hioi_manifest_parse_elements_2_0 (dataset, elements_object);
 }
 
+static int hioi_manifest_parse_3_0 (hio_dataset_t dataset, json_object *object) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
+  json_object *elements_object, *config;
+  unsigned long mode = 0, size, value;
+  const char *tmp_string;
+  long status;
+  int rc;
+
+  /* check for compatibility with this manifest version */
+  rc = hioi_manifest_get_string (object, HIO_MANIFEST_PROP_COMPAT, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (rc, &dataset->ds_object, "manifest missing required %s key",
+                   HIO_MANIFEST_PROP_COMPAT);
+    return rc;
+  }
+
+  if (strcmp ((char *) tmp_string, "3.0")) {
+    /* incompatible version */
+    return hioi_manifest_parse_2_0 (dataset, object);
+  }
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "compatibility version of manifest: %s",
+            (char *) tmp_string);
+
+  rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_DATASET_MODE, &tmp_string);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (rc, &dataset->ds_object, "manifest missing required %s key",
+                   HIO_MANIFEST_KEY_DATASET_MODE);
+    return rc;
+  }
+
+  if (0 == strcmp (tmp_string, "unique")) {
+    mode = HIO_SET_ELEMENT_UNIQUE;
+  } else if (0 == strcmp (tmp_string, "shared")) {
+    mode = HIO_SET_ELEMENT_SHARED;
+  } else {
+    hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object,
+                   "unknown dataset mode specified in manifest: %s", (const char *) tmp_string);
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if (mode != dataset->ds_mode) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object,
+                   "mismatch in dataset mode. requested: %d, actual: %d", mode,
+                   dataset->ds_mode);
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  if (HIO_SET_ELEMENT_UNIQUE == mode) {
+    /* verify that the same number of ranks are in use */
+    rc = hioi_manifest_get_number (object, HIO_MANIFEST_KEY_COMM_SIZE, &size);
+    if (HIO_SUCCESS != rc) {
+      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "manifest missing required %s key",
+                     HIO_MANIFEST_KEY_COMM_SIZE);
+      return HIO_ERR_BAD_PARAM;
+    }
+
+    if (size != context->c_size) {
+      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size does not match dataset",
+                     HIO_MANIFEST_KEY_COMM_SIZE);
+      return HIO_ERR_BAD_PARAM;
+    }
+  }
+
+
+  config = hioi_manifest_find_object (object, "config");
+  if (NULL != config) {
+    json_object_object_foreach (object, key, value) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "found manifest configuration key %s", key);
+      rc = hio_config_set_value (&dataset->ds_object, key, json_object_get_string (value));
+      if (HIO_SUCCESS != rc) {
+        hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "error parsing manifest configuration key: %s", key);
+      }
+    }
+  }
+
+  rc = hioi_manifest_get_signed_number (object, HIO_MANIFEST_KEY_STATUS, &status);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "manifest status key missing");
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  dataset->ds_status = status;
+
+  /* find and parse all elements covered by this manifest */
+  elements_object = hioi_manifest_find_object (object, "elements");
+  if (NULL == elements_object) {
+    /* no elements in this file */
+    return HIO_SUCCESS;
+  }
+
+  return hioi_manifest_parse_elements_2_0 (dataset, elements_object);
+}
+
 static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_header_t *header, json_object *object) {
   const char *tmp_string;
   unsigned long value;
@@ -580,7 +710,7 @@ static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_he
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "compatibility version of manifest: %s", (char *) tmp_string);
 
-  if (strcmp ((char *) tmp_string, "2.0")) {
+  if (strcmp (tmp_string, "2.0") && strcmp (tmp_string, "3.0")) {
     /* incompatible version */
     return HIO_ERROR;
   }
@@ -606,24 +736,6 @@ static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_he
   }
 
   header->ds_mode = value;
-
-  rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_FILE_MODE, &tmp_string);
-  if (HIO_SUCCESS != rc) {
-    hioi_err_push (HIO_ERR_BAD_PARAM, &context->c_object, "file mode was not specified in manifest");
-    return HIO_ERR_BAD_PARAM;
-  }
-
-  if (0 == strcmp ((const char *) tmp_string, "basic")) {
-    value = HIO_FILE_MODE_BASIC;
-  } else if (0 == strcmp ((const char *) tmp_string, "optimized")) {
-    value = HIO_FILE_MODE_OPTIMIZED;
-  } else {
-    hioi_err_push (HIO_ERR_BAD_PARAM, &context->c_object, "unrecognized file mode in manifest: %s",
-                  tmp_string);
-    return HIO_ERR_BAD_PARAM;
-  }
-
-  header->ds_fmode = value;
 
   rc = hioi_manifest_get_signed_number (object, HIO_MANIFEST_KEY_STATUS, &svalue);
 
@@ -730,7 +842,7 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data,
     return HIO_ERROR;
   }
 
-  rc = hioi_manifest_parse_2_0 (dataset, object);
+  rc = hioi_manifest_parse_3_0 (dataset, object);
   if (free_data) {
     free ((char *) data);
   }
