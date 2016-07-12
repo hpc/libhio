@@ -22,15 +22,6 @@ cmdw="
   /@@ Read and write N-N multi DS test case @/
   hi MY_CTX $HIO_TEST_ROOTS
 
-  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
-  hvp c. .
-  lc $nblk
-    hew 0 $blksz
-  le
-  hec hdc hdf
-
-  s 1
   hda NTN_DS 98 WRITE,CREAT UNIQUE hdo
   heo MY_EL WRITE,CREAT,TRUNC 20Mi
   hvp c. .
@@ -48,6 +39,15 @@ cmdw="
   le
   hec hdc hdf
 
+  s 1
+  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
+  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  hvp c. .
+  lc $nblk
+    hew 0 $blksz
+  le
+  hec hdc hdf
+
   hf mgf mf
 "
 
@@ -56,8 +56,8 @@ cmdr="
   /@@ Read and write N-N multi DS test case @/
   hi MY_CTX $HIO_TEST_ROOTS
 
-  hxdi 99
-  hda NTN_DS 99 READ UNIQUE hdo
+  hxdi 98
+  hda NTN_DS 98 READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .
   hck on
@@ -66,7 +66,7 @@ cmdr="
   le
   hec hdc hdf
 
-  hxdi 99
+  hxdi 97
   hda NTN_DS ID_NEWEST READ UNIQUE hdo
   heo MY_EL READ 20Mi
   hvp c. .

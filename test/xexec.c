@@ -396,7 +396,7 @@ void lfsr_22_byte(unsigned char * p, U64 len) {
 #if 0
 void lfsr_22_byte_init(void) {
   srandom(15485863); // The 1 millionth prime
-  for (int i = 1; i<sizeof(lfsr_state); ++i) {
+  for (int i = 0; i<sizeof(lfsr_state); ++i) {
     lfsr_state[i] = random() % 256;
   }
 }
@@ -469,6 +469,41 @@ void lfsr_test(void) {
   }
 }
 #endif
+
+//----------------------------------------------------------------------------
+// fread and fwrite with redrive
+//----------------------------------------------------------------------------
+ssize_t fwrite_rd (FILE *file, const void *ptr, size_t count) {
+  ssize_t actual, total = 0;
+
+  do {
+    actual = fwrite (ptr, 1, count, file);
+
+    if (actual > 0) {
+      total += actual;
+      count -= actual;
+      ptr = (void *) ((intptr_t) ptr + actual);
+    }
+  } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
+
+  return (actual < 0) ? actual: total;
+}
+
+ssize_t fread_rd (FILE *file, void *ptr, size_t count) {
+  ssize_t actual, total = 0;
+
+  do {
+    actual = fread (ptr, 1, count, file);
+
+    if (actual > 0) {
+      total += actual;
+      count -= actual;
+      ptr = (void *) ((intptr_t) ptr + actual);
+    }
+  } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
+
+  return (actual < 0) ? actual: total;
+}
 
 //----------------------------------------------------------------------------
 // If MPI & Rank 0, VERB1 message with collective min/mean/max/stddev/total
@@ -1426,7 +1461,9 @@ static hio_flags_t hio_dataset_flags;
 static hio_dataset_mode_t hio_dataset_mode;
 static char * hio_element_name;
 static U64 hio_element_hash;
-#define EL_HASH_MODULUS 65521 // A prime a little less than 2**16
+#define EL_HASH_MODULUS 65521     // A prime a little less than 2**16
+//#define EL_HASH_MODULUS 786431  // A prime about 75% of 2**20
+//#define EL_HASH_MODULUS 1048573 // A prime a little less that 2**20
 static hio_return_t hio_rc_exp = HIO_SUCCESS;
 static I64 hio_cnt_exp = HIO_CNT_REQ;
 static I64 hio_dsid_exp = -999;
@@ -1617,7 +1654,9 @@ ACTION_RUN(hew_run) {
   DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
   ETIMER_START(&hio_api_tmr);
-  hcnt = hio_element_write (element, ofs_abs, 0, wbuf + ( (ofs_abs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
+  void * expected = wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
+  DBG2("hew: hio_element_hash: 0x%lX  wbuf: 0x%lX expexted-wbuf: 0x%lX", hio_element_hash, wbuf, expected - wbuf);  
+  hcnt = hio_element_write (element, ofs_abs, 0, expected, 1, hreq);
   hio_hew_time += ETIMER_ELAPSED(&hio_api_tmr);
   HCNT_TEST(hio_element_write)
   rw_count[1] += hcnt;
@@ -1653,31 +1692,70 @@ ACTION_RUN(her_run) {
   if (hio_check) {
     void * expected =  wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
     void * mis_comp;
+    DBG2("her: hio_element_hash: 0x%lX  wbuf: 0x%lX expected-wbuf: 0x%lX", hio_element_hash, wbuf, expected - wbuf);  
     // Force error for unit test
-    // *(char *)(rbuf+27) = '\0';
-    if ((mis_comp = memdiff(rbuf, expected, hreq))) {
+    //*(char *)(rbuf+27) = '\0';
+    if ( ! (mis_comp = memdiff(rbuf, expected, hreq)) ) {
+      VERB3("hio_element_read data check successful");
+    } else {
+      // Read data miscompare - dump lots of data about it
       local_fails++;
       I64 offset = (char *)mis_comp - (char *)rbuf;
-      I64 dump_start = MAX(0, offset - 16);
-      VERB0("Error: hio_element_read data check miscompare; Read ofs: %lld Read size: %lld Miscomp ofs: %lld",
-             ofs_abs, hreq, offset);
+      I64 dump_start = MAX(0, offset - 16) & (~15);
+      VERB0("Error: hio_element_read data check miscompare");
+      VERB0("Element read offset: 0x%llX  %lld", ofs_abs, ofs_abs); 
+      VERB0("Element read length: 0x%llX  %lld", hreq, hreq); 
+      VERB0("      Read addresss: 0x%llX", rbuf); 
+      VERB0(" Miscompare address: 0x%llX", mis_comp); 
+      VERB0("  Miscompare offset: 0x%llX  %lld", mis_comp-rbuf, mis_comp-rbuf); 
 
-      VERB0("Miscompare expected data at offset %lld follows:", dump_start);
-      hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 32);
+      VERB0("Miscompare expected data at offset 0x%llX %lld follows:", dump_start, dump_start);
+      hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 96);
 
-      VERB0("Miscompare actual data at offset %lld follows:", dump_start);
-      hex_dump( rbuf + dump_start, 32);
+      VERB0("Miscompare actual data at offset 0x%llX %lld follows:", dump_start, dump_start);
+      hex_dump( rbuf + dump_start, 96);
 
-      VERB0("Read addr: 0x%lX  Exp addr: 0x%lX  Miscomp addr: 0x%lX", rbuf, expected, mis_comp);
-      VERB0("Expected ^ Actual follows:");
+      VERB0("XOR of Expected addr: 0x%lX  Miscomp addr: 0x%lX", expected, mis_comp);
       char * xorbuf = MALLOCX(hreq);
       for (int i=0; i<hreq; i++) {
         ((char *)xorbuf)[i] = ((char *)rbuf)[i] ^ ((char *)expected)[i];
       }
       hex_dump( xorbuf, hreq);
       FREEX(xorbuf);
-    } else {
-      VERB3("hio_element_read data check successful");
+
+      char * dw_path = getenv("DW_JOB_STRIPED");
+      if (dw_path) {
+        // Attempt to dump the datawarp physical file data directly (without HIO) 
+        // This works for the current version of HIO in basic mode, no guarantees
+        // going forward.
+        char path[512];
+        //                            root
+        //                               ctx    dsn
+        //                                         id              el_name
+        int len = snprintf(path, sizeof(path), "%s/%s.hio/%s/%lld/element_data.%s",
+                           dw_path, hio_context_name, hio_dataset_name,
+                           hio_ds_id_act, hio_element_name);
+        if (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) {
+          snprintf(path+len, sizeof(path)-len, ".%05d", myrank);
+        }
+
+        FILE * elf = fopen(path, "r");
+        if (!elf) {
+          VERB0("fopen(\"%s\", \"r\") failed, errno: %d", path, errno);
+        } else {
+          int rc = fseeko(elf, ofs_abs, SEEK_SET);
+          if (rc != 0 ) {
+            VERB0("fseek( , %llu, SEEK_SET) failed, errno: %d", ofs_abs, errno);
+          } else {
+            char * fbuf = MALLOCX(hreq);
+            ssize_t count = fread_rd(elf, fbuf, hreq);
+            if (count != hreq) VERB0("Warning: fread_rd count: %ld, request: %ld", count, hreq);
+            VERB0("File %s at offset 0x%lX:", path, ofs_abs);
+            hex_dump(fbuf, hreq);  
+            FREEX(fbuf);
+          }
+        } 
+      }
     }
   }
 }

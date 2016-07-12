@@ -494,6 +494,7 @@ if [[ $size == [[:digit:]]* ]]; then
   if [[ -n ${szarr[3]} ]]; then synexit "too many elements in size: \"$size\""; fi
 else
   case $size in
+    u ) blksz=$(( 32           )); totsz=$((  32           )); nseg=1;;
     t ) blksz=$((  1 * $cons_ki)); totsz=$((  10 * $cons_ki)); nseg=2;;
     s ) blksz=$(( 20 * $cons_ki)); totsz=$(( 160 * $cons_ki)); nseg=4;;
     m ) blksz=$((  1 * $cons_mi)); totsz=$(( 200 * $cons_mi)); nseg=8;;
