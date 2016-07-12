@@ -264,9 +264,9 @@ int hioi_context_create_modules (hio_context_t context) {
 
     rc = hioi_component_query (context, data_root, next_data_root, &module);
     if (HIO_SUCCESS != rc) {
-      hioi_err_push (rc, &context->c_object, "Could not find an hio io module for data root %s",
-                    data_root);
-      break;
+      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", data_root);
+      data_root = next_data_root;
+      continue;
     }
 
     /* the module may be used in this context. see if the dataset size needs to
@@ -277,8 +277,8 @@ int hioi_context_create_modules (hio_context_t context) {
 
     context->c_modules[num_modules++] = module;
     if (HIO_MAX_DATA_ROOTS <= num_modules) {
-      hioi_log (context, HIO_VERBOSE_WARN,
-                "Maximum number of IO modules (%d) reached for this context", HIO_MAX_DATA_ROOTS);
+      hioi_log (context, HIO_VERBOSE_WARN, "Maximum number of IO modules (%d) reached for this context",
+                HIO_MAX_DATA_ROOTS);
       break;
     }
     data_root = next_data_root;
