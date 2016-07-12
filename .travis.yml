@@ -17,14 +17,12 @@ addons:
             - automake
             - libtool
             - m4
-            - openmpi-bin
-            - openmpi-dev
 
 before_script:
     - if [[ "$TRAVIS_OS_NAME" == "osx" ]] ; then brew update ; brew install openmpi ; fi
-    - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then sudo apt-get -qq update ; sudo apt-get -qq install openmpi-bin ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then sudo apt-get -qq update ; sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1397BC53640DB551 ; sudo apt-get -qq install openmpi-bin libopenmpi-dev ; fi
 
 script:
     - ./autogen.sh && ./configure
     - make -j 8
-    - cd test ; make check
+    - cd test ; mkdir /tmp/test ; HIO_TEST_ROOTS=posix:/tmp/test make check

@@ -43,7 +43,7 @@ elif test ${MPICC} = "mpicc" ; then
     hio_use_mpi=1
 fi
 
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([serial-tests])
 LT_INIT
 
 HIO_CHECK_JSON
