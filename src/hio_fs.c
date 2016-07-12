@@ -51,9 +51,18 @@
 #include <sys/vfs.h>
 #endif
 
-static int hioi_fs_open_posix (const char *path, hio_fs_attr_t *fs_attr, int flags, int mode);
+#if HAVE_DATAWARP_H
 
-static int hioi_fs_open_posix (const char *path, hio_fs_attr_t *fs_attr, int flags, int mode) {
+#include <datawarp.h>
+
+/* datawarp does not yet provide a define for the filesystem magic so it
+ * is hard-coded here. remove this line if cray ever defines this. */
+#define DW_SUPER_MAGIC 0x3e3f
+
+#endif
+
+static int hioi_fs_open_posix (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr,
+			       int flags, int mode) {
 #pragma unused(fs_attr)
   int fd;
 
@@ -65,7 +74,8 @@ static int hioi_fs_open_posix (const char *path, hio_fs_attr_t *fs_attr, int fla
   return fd;
 }
 
-static int hioi_fs_open_lustre (const char *path, hio_fs_attr_t *fs_attr, int flags, int mode) {
+static int hioi_fs_open_lustre (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr,
+				int flags, int mode) {
 #if defined(LL_SUPER_MAGIC)
   struct lov_user_md lum;
   int rc, fd;
@@ -122,14 +132,51 @@ static int hioi_fs_open_lustre (const char *path, hio_fs_attr_t *fs_attr, int fl
 
   return hioi_err_errno (errno);
 #else
-  return hioi_fs_open_posix (path, fs_attr, flags, mode);
+  return hioi_fs_open_posix (context, path, fs_attr, flags, mode);
 #endif
 }
+
+static int hioi_fs_open_datawarp (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr,
+				  int flags, int mode) {
+#if defined(DW_SUPER_MAGIC)
+  struct lov_user_md lum;
+  int rc, fd;
+
+  fd = open (path, flags, mode);
+  if (-1 == fd && EEXIST == errno) {
+    flags &= ~O_CREAT;
+    fd = open (path, flags);
+    if (fd < 0) {
+      return hioi_err_errno (errno);
+    }
+
+    return fd;
+  }
+
+  if (fd >= 0) {
+    if (flags & O_CREAT) {
+      rc = dw_set_stripe_configuration (fd, fs_attr->fs_ssize, fs_attr->fs_scount);
+      if (0 != rc) {
+	hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "datawarp: could not set file striping parameters: "
+		  "errno = %d", -rc);
+      }
+    }
+
+    return fd;
+  }
+
+  return hioi_err_errno (errno);
+#else
+  return hioi_fs_open_posix (context, path, fs_attr, flags, mode);
+#endif
+}
+
 
 hio_fs_open_fn_t hio_fs_open_fns[HIO_FS_TYPE_MAX] = {
   hioi_fs_open_posix,
   hioi_fs_open_lustre,
   hioi_fs_open_posix,
+  hioi_fs_open_datawarp,
 };
 
 #if defined(LL_SUPER_MAGIC)
@@ -191,7 +238,7 @@ static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {
     return hioi_err_errno (errno);
   }
 
-  fs_attr->fs_flags |= HIO_FS_SUPPORTS_STRIPING;
+  fs_attr->fs_flags |= HIO_FS_SUPPORTS_STRIPING | HIO_FS_SUPPORTS_RAID;
   fs_attr->fs_type        = HIO_FS_TYPE_LUSTRE;
   fs_attr->fs_sunit       = 64 * 1024;
   fs_attr->fs_smax_size   = 0x100000000ul;
@@ -240,8 +287,104 @@ static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {
   return HIO_SUCCESS;
 }
 
+static int hioi_fs_set_stripe_lustre (const char *path, hio_fs_attr_t *fs_attr) {
+  struct lov_user_md lum;
+  int fd, rc;
+
+  fd = open (path, O_RDONLY);
+  if (0 > fd) {
+    return hioi_err_errno (errno);
+  }
+
+  errno = 0;
+
+  /* NTH: use the default layout/starting index for now */
+  lum.lmm_magic = LOV_USER_MAGIC;
+  switch (fs_attr->fs_raid_level) {
+  case 0:
+    lum.lmm_pattern = LOV_PATTERN_RAID0;
+    break;
+#if defined(LOV_PATTERN_RAID1)
+  case 1:
+    lum.lmm_pattern = LOV_PATTERN_RAID1;
+    break;
+#endif
+  default:
+    lum.lmm_pattern = 0;
+  }
+
+  lum.lmm_pattern = fs_attr->fs_raid_level;
+  lum.lmm_stripe_size = fs_attr->fs_ssize;
+  lum.lmm_stripe_count = fs_attr->fs_scount;
+  lum.lmm_stripe_offset = -1;
+
+  rc = ioctl (fd, LL_IOC_LOV_SETSTRIPE, &lum);
+
+  close (fd);
+
+  return hioi_err_errno (errno);
+}
 #endif
 
+#if HIO_USE_DATAWARP
+static int hioi_fs_query_datawarp (const char *path, hio_fs_attr_t *fs_attr) {
+  int stripe_size, stripe_width, rc, fd, start;
+
+  fd = open (path, O_RDONLY);
+  if (-1 == fd) {
+    return hioi_err_errno (errno);
+  }
+
+  rc = dw_get_stripe_configuration (fd, &stripe_size, &stripe_width, &start);
+  if (0 != rc) {
+    close (fd);
+    return hioi_err_errno (errno);
+  }
+
+  fs_attr->fs_flags |= HIO_FS_SUPPORTS_STRIPING;
+  fs_attr->fs_type        = HIO_FS_TYPE_DATAWARP;
+  fs_attr->fs_sunit       = 4096;
+  fs_attr->fs_smax_size   = 1ul << 34;
+  /* query returns the max stripe width not the current */
+  fs_attr->fs_smax_count  = stripe_width;
+  fs_attr->fs_scount      = stripe_width;
+  fs_attr->fs_ssize       = stripe_size;
+
+  return HIO_SUCCESS;
+}
+
+static int hioi_fs_set_stripe_datawarp (const char *path, hio_fs_attr_t *fs_attr) {
+  int fd, rc;
+
+  fd = open (path, O_RDONLY);
+  if (-1 == fd) {
+    return hioi_err_errno (errno);
+  }
+
+  rc = dw_set_stripe_configuration (fd, fs_attr->fs_ssize, fs_attr->fs_scount);
+
+  close (fd);
+
+  return hioi_err_errno (-rc);
+}
+#endif
+
+int hioi_fs_set_stripe (const char *path, hio_fs_attr_t *fs_attr) {
+  switch (fs_attr->fs_type) {
+#if HIO_USE_DATAWARP
+  case HIO_FS_TYPE_DATAWARP:
+    return hioi_fs_set_stripe_datawarp (path, fs_attr);
+#endif
+#if defined(LL_SUPER_MAGIC)
+  case HIO_FS_TYPE_LUSTRE:
+    return hioi_fs_set_stripe_lustre (path, fs_attr);
+#endif
+  default:
+    return HIO_ERR_NOT_AVAILABLE;
+  }
+
+  return HIO_ERR_NOT_AVAILABLE;
+}
 
 int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr) {
   struct statfs fsinfo;
@@ -299,6 +442,11 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
       /* panfs */
       break;
 #endif
+#if HIO_USE_DATAWARP
+    case DW_SUPER_MAGIC:
+      hioi_fs_query_datawarp (tmp, fs_attr);
+      break;
+#endif
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "filesystem query: path: %s, type: %d, flags: 0x%x, block size: %" PRIu64
@@ -319,6 +467,8 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
   }
 
   fs_attr->fs_open = hio_fs_open_fns[fs_attr->fs_type];
+  /* if this assert is hit the above array needs to be updated */
+  assert (NULL != fs_attr->fs_open);
 
   return HIO_SUCCESS;
 }

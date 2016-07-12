@@ -27,10 +27,12 @@ static hio_var_enum_t hioi_dataset_file_modes = {
 static hio_var_enum_value_t hioi_dataset_fs_type_enum_values[] = {
   {.string_value = "default", .value = HIO_FS_TYPE_DEFAULT},
   {.string_value = "lustre", .value = HIO_FS_TYPE_LUSTRE},
-  {.string_value = "gpfs", .value = HIO_FS_TYPE_GPFS}};
+  {.string_value = "gpfs", .value = HIO_FS_TYPE_GPFS},
+  {.string_value = "datawarp", .value = HIO_FS_TYPE_DATAWARP},
+};
 
 static hio_var_enum_t hioi_dataset_fs_type_enum = {
-  .count  = 3,
+  .count  = 4,
   .values = hioi_dataset_fs_type_enum_values,
 };
 

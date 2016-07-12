@@ -423,6 +423,17 @@ int hioi_context_generate_leader_list (hio_context_t context);
  */
 int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *attributes);
 
+/**
+ * @brief Set filesystem striping attributes on a path
+ *
+ * @param[in] path    filesystem path valid for fs_attr
+ * @param[in] fs_attr filesystem attributes to set
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_NOT_AVAILABLE on failure
+ */
+int hioi_fs_set_stripe (const char *path, hio_fs_attr_t *fs_attr);
+
 int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset);
 int hioi_dataset_close_internal (hio_dataset_t dataset);
 

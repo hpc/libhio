@@ -378,14 +378,16 @@ typedef enum hio_dataset_fmode {
 
 struct hio_fs_attr_t;
 
-typedef int (*hio_fs_open_fn_t) (const char *path, struct hio_fs_attr_t *fs_attr, int flags, int mode);
+typedef int (*hio_fs_open_fn_t) (hio_context_t context, const char *path, struct hio_fs_attr_t *fs_attr, int flags, int mode);
 
 #define HIO_FS_SUPPORTS_STRIPING 1
+#define HIO_FS_SUPPORTS_RAID     2
 
 enum {
   HIO_FS_TYPE_DEFAULT,
   HIO_FS_TYPE_LUSTRE,
   HIO_FS_TYPE_GPFS,
+  HIO_FS_TYPE_DATAWARP,
   HIO_FS_TYPE_MAX,
 };
 
