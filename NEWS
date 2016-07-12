@@ -1,7 +1,19 @@
 HIO NEWS
 ========
 
-Last updated 2016-06-18
+Last updated 2016-07-12
+
+Release hio.1.4.0.0-rc1
+
+This release brings further optimizations to libhio. There are now three
+file modes that can be used: basic, file_per_node, and strided. No change
+was made to basic mode but optimized mode was split into two. The first
+writes all element data to a single file associated with all processes on
+the node. The second writes data blocks for each element across multiple
+files. file_per_node is valid for both unique and shared datasets but
+strided mode is only valid for shared datasets. The default mode for
+shared datasets is has been changed from basic to strided. No change
+was made to the default file mode for unique datasets.
 
 Release hio.1.3.0.4
 
