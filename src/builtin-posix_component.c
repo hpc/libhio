@@ -367,6 +367,8 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
   /* set default stripe count */
   fs_attr->fs_scount = 1;
 
+  posix_dataset->ds_fcount = context->c_size;
+
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_STRIPING) {
     if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
       /* pick a reasonable default stripe size */
@@ -380,9 +382,21 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
        * a different stripe to maximize the available IO bandwidth */
       fs_attr->fs_scount = min(context->c_shared_size, fs_attr->fs_smax_count);
 #endif
+    } else if (HIO_FILE_MODE_STRIDED == posix_dataset->ds_fmode) {
+      /* pick a reasonable default stripe size */
+      fs_attr->fs_ssize = posix_dataset->ds_bs;
+
+      posix_dataset->ds_fcount = fs_attr->fs_smax_count * 32;
+      fs_attr->fs_scount = 16;
+      if (context->c_size < posix_dataset->ds_fcount) {
+        posix_dataset->ds_fcount = context->c_size;
+      }
     } else if (HIO_SET_ELEMENT_UNIQUE != dataset->ds_mode) {
       /* set defaults striping count */
+      fs_attr->fs_ssize = 1 << 20;
       fs_attr->fs_scount = max (1, (unsigned) ((float) fs_attr->fs_smax_count * 0.9));
+    } else {
+      fs_attr->fs_ssize = 1 << 20;
     }
 
     hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_scount,
@@ -447,6 +461,17 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   rc = builtin_posix_module_setup_striping (context, module, dataset);
   if (HIO_SUCCESS != rc) {
     return rc;
+  }
+
+  if (HIO_FILE_MODE_STRIDED == posix_dataset->ds_fmode) {
+    hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_fcount,
+                     "dataset_file_count", HIO_CONFIG_TYPE_UINT64, NULL, "Number of files to use "
+                     "in strided file mode", 0);
+  } else if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
+    posix_dataset->ds_use_bzip = true;
+    hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_use_bzip,
+                     "dataset_use_bzip", HIO_CONFIG_TYPE_BOOL, NULL,
+                     "Use bzip2 compression for dataset manifests", 0);
   }
 
   if (dataset->ds_flags & HIO_FLAG_TRUNC) {
@@ -753,6 +778,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
                                     char *path, hio_file_t *file) {
   hio_object_t hio_object = &posix_dataset->base.ds_object;
+  hio_context_t context = hioi_object_context (hio_object);
   hio_fs_attr_t *fs_attr = &posix_dataset->base.ds_fsattr;
   int open_flags, fd;
   char *file_mode;
@@ -910,37 +936,35 @@ static unsigned long builtin_posix_reserve (builtin_posix_module_dataset_t *posi
   return new_offset;
 }
 
-static int builtin_posix_element_translate_opt_old (builtin_posix_module_t *posix_module, hio_element_t element, off_t offset,
+static int builtin_posix_element_translate_strided (builtin_posix_module_t *posix_module, hio_element_t element, off_t offset,
                                                     size_t *size, hio_file_t **file_out) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
+  size_t block_id, block_base, block_bound, block_offset, file_id, file_block;
   hio_context_t context = hioi_object_context (&element->e_object);
-  size_t block_id, block_base, block_bound, block_offset;
   builtin_posix_file_t *file;
   int32_t file_index;
   char *path;
   int rc;
 
-  block_id = offset / posix_dataset->base.ds_bs;
-  block_base = block_id * posix_dataset->base.ds_bs;
-  block_bound = block_base + posix_dataset->base.ds_bs;
-  block_offset = offset - block_base;
+  block_id = offset / posix_dataset->ds_bs;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin_posix_element_translate: element: %s, offset: %lu, block_id: %lu, "
-            "block_offset: %lu, block_size: %llu", hioi_object_identifier(element), (unsigned long) offset,
-            block_id, block_offset, posix_dataset->base.ds_bs);
+  file_id = block_id % posix_dataset->ds_fcount;
+  file_block = block_id / posix_dataset->ds_fcount;
+
+  block_base = block_id * posix_dataset->ds_bs;
+  block_bound = block_base + posix_dataset->ds_bs;
+  block_offset = file_block * posix_dataset->ds_bs + offset - block_base;
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin_posix_element_translate_strided: element: %s, offset: %lu, "
+            "file_id: %d, file_block: %lu, block_offset: %lu, block_size: %llu", hioi_object_identifier(element),
+            (unsigned long) offset, file_id, file_id, block_offset, posix_dataset->ds_bs);
 
   if (offset + *size > block_bound) {
     *size = block_bound - offset;
   }
 
-  rc = asprintf (&path, "%s_block.%lu", hioi_object_identifier(element), (unsigned long) block_id);
-  if (0 > rc) {
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
-  char *tmp = path;
-  rc = asprintf (&path, "%s/%s", posix_dataset->base_path, tmp);
-  free (tmp);
+  rc = asprintf (&path, "%s/data/%s_block.%08lu", posix_dataset->base_path, hioi_object_identifier(element),
+                 (unsigned long) file_id);
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
@@ -964,10 +988,6 @@ static int builtin_posix_element_translate_opt_old (builtin_posix_module_t *posi
   }
 
   hioi_file_seek (&file->f_file, block_offset, SEEK_SET);
-
-  if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
-    hioi_element_add_segment (element, -1, block_offset, offset, *size);
-  }
 
   *file_out = &file->f_file;
 
@@ -1061,18 +1081,22 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
 static int builtin_posix_element_translate (builtin_posix_module_t *posix_module, hio_element_t element, off_t offset,
                                             size_t *size, hio_file_t **file_out, bool reading) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
+  int rc = HIO_SUCCESS;
 
-  if (HIO_FILE_MODE_BASIC == posix_dataset->base.ds_fmode) {
+  switch (posix_dataset->ds_fmode) {
+  case HIO_FILE_MODE_BASIC:
     *file_out = &element->e_file;
     hioi_file_seek (&element->e_file, offset, SEEK_SET);
-    return HIO_SUCCESS;
+    break;
+  case HIO_FILE_MODE_STRIDED:
+    rc = builtin_posix_element_translate_strided (posix_module, element, offset, size, file_out);
+    break;
+  case HIO_FILE_MODE_OPTIMIZED:
+    rc = builtin_posix_element_translate_opt (posix_module, element, offset, size, file_out, reading);
+    break;
   }
 
-  if (reading && 0 == element->e_scount) {
-    return builtin_posix_element_translate_opt_old (posix_module, element, offset, size, file_out);
-  }
-
-  return builtin_posix_element_translate_opt (posix_module, element, offset, size, file_out, reading);
+  return rc;
 }
 
 static ssize_t builtin_posix_module_element_write_strided_internal (builtin_posix_module_t *posix_module, hio_element_t element,
