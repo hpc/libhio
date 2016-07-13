@@ -213,6 +213,11 @@ int hio_dataset_open (hio_dataset_t dataset) {
     return HIO_ERR_BAD_PARAM;
   }
 
+  if (dataset->ds_flags & HIO_FLAG_TRUNC) {
+    /* ensure we take the create path later */
+    dataset->ds_flags |= HIO_FLAG_CREAT;
+  }
+
   context = hioi_object_context ((hio_object_t) dataset);
 
   if (HIO_DATASET_ID_HIGHEST == dataset->ds_id) {

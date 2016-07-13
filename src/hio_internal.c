@@ -181,7 +181,7 @@ void hioi_err_push (int hrc, hio_object_t object, char *format, ...) {
    }
 }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
 void hioi_err_push_mpi (int mpirc, hio_object_t object, char *format, ...) {
   hio_context_t context = object ? hioi_object_context (object) : NULL;
   hio_error_stack_item_t *new_item;
@@ -472,7 +472,7 @@ hio_context_t hioi_object_context (hio_object_t object) {
 }
 
 int hioi_string_scatter (hio_context_t context, char **string) {
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     int string_len;
 

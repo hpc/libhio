@@ -33,6 +33,7 @@ hio_element_t hioi_element_alloc (hio_dataset_t dataset, const char *name, const
 
   element->e_rank = rank;
   element->e_file.f_fd = -1;
+  element->e_index = -1;
 
   return element;
 }

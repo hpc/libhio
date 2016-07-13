@@ -12,7 +12,7 @@
 #if !defined(HIO_COMPONENT_H)
 #define HIO_COMPONENT_H
 
-#include "hio_types.h"
+#include "hio_config.h"
 
 #if defined(HAVE_STDINT_H)
 #include <stdint.h>
