@@ -191,6 +191,9 @@ static json_object *hio_manifest_generate_simple_3_0 (hio_dataset_t dataset) {
     case HIO_CONFIG_TYPE_STRING:
       hioi_manifest_set_string (config, name, value);
       break;
+    default:
+      /* ignore other types for now */
+      break;
     }
 
     free (value);
@@ -904,8 +907,8 @@ int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
   size_t manifest_size;
   int rc;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%llu from %s",
-	    dataset->ds_object.identifier, dataset->ds_id, path);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%" PRIu64
+            " from %s", dataset->ds_object.identifier, dataset->ds_id, path);
 
   rc = hioi_manifest_read (path, &manifest, &manifest_size);
   if (HIO_SUCCESS != rc) {

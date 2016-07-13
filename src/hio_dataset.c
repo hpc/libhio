@@ -419,8 +419,9 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
   uint64_t rotime = hioi_gettime ();
   int rc;
 
-  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%llu with flags 0x%x with backend module %p",
-            dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags, module);
+  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%" PRIu64 " with flags 0x%x "
+            "with backend module %p", dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags,
+            module);
 
   /* Several things need to be done here:
    * 1) check if the user is requesting a specific dataset or the newest available,
@@ -429,8 +430,8 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
    *    module to open (create) the dataset. */
   rc = module->dataset_open (module, dataset);
   if (HIO_SUCCESS != rc) {
-    hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%llu on data root %s",
-              dataset->ds_object.identifier, dataset->ds_id, module->data_root);
+    hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%" PRIu64
+              " on data root %s", dataset->ds_object.identifier, dataset->ds_id, module->data_root);
     return rc;
   }
 

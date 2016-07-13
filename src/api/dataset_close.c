@@ -30,7 +30,7 @@ int hio_dataset_close (hio_dataset_t dataset) {
 
   context = hioi_object_context (&dataset->ds_object);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%llu",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%" PRIu64,
             hioi_object_identifier (dataset), dataset->ds_id);
 
   tmp[0] = dataset->ds_stat.s_bread;

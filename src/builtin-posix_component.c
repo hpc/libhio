@@ -51,10 +51,11 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset);
 static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element_t element);
 static int builtin_posix_module_element_close (hio_element_t element);
 static int builtin_posix_module_element_write_strided_nb (hio_element_t element, hio_request_t *request,
-                                                          off_t offset, const void *ptr, size_t count,
+                                                          uint64_t offset, const void *ptr, size_t count,
                                                           size_t size, size_t stride);
-static int builtin_posix_module_element_read_strided_nb (hio_element_t element, hio_request_t *request, off_t offset,
-                                                         void *ptr, size_t count, size_t size, size_t stride);
+static int builtin_posix_module_element_read_strided_nb (hio_element_t element, hio_request_t *request,
+                                                         uint64_t offset, void *ptr, size_t count, size_t size,
+                                                         size_t stride);
 static int builtin_posix_module_element_flush (hio_element_t element, hio_flush_mode_t mode);
 static int builtin_posix_module_element_complete (hio_element_t element);
 static int builtin_posix_module_process_reqs (hio_dataset_t dataset, hio_internal_request_t **reqs, int req_count);
@@ -622,8 +623,9 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
 
   stop = hioi_gettime ();
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully %s posix dataset %s:%llu on data root %s. "
-            "open time %llu usec", (dataset->ds_flags & HIO_FLAG_CREAT) ? "created" : "opened", hioi_object_identifier(dataset),
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully %s posix dataset "
+            "%s:%" PRIu64 " on data root %s. open time %" PRIu64 " usec",
+            (dataset->ds_flags & HIO_FLAG_CREAT) ? "created" : "opened", hioi_object_identifier(dataset),
             dataset->ds_id, module->data_root, stop - start);
 
   return HIO_SUCCESS;
@@ -727,8 +729,9 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
 
   stop = hioi_gettime ();
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully closed posix dataset %s:%llu on data root %s. "
-            "close time %llu usec", hioi_object_identifier(dataset), dataset->ds_id, module->data_root, stop - start);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully closed posix dataset "
+            "%s:%" PRIu64 " on data root %s. close time %" PRIu64 " usec", hioi_object_identifier(dataset),
+            dataset->ds_id, module->data_root, stop - start);
 
   return rc;
 }
@@ -756,7 +759,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
     return hioi_err_errno (errno);
   }
 
-  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "posix: unlinking existing dataset %s::%llu",
+  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "posix: unlinking existing dataset %s::%" PRId64,
             name, set_id);
 
   /* use tree walk depth-first to remove all of the files for this dataset */
@@ -932,8 +935,8 @@ static unsigned long builtin_posix_reserve (builtin_posix_module_dataset_t *posi
   return new_offset;
 }
 
-static int builtin_posix_element_translate_strided (builtin_posix_module_t *posix_module, hio_element_t element, off_t offset,
-                                                    size_t *size, hio_file_t **file_out) {
+static int builtin_posix_element_translate_strided (builtin_posix_module_t *posix_module, hio_element_t element,
+                                                    uint64_t offset, size_t *size, hio_file_t **file_out) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
   size_t block_id, block_base, block_bound, block_offset, file_id, file_block;
   hio_context_t context = hioi_object_context (&element->e_object);
@@ -951,9 +954,9 @@ static int builtin_posix_element_translate_strided (builtin_posix_module_t *posi
   block_bound = block_base + posix_dataset->ds_bs;
   block_offset = file_block * posix_dataset->ds_bs + offset - block_base;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin_posix_element_translate_strided: element: %s, offset: %lu, "
-            "file_id: %d, file_block: %lu, block_offset: %lu, block_size: %llu", hioi_object_identifier(element),
-            (unsigned long) offset, file_id, file_id, block_offset, posix_dataset->ds_bs);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin_posix_element_translate_strided: element: %s, offset: %"
+            PRIu64 ", file_id: %lu, file_block: %lu, block_offset: %lu, block_size: %" PRIu64,
+            hioi_object_identifier(element), offset, file_id, file_id, block_offset, posix_dataset->ds_bs);
 
   if (offset + *size > block_bound) {
     *size = block_bound - offset;
@@ -990,8 +993,9 @@ static int builtin_posix_element_translate_strided (builtin_posix_module_t *posi
   return HIO_SUCCESS;
 }
 
-static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_module, hio_element_t element, off_t offset,
-                                                size_t *size, hio_file_t **file_out, bool reading) {
+static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_module, hio_element_t element,
+                                                uint64_t offset, size_t *size, hio_file_t **file_out,
+                                                bool reading) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
   hio_context_t context = hioi_object_context (&element->e_object);
   builtin_posix_file_t *file;
@@ -1001,7 +1005,7 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
   char *path;
   int rc;
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "translating element %s offset %lld size %lu",
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "translating element %s offset %" PRIu64 " size %lu",
             hioi_object_identifier (&element->e_object), offset, *size);
   rc = hioi_element_translate_offset (element, offset, &file_index, &file_offset, size);
 #if HIO_MPI_HAVE(3)
@@ -1012,7 +1016,7 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
 
   if (HIO_SUCCESS != rc) {
     if (reading) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset %lld not found", offset);
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset %" PRIu64 " not found", offset);
       /* not found */
       return rc;
     }
@@ -1032,8 +1036,8 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
 
     hioi_element_add_segment (element, file_index, file_offset, offset, *size);
   } else {
-    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset found in file @ rank %d, offset %llu, size %lu", file_index,
-              file_offset, *size);
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "offset found in file @ rank %d, offset %" PRIu64
+              ", size %lu", file_index, file_offset, *size);
     rc = asprintf (&path, "%s/data/data.%x", posix_dataset->base_path, file_index);
     if (0 > rc) {
       return HIO_ERR_OUT_OF_RESOURCE;
@@ -1074,8 +1078,8 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
   return HIO_SUCCESS;
 }
 
-static int builtin_posix_element_translate (builtin_posix_module_t *posix_module, hio_element_t element, off_t offset,
-                                            size_t *size, hio_file_t **file_out, bool reading) {
+static int builtin_posix_element_translate (builtin_posix_module_t *posix_module, hio_element_t element,
+                                            uint64_t offset, size_t *size, hio_file_t **file_out, bool reading) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
   int rc = HIO_SUCCESS;
 
@@ -1096,7 +1100,7 @@ static int builtin_posix_element_translate (builtin_posix_module_t *posix_module
 }
 
 static ssize_t builtin_posix_module_element_write_strided_internal (builtin_posix_module_t *posix_module, hio_element_t element,
-                                                                    off_t offset, const void *ptr, size_t count, size_t size,
+                                                                    uint64_t offset, const void *ptr, size_t count, size_t size,
                                                                     size_t stride) {
   hio_dataset_t dataset = hioi_element_dataset (element);
   size_t bytes_written = 0, ret;
@@ -1132,7 +1136,7 @@ static ssize_t builtin_posix_module_element_write_strided_internal (builtin_posi
       }
 
       hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
-                "posix: writing %lu bytes to file offset %llu", actual, file->f_offset);
+                "posix: writing %lu bytes to file offset %" PRIu64, actual, file->f_offset);
 
       ret = hioi_file_write (file, ptr, actual);
       if (ret > 0) {
@@ -1177,14 +1181,15 @@ static ssize_t builtin_posix_module_element_write_strided_internal (builtin_posi
     dataset->ds_stat.s_bwritten += bytes_written;
   }
 
-  hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_LOW, "posix: finished write. bytes written: "
-            "%lu, time: %llu usec", bytes_written, stop - start);
+  hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_LOW,
+            "posix: finished write. bytes written: %lu, time: %" PRIu64 " usec",
+            bytes_written, stop - start);
 
   return bytes_written;
 }
 
 static ssize_t builtin_posix_module_element_read_strided_internal (builtin_posix_module_t *posix_module, hio_element_t element,
-                                                                   off_t offset, void *ptr, size_t count, size_t size,
+                                                                   uint64_t offset, void *ptr, size_t count, size_t size,
                                                                    size_t stride) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
   size_t bytes_read = 0, ret;

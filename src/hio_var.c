@@ -153,7 +153,7 @@ static int hioi_config_set_value_internal (hio_context_t context, hio_var_t *var
     }
 
     if (found) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting enumeration value to %llu", intval);
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting enumeration value to %" PRIu64, intval);
     } else {
       hioi_log (context, HIO_VERBOSE_WARN, "Invalid enumeration value provided for variable %s. Got %s",
                 var->var_name, strval);
