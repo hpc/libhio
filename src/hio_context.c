@@ -37,7 +37,7 @@ static void hioi_context_release (hio_object_t object) {
   hioi_config_list_release (&context->c_fconfig);
 
   /* clean up any mpi resources */
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (context->c_use_mpi) {
     int rc;
 
@@ -52,7 +52,7 @@ static void hioi_context_release (hio_object_t object) {
   free (context->c_dw_root);
 #endif
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   if (MPI_COMM_NULL != context->c_shared_comm) {
     MPI_Comm_free (&context->c_shared_comm);
   }
@@ -134,7 +134,7 @@ static hio_context_t hio_context_alloc (const char *identifier) {
   new_context->c_size = 1;
   hio_context_msg_id(new_context, 0); 
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   new_context->c_shared_comm = MPI_COMM_NULL;
   new_context->c_shared_size = 1;
   new_context->c_shared_rank = 0;
@@ -189,7 +189,7 @@ static int hioi_context_scatter (hio_context_t context) {
   return HIO_SUCCESS;
 }
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
 int hioi_context_generate_leader_list (hio_context_t context) {
   int color = (0 == context->c_shared_rank) ? 0 : MPI_UNDEFINED;
   MPI_Comm leader_comm;
@@ -400,8 +400,8 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
   return HIO_SUCCESS;
 }
 
-#if HIO_USE_MPI
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(1)
+#if HIO_MPI_HAVE(3)
 static int hioi_context_init_shared (hio_context_t context) {
   int shared_rank, shared_size;
   MPI_Comm shared_comm;
@@ -433,7 +433,7 @@ static int hioi_context_init_shared (hio_context_t context) {
 
   return HIO_SUCCESS;
 }
-#endif /* HAVE_MPI_COMM_SPLIT_TYPE */
+#endif /* HIO_MPI_HAVE(3) */
 
 int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config_file,
                   const char *config_file_prefix, const char *context_name) {
@@ -480,7 +480,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
     return rc;
   }
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   rc = hioi_context_init_shared (context);
   if (HIO_SUCCESS != rc) {
     hioi_object_release (&context->c_object);

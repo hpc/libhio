@@ -456,7 +456,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
     }
   }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     MPI_Bcast (&data_size, 1, MPI_UNSIGNED, 0, context->c_comm);
   }
@@ -484,7 +484,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
     close (fd);
   }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     MPI_Bcast (buffer, data_size, MPI_BYTE, 0, context->c_comm);
   }

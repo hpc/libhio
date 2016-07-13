@@ -181,7 +181,7 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
     num_set_ids = set_id_index;
   } while (0);
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     MPI_Bcast (&num_set_ids, 1, MPI_INT, 0, context->c_comm);
   }
@@ -204,7 +204,7 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
     assert (NULL != *headers);
   }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     MPI_Bcast (*headers, sizeof (**headers) * num_set_ids, MPI_BYTE, 0, context->c_comm);
   }
@@ -220,6 +220,7 @@ static int manifest_index_compare (const void *a, const void *b) {
   return ia - ib;
 }
 
+#if HIO_MPI_HAVE(3)
 static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_dataset_t *posix_dataset, int **manifest_ids, size_t *count) {
   hio_context_t context = hioi_object_context (&posix_dataset->base.ds_object);
   int num_manifest_ids = 0, manifest_id_index = 0, manifest_id;
@@ -231,7 +232,6 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
   *manifest_ids = NULL;
   *count = 0;
 
-#if HIO_USE_MPI
   rc = hioi_context_generate_leader_list (context);
   if (HIO_SUCCESS != rc) {
     return rc;
@@ -240,7 +240,6 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
   if (0 != context->c_shared_rank) {
     return HIO_SUCCESS;
   }
-#endif
 
   do {
     if (0 != context->c_rank) {
@@ -288,7 +287,6 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
     closedir (dir);
   }
 
-#if HIO_USE_MPI
   num_manifest_ids /= context->c_node_count;
 
   MPI_Bcast (&num_manifest_ids, 1, MPI_INT, 0, context->c_node_leader_comm);
@@ -302,14 +300,12 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
   }
 
   free (tmp);
-#else
-  *manifest_ids = tmp;
-#endif
 
   *count = num_manifest_ids;
 
   return HIO_SUCCESS;
 }
+#endif /* HIO_MPI_HAVE(3) */
 
 static int builtin_posix_module_dataset_init (struct hio_module_t *module,
                                               builtin_posix_module_dataset_t *posix_dataset) {
@@ -377,7 +373,7 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
       /* use group locking if available as we guarantee stripe exclusivity in optimized mode */
       fs_attr->fs_use_group_locking = true;
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
       /* if group locking is not available then each rank should attempt to write to
        * a different stripe to maximize the available IO bandwidth */
       fs_attr->fs_scount = min(context->c_shared_size, fs_attr->fs_smax_count);
@@ -512,7 +508,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     }
   }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   /* share dataset header will all processes in the communication domain */
   rc = hioi_dataset_scatter_comm (dataset, context->c_comm, manifest, manifest_size, rc);
 #endif
@@ -522,6 +518,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     return rc;
   }
 
+#if HIO_MPI_HAVE(3)
   if (!(dataset->ds_flags & HIO_FLAG_CREAT) && HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     size_t manifest_id_count = 0;
     int *manifest_ids;
@@ -581,7 +578,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       free (manifest_ids);
     }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
     /* share dataset information with all processes on this node */
     rc = hioi_dataset_scatter_comm (dataset, context->c_shared_comm, manifest, manifest_size, rc);
 #endif
@@ -592,12 +589,10 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     }
   }
 
-#if HAVE_MPI_WIN_ALLOCATE_SHARED
   /* if possible set up a shared memory window for this dataset */
   if (hioi_context_using_mpi (context) && HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     hioi_dataset_shared_init (dataset);
   }
-#endif
 
   if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     if (2 > context->c_size || NULL == dataset->ds_shared_control) {
@@ -605,16 +600,17 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
       posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
       hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: optimized file mode requested but not supported in this "
                 "dataset mode. falling back to basic file mode, path: %s", posix_dataset->base_path);
-#if HAVE_MPI_COMM_SPLIT_TYPE
     } else if (HIO_SET_ELEMENT_SHARED == dataset->ds_mode) {
       rc = hioi_dataset_generate_map (dataset);
       if (HIO_SUCCESS != rc) {
         free (posix_dataset->base_path);
         return rc;
       }
-#endif
     }
   }
+
+  /* NTH: if requested more code is needed to load an optimized dataset with an older MPI */
+#endif /* HIO_MPI_HAVE(3) */
 
   dataset->ds_module = module;
   dataset->ds_close = builtin_posix_module_dataset_close;
@@ -660,7 +656,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
     pthread_mutex_unlock (&dataset->ds_shared_control->s_stripes[stripe].s_mutex);
   }
 
-#if HAVE_MPI_WIN_ALLOCATE_SHARED
+#if HIO_MPI_HAVE(3)
   /* release the shared state if it was allocated */
   (void) hioi_dataset_shared_fini (dataset);
 
@@ -693,7 +689,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
       }
     }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(3)
     if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
       /* optimized mode requires a data manifest to describe how the data landed on the filesystem */
       rc = hioi_dataset_gather_manifest_comm (dataset, context->c_shared_comm, &manifest, &manifest_size,
@@ -720,7 +716,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
 #endif
   }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   /* ensure all ranks have closed the dataset before continuing */
   if (hioi_context_using_mpi (context)) {
     MPI_Allreduce (MPI_IN_PLACE, &rc, 1, MPI_INT, MPI_MIN, context->c_comm);
@@ -836,7 +832,7 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  if (access (path)) {
+  if (access (path, R_OK)) {
     /* fall back on old naming scheme */
     if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
       rc = asprintf (&path, "%s/element_data.%s.%08d", posix_dataset->base_path, element_name,
@@ -1008,7 +1004,7 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "translating element %s offset %lld size %lu",
             hioi_object_identifier (&element->e_object), offset, *size);
   rc = hioi_element_translate_offset (element, offset, &file_index, &file_offset, size);
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   if (HIO_SUCCESS != rc && reading) {
     rc = hioi_dataset_map_translate_offset (element, offset, &file_index, &file_offset, size);
   }
@@ -1043,7 +1039,7 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    if (access (path, O_RDONLY)) {
+    if (access (path, R_OK)) {
       free (path);
       rc = asprintf (&path, "%s/data.%x", posix_dataset->base_path, file_index);
       if (0 > rc) {

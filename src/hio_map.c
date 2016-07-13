@@ -11,6 +11,8 @@
 
 #include "hio_internal.h"
 
+#if HIO_MPI_HAVE(3)
+
 #include <stdlib.h>
 #include <string.h>
 #include <alloca.h>
@@ -666,3 +668,5 @@ int hioi_dataset_map_translate_offset (hio_element_t element, uint64_t app_offse
 
   return HIO_SUCCESS;
 }
+
+#endif

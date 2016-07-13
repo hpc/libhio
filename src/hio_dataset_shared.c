@@ -70,7 +70,7 @@ int hioi_dataset_buffer_flush (hio_dataset_t dataset) {
   return rc;
 }
 
-#if HAVE_MPI_WIN_ALLOCATE_SHARED
+#if HIO_MPI_HAVE(3)
 
 int hioi_dataset_shared_init (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
@@ -154,4 +154,4 @@ int hioi_dataset_shared_fini (hio_dataset_t dataset) {
   return HIO_SUCCESS;
 }
 
-#endif /* HAVE_MPI_WIN_ALLOCATE_SHARED */
+#endif /* HIO_MPI_HAVE(3) */

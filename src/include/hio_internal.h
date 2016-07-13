@@ -18,8 +18,8 @@
 #define HIO_INTERNAL_H
 
 #include "hio_config.h"
-
 #include "hio_types.h"
+#include "hio_var.h"
 
 #include <stddef.h>
 #include <inttypes.h>
@@ -260,7 +260,7 @@ void hioi_object_release (hio_object_t object);
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
                                   int flags, hio_dataset_mode_t mode);
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
 /**
  * @brief scatter dataset configuration to all processes in a communicator
  *
@@ -281,7 +281,7 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsig
 int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out, bool compress_data,
                                   bool simple);
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
 int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, unsigned char **data_out, size_t *data_size_out,
                                        bool compress_data, bool simple);
 #endif
@@ -395,14 +395,14 @@ int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *head
 /* context functions */
 
 static inline bool hioi_context_using_mpi (hio_context_t context) {
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   return context->c_use_mpi;
 #endif
 
   return false;
 }
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
 int hioi_context_generate_leader_list (hio_context_t context);
 #endif
 
@@ -559,11 +559,13 @@ void hioi_file_flush (hio_file_t *file);
 #define hioi_timed_call(call) call
 #endif
 
+#if HIO_MPI_HAVE(3)
 /* functions to build/search the manifest map */
 int hioi_dataset_generate_map (hio_dataset_t dataset);
 int hioi_dataset_map_release (hio_dataset_t dataset);
 int hioi_dataset_map_translate_offset (hio_element_t element, uint64_t app_offset, int *file_index,
                                        uint64_t *offset, size_t *length);
+#endif
 
 /* internal version of hio_config_get_info that doesn't strdup the name */
 int hioi_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,

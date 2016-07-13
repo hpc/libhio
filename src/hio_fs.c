@@ -457,7 +457,7 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
 
   } while (0);
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     MPI_Bcast (fs_attr, sizeof (*fs_attr), MPI_BYTE, 0, context->c_comm);
   }

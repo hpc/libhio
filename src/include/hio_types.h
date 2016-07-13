@@ -12,8 +12,15 @@
 #if !defined(HIO_TYPES_H)
 #define HIO_TYPES_H
 
-#include "hio_var.h"
+#if HIO_USE_MPI
+#include <mpi.h>
+#endif
+
+#include "hio.h"
+
 #include "hio_component.h"
+
+#define HIO_MPI_HAVE(v) (defined(MPI_VERSION) && MPI_VERSION >= (v))
 
 #if defined(HAVE_SYS_TIME_H)
 #include <sys/time.h>
@@ -243,6 +250,79 @@ typedef enum {
   HIO_OBJECT_TYPE_ANY,
 } hio_object_type_t;
 
+enum {
+  /** default flag: read-write variable */
+  HIO_VAR_FLAG_DEFAULT  = 0,
+  /** variable is not constant but is read-only */
+  HIO_VAR_FLAG_READONLY = 1,
+  /** variable value will never change (informational) */
+  HIO_VAR_FLAG_CONSTANT = 2,
+};
+
+typedef union hio_var_value_t {
+  bool     boolval;
+  char    *strval;
+  int32_t  int32val;
+  uint32_t uint32val;
+  int64_t  int64val;
+  uint64_t uint64val;
+  float    floatval;
+  double   doubleval;
+} hio_var_value_t;
+
+typedef struct hio_config_kv_t {
+  int object_type;
+  char *object_identifier;
+
+  char *key;
+  char *value;
+} hio_config_kv_t;
+
+typedef struct hio_config_kv_list_t {
+  hio_config_kv_t *kv_list;
+  size_t kv_list_count;
+  size_t kv_list_size;
+} hio_config_kv_list_t;
+
+typedef struct hio_var_enum_value_t {
+    /** string to match */
+    char *string_value;
+
+    /** corresponding value */
+    int value;
+} hio_var_enum_value_t;
+
+typedef struct hio_var_enum_t {
+  /** number of values */
+  int count;
+  /** value array */
+  hio_var_enum_value_t *values;
+} hio_var_enum_t;
+
+typedef struct hio_var_t {
+  /** unique name for this variable (allocated) */
+  char             *var_name;
+  /** basic type */
+  hio_config_type_t var_type;
+  /** location where this variable is stored */
+  hio_var_value_t  *var_storage;
+  /** variable flags (read only, etc) */
+  int               var_flags;
+  /** brief description (allocated) */
+  const char       *var_description;
+  /** variable enumerator (integer types only) */
+  const hio_var_enum_t *var_enum;
+} hio_var_t;
+
+typedef struct hio_var_array_t {
+  /** array of configurations */
+  hio_var_t *vars;
+  /** current number of valid configurations */
+  int        var_count;
+  /** current size of configuration array */
+  int        var_size;
+} hio_var_array_t;
+
 /**
  * Base of all hio objects
  */
@@ -278,7 +358,7 @@ struct hio_object {
 struct hio_context {
   struct hio_object c_object;
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   /** internal communicator for this context */
   MPI_Comm          c_comm;
   bool              c_use_mpi;
@@ -321,7 +401,7 @@ struct hio_context {
   #endif
 #endif
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   MPI_Comm           c_shared_comm;
   int                c_shared_size;
   int                c_shared_rank;
@@ -429,8 +509,9 @@ typedef struct hio_buffer_t {
   size_t     b_remaining;
 } hio_buffer_t;
 
+#if HIO_MPI_HAVE(3)
 /**
- * Data structure for hio dataset maps
+ * Data structure for hio dataset map
  */
 typedef struct hio_dataset_map_data_t {
   /** global number of entries */
@@ -449,6 +530,7 @@ typedef struct hio_dataset_map_t {
   /** segment window */
   hio_dataset_map_data_t map_segments;
 } hio_dataset_map_t;
+#endif /* HIO_MPI_HAVE(3) */
 
 /**
  * Data structure for control block in shared memory
@@ -519,10 +601,11 @@ struct hio_dataset {
 
   hio_buffer_t        ds_buffer;
 
-#if HAVE_MPI_WIN_ALLOCATE_SHARED
+#if HIO_MPI_HAVE(3)
   MPI_Win             ds_shared_win;
   hio_dataset_map_t   ds_map;
 #endif
+
   hio_shared_control_t *ds_shared_control;
 
   /** close the dataset and free any internal resources */

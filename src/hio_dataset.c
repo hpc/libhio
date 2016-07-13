@@ -118,7 +118,7 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   new_dataset->ds_mode = mode;
   new_dataset->ds_close = hioi_dataset_close_stub;
   new_dataset->ds_element_open = hioi_dataset_element_open_stub;
-#if HAVE_MPI_WIN_ALLOCATE_SHARED
+#if HIO_MPI_HAVE(3)
   new_dataset->ds_shared_win = MPI_WIN_NULL;
   new_dataset->ds_map.map_elements.md_win = MPI_WIN_NULL;
   new_dataset->ds_map.map_segments.md_win = MPI_WIN_NULL;
@@ -188,7 +188,7 @@ hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *da
   return NULL;
 }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
 int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, unsigned char **data_out, size_t *data_size_out,
                                        bool compress_data, bool simple) {
   hio_context_t context = (hio_context_t) dataset->ds_object.parent;
@@ -276,7 +276,7 @@ int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, uns
 
 int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out,
                                   bool compress_data, bool simple) {
-#if HIO_USING_MPI
+#if HIO_MPI_HAVE(1)
   hio_context_t context = hioi_object_context (&dataset->ds_object);
 
   return hioi_dataset_gather_manifest_comm (dataset, context->c_comm, data_out, data_size_out, compress_data, simple);
@@ -285,7 +285,7 @@ int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_ou
 #endif
 }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
 int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsigned char *manifest, size_t manifest_size, int rc) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   int rank;
@@ -412,7 +412,7 @@ static int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned ch
   return rc;
 }
 
-#endif /* HIO_USE_MPI */
+#endif /* HIO_MPI_HAVE(1) */
 
 int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
   /* get timestamp before open call */

@@ -60,7 +60,7 @@ int hio_dataset_close (hio_dataset_t dataset) {
       ds_data->dd_average_write_time += (uint64_t) ((float) dataset->ds_stat.s_wtime * 0.2);
     }
   }
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (1 != context->c_size) {
     MPI_Reduce (0 == context->c_rank ? MPI_IN_PLACE : tmp, tmp, 6, MPI_UINT64_T, MPI_SUM, 0, context->c_comm);
   }
