@@ -84,6 +84,7 @@ typedef enum H5FD_hio_io_t {
   H5FD_HIO_DATASET_UNIQUE
 } H5FD_hio_io_t;
 
+#define HIO_FILE_NAME_SIZE 1024
 #define HIO_ELEM_NAME_SIZE 256
 #define HIO_CONFIG_FILE_SIZE 128
 #define HIO_CONFIG_PREFIX_SIZE 256
@@ -95,11 +96,13 @@ typedef struct hio_settings_t {
   int dataset_mode;
   size_t stride_size;
   hio_request_t *request;
+  char name[HIO_FILE_NAME_SIZE];
   char element_name[HIO_ELEM_NAME_SIZE];
   char config_file[HIO_CONFIG_FILE_SIZE];
   char config_prefix[HIO_CONFIG_PREFIX_SIZE];
   MPI_Comm comm;
   int64_t setid;
+  int flags;
 } hio_settings_t;  
 
 H5_DLL hid_t H5FD_hio_init(void);
