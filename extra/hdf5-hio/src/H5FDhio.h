@@ -124,12 +124,12 @@ H5_DLL void H5FD_hio_settings_init(hio_settings_t *);
    * \param settings a pointer to the settings structure
    * \param read_blocking H5FD_HIO_BLOCKING or H5FD_HIO_NONBLOCKING
    */
-H5_DLL void H5FD_hio_set_read_blocking(hio_settings_t *settings, H5FD_hio_io_t read_blocking);
+  //H5_DLL void H5FD_hio_set_read_blocking(hio_settings_t *settings, H5FD_hio_io_t read_blocking);
   /** Set the HIO write blocking mode
    * \param settings a pointer to the settings structure
    * \param write_blocking H5FD_HIO_BLOCKING or H5FD_HIO_NONBLOCKING
    */
-H5_DLL void H5FD_hio_set_write_blocking(hio_settings_t *settings, H5FD_hio_io_t write_blocking);
+  //H5_DLL void H5FD_hio_set_write_blocking(hio_settings_t *settings, H5FD_hio_io_t write_blocking);
   /** Set the HIO read IO mode
    * \param settings a pointer to the settings structure
    * \param read_io_mode H5FD_HIO_STRIDED or H5FD_HIO_CONTIGUOUS
@@ -144,7 +144,7 @@ H5_DLL void H5FD_hio_set_write_io(hio_settings_t *settings, H5FD_hio_io_t write_
    * \param settings a pointer to the settings structure
    * \param request a pointer to an HIO request for async operations
    */
-H5_DLL void H5FD_hio_set_request(hio_settings_t *settings, hio_request_t *request);
+  //H5_DLL void H5FD_hio_set_request(hio_settings_t *settings, hio_request_t *request);
   /** Set the HIO element name
    * \param settings a pointer to the settings structure
    * \param elem_name The element name to use
