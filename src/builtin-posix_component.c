@@ -101,8 +101,6 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
     rc = hioi_fs_set_stripe (path, &posix_dataset->base.ds_fsattr);
     if (HIO_SUCCESS != rc) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: could not set file system striping on %s", path);
-      /* re-check the striping parameters */
-      (void) hioi_fs_query (context, path, &posix_dataset->base.ds_fsattr);
     }
   }
 
