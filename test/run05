@@ -18,9 +18,10 @@ batch_sub $(( $ranks * $blksz * $nblk ))
 cmdw="
   name run05w v $verbose_lev d $debug_lev mi 0
   /@@ Create and reuse N-N dataset - i.e., ensure TRUNC works @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
   hda NTN_DS 97 WRITE,CREAT,TRUNC UNIQUE hdo
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   hvp c. .
   lc $nblk
     hew 0 $blksz
@@ -31,9 +32,10 @@ cmdw="
 cmdr="
   name run05r v $verbose_lev d $debug_lev mi 0
   /@@ Create and reuse N-N dataset - i.e., ensure TRUNC works @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
   hda NTN_DS 97 READ UNIQUE hdo
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nblk

@@ -22,9 +22,10 @@ batch_sub $(( $ranks * $blkszM * $nblkM ))
 cmdw="
   name run12w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write random N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
   hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   hvp c. .
   srr 100
   lcr $nblk $nblkM
@@ -36,9 +37,10 @@ cmdw="
 cmdr="
   name run12r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write random N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
   hda NTN_DS 97 READ UNIQUE hdo
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   srr 100

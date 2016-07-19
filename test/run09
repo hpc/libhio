@@ -27,12 +27,13 @@ batch_sub $(( 3 * $ranks * $blksz * $nblk ))
 cmdw="
   name run09w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
   hi MYCTX $HIO_TEST_ROOTS
 
   hda NTNDS 98 WRITE,CREAT UNIQUE hdo
   hvsd datawarp_stage_mode immediate
   hvp c. .
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   lc $nblk
     hew 0 $blksz
   le
@@ -43,7 +44,7 @@ cmdw="
   hda NTNDS 97 WRITE,CREAT UNIQUE hdo
   hvsd datawarp_stage_mode immediate
   hvp c. .
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   lc $nblk
     hew 0 $blksz
   le
@@ -54,7 +55,7 @@ cmdw="
   hda NTNDS 96 WRITE,CREAT UNIQUE hdo
   hvsd datawarp_stage_mode immediate
   hvp c. .
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   lc $nblk
     hew 0 $blksz
   le
@@ -66,12 +67,13 @@ cmdw="
 cmdr="
   name run09r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
   hi MYCTX $HIO_TEST_ROOTS
 
   hxdi 97
   hvp c. .
   hda NTNDS 97 READ UNIQUE hdo
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nblk
@@ -81,7 +83,7 @@ cmdr="
 
   hxdi 98
   hda NTNDS ID_HIGHEST READ UNIQUE
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nblk
@@ -91,7 +93,7 @@ cmdr="
 
   qof 2 hxdi 96
   hda NTNDS ID_NEWEST READ UNIQUE hdo
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nblk

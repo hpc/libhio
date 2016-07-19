@@ -19,10 +19,11 @@ batch_sub $(( $ranks * $blksz * $nblkpseg * $nseg ))
 cmdw="
   name run03w v $verbose_lev d $debug_lev mi 0
   /@@ Write N-1 test case @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
   hdu NT1_DS 98 ALL
   hda NT1_DS 98 WRITE,CREAT SHARED hdo
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   hvp c. .
   lc $nseg
     hsegr 0 $segsz 0
@@ -36,9 +37,10 @@ cmdw="
 cmdr="
   name run03r v $verbose_lev d $debug_lev mi 32
   /@@ Read N-1 test case with data checking @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
   hda NT1_DS 98 READ SHARED hdo
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nseg

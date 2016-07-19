@@ -20,10 +20,20 @@ batch_sub $(( 3 * $ranks * $blksz * $nblk ))
 cmdw="
   name run20w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write N-N multi DS test case @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
 
+  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
+  heo MY_EL WRITE,CREAT,TRUNC
+  hvp c. .
+  lc $nblk
+    hew 0 $blksz
+  le
+  hec hdc hdf
+
+  s 1
   hda NTN_DS 98 WRITE,CREAT UNIQUE hdo
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   hvp c. .
   lc $nblk
     hew 0 $blksz
@@ -32,16 +42,7 @@ cmdw="
 
   s 1
   hda NTN_DS 99 WRITE,CREAT UNIQUE hdo
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
-  hvp c. .
-  lc $nblk
-    hew 0 $blksz
-  le
-  hec hdc hdf
-
-  s 1
-  hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
-  heo MY_EL WRITE,CREAT,TRUNC 20Mi
+  heo MY_EL WRITE,CREAT,TRUNC
   hvp c. .
   lc $nblk
     hew 0 $blksz
@@ -54,11 +55,12 @@ cmdw="
 cmdr="
   name run20r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N multi DS test case @/
+  dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
 
-  hxdi 98
-  hda NTN_DS 98 READ UNIQUE hdo
-  heo MY_EL READ 20Mi
+  hxdi 99
+  hda NTN_DS 99 READ UNIQUE hdo
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nblk
@@ -66,9 +68,9 @@ cmdr="
   le
   hec hdc hdf
 
-  hxdi 97
+  hxdi 99
   hda NTN_DS ID_NEWEST READ UNIQUE hdo
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nblk
@@ -78,7 +80,7 @@ cmdr="
 
   hxdi 99
   hda NTN_DS ID_HIGHEST READ UNIQUE hdo
-  heo MY_EL READ 20Mi
+  heo MY_EL READ
   hvp c. .
   hck on
   lc $nblk
