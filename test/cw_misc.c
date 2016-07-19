@@ -335,7 +335,7 @@ void hex_dump(void *data, int size) {
            skipped = 0;
         }
         /* print rest of buffer if not empty */
-        printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
+        printf("[%6.6s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
     }
 }
 
@@ -527,7 +527,7 @@ I64 GetCPUaffinity(void) {
 //    eng_not(buf, sizeof(buf), 0.00835, "D5.4", "Sec") returns "8.3500 mSec" 
 //-------------------------------------------------------------------------------
 char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
-  static const char *pref[] = {"y", "z", "a", "f", "p", "n", "u", "m", "", 
+  static const char *pref[] = {"y", "z", "a", "f", "p", "n", "u", "m", " ", 
                                "k", "M", "G", "T", "P", "E", "Z", "Y"};
   int zofs = 8; // pref[8] is the empty prefix "" for multiplier 1.0 
   double lval, mant;

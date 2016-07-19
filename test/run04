@@ -27,7 +27,7 @@ fails="
   /@@ 1. Basic successful function @/
     hi MY_CTX $HIO_TEST_ROOTS
     hda NTN_DS 97 WRITE,CREAT UNIQUE hdo
-    heo MY_EL WRITE,CREAT,TRUNC 20Mi
+    heo MY_EL WRITE,CREAT,TRUNC
     hvp c. .
     hec hdc hdf hf
 
@@ -61,7 +61,7 @@ fails="
 
   /@@ 6. HEO without HDO @/
     hxrc ERR_BAD_PARAM
-    heo MY_EL WRITE,CREAT,TRUNC 20Mi
+    heo MY_EL WRITE,CREAT,TRUNC
 
   /@@ 7. HI, HDA READ HDO non-existent DS ID  @/
     hi MY_CTX $HIO_TEST_ROOTS

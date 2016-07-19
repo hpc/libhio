@@ -27,6 +27,8 @@ typedef  int64_t I64;
 typedef uint32_t U32;
 typedef  int32_t I32;
 #define DIM1(array) ( sizeof(array) / sizeof(array[0]) )
+#define BDYUP(x, pwr2) ((unsigned)(x+pwr2-1) & ~((unsigned)pwr2-1))
+#define BDYDN(x, pwr2) ((unsigned)(x ) & ~((unsigned)pwr2-1))
 #ifndef MAX
   #define MAX(a,b) ( (a) > (b) ? (a) : (b) )
 #endif

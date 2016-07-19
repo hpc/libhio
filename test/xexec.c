@@ -159,6 +159,9 @@ char * help =
   "  dls <symbol>  Issue dlsym for specified symbol in most recently opened library\n"
   "  dlc           Issue dlclose for most recently opened library\n"
   #endif // DLFCN
+  "  dbuf RAND22 | RAND22P | OFS20  <size>  Allocates and initializes data buffer\n"
+  "                with pattern used for read data check.  Write and read patterns\n"
+  "                must match.\n"
   #ifdef HIO
   "  hi  <name> <data_root>  Init hio context\n"
   "  hda <name> <id> <flags> <mode> Dataset allocate\n"
@@ -297,6 +300,13 @@ ACTION * actv;
 MSG_CONTEXT my_msg_context;
 #define MY_MSG_CTX (&my_msg_context)
 
+// Common read / write buffer pointers, etc.  Set by dbuf action.
+static void * wbuf_ptr = NULL;
+static void * rbuf_ptr = NULL;
+static size_t rwbuf_len = 0;  // length not counting pattern overun area
+static U64 wbuf_hash_mod;  // Element hash modulus
+static U64 wbuf_bdy;
+
 //----------------------------------------------------------------------------
 // Common subroutines and macros
 //----------------------------------------------------------------------------
@@ -393,27 +403,24 @@ void lfsr_22_byte(unsigned char * p, U64 len) {
   }
 }
 
-#if 0
 void lfsr_22_byte_init(void) {
   srandom(15485863); // The 1 millionth prime
   for (int i = 0; i<sizeof(lfsr_state); ++i) {
     lfsr_state[i] = random() % 256;
   }
 }
-#else
-void lfsr_22_byte_init(void) {
+
+void lfsr_22_byte_init_p(void) {
   // Use a very simple PRNG to initialize lfsr_state
   int prime = 15485863; // The 1 millionth prime
   lfsr_state[0] = 0xA5;
   for (int i = 1; i<sizeof(lfsr_state); ++i) {
     lfsr_state[i] = (lfsr_state[i-1] * prime) % 256;
   }
-
   // Cycle a few times to mix things up
   unsigned char t[1000];
   lfsr_22_byte(t, sizeof(t));
 }
-#endif
 
 # if 1
 void lfsr_test(void) {
@@ -509,26 +516,69 @@ ssize_t fread_rd (FILE *file, void *ptr, size_t count) {
 // If MPI & Rank 0, VERB1 message with collective min/mean/max/stddev/total
 // Always VERB2 local value message
 //----------------------------------------------------------------------------
+struct mm_val_s {
+  double val;
+  char id[24];
+};
+
+struct min_max_s {
+  struct mm_val_s min;
+  struct mm_val_s max;
+};
+
+void min_max_who(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype) {
+  for (int j=0; j<*len; ++j) {
+    struct min_max_s *vi = ((struct min_max_s *)invec) + j;
+    struct min_max_s *vo = ((struct min_max_s *)inoutvec) + j;
+
+    if ( (*vi).min.val < (*vo).min.val ) {
+      (*vo).min = (*vi).min;
+    }
+    if ( (*vi).max.val > (*vo).max.val ) {
+      (*vo).max = (*vi).max;
+    }
+  }
+}
+
 void prt_mmmst(double val, char * desc, char * unit) {
   #ifdef MPI
     if (mpi_size > 0) {
-      double sum, mean, min, max, diff, sumdiff, sd;
+      double sum, mean, diff, sumdiff, sd;
+      struct min_max_s mm, mmr;
+      MPI_Datatype mmtype;
+      MPI_Op mmw_op;
+
+      // Set up MPI data type and op
+      MPI_CK( MPI_Type_contiguous(sizeof(struct min_max_s), MPI_BYTE, &mmtype) );
+      MPI_CK( MPI_Type_commit(&mmtype) );
+      MPI_CK( MPI_Op_create(min_max_who, true, & mmw_op) );
+
       // Use two pass method to calculate variance
-      MPI_CK(MPI_Allreduce(&val, &sum, 1, MPI_DOUBLE, MPI_SUM, mpi_comm));
+      MPI_CK( MPI_Allreduce(&val, &sum, 1, MPI_DOUBLE, MPI_SUM, mpi_comm) );
       mean = sum/(double)mpi_size;
       diff = (val - mean) * (val - mean);
-      MPI_CK(MPI_Reduce(&diff, &sumdiff, 1, MPI_DOUBLE, MPI_SUM, 0, mpi_comm));
+      MPI_CK( MPI_Reduce(&diff, &sumdiff, 1, MPI_DOUBLE, MPI_SUM, 0, mpi_comm) );
       sd = sqrt(sumdiff / mpi_size);
+
       // Get min, max
-      MPI_CK(MPI_Reduce(&val, &min, 1, MPI_DOUBLE, MPI_MIN, 0, mpi_comm));
-      MPI_CK(MPI_Reduce(&val, &max, 1, MPI_DOUBLE, MPI_MAX, 0, mpi_comm));
+      mm.min.val = mm.max.val = val;
+      strncpy(mm.min.id, id_string, sizeof(mm.min.id)); 
+      mm.min.id[sizeof(mm.min.id)-1] = '\0';
+      char * p = strchr(mm.min.id, ' ');
+      if (p) *p = '\0';
+      strncpy(mm.max.id, mm.min.id, sizeof(mm.max.id)); 
+      MPI_CK( MPI_Reduce(&mm, &mmr, 1, mmtype, mmw_op, 0, mpi_comm) );
+      MPI_CK( MPI_Type_free(&mmtype) );
+      MPI_CK( MPI_Op_free(&mmw_op) );
+
       char b1[32], b2[32], b3[32], b4[32], b5[32];
-      if (0 == myrank) VERB1("%s mean/min/max/s/tot: %s %s %s %s %s %s", desc,
+      if (0 == myrank) VERB1("%s mean/min/max/s/tot: %s %s %s %s %s %s   min/max: %s %s", desc,
                              eng_not(b1, sizeof(b1), mean, "D6.4", ""),
-                             eng_not(b2, sizeof(b2), min,  "D6.4", ""),
-                             eng_not(b3, sizeof(b3), max,  "D6.4", ""),
+                             eng_not(b2, sizeof(b2), mmr.min.val,  "D6.4", ""), 
+                             eng_not(b3, sizeof(b3), mmr.max.val,  "D6.4", ""), 
                              eng_not(b4, sizeof(b4), sd,   "D6.4", ""),
-                             eng_not(b5, sizeof(b5), sum,  "D6.4", ""), unit);
+                             eng_not(b5, sizeof(b5), sum,  "D6.4", ""), unit,
+                             mmr.min.id, mmr.max.id);
     }
   #endif
 
@@ -548,12 +598,15 @@ ACTION_RUN(ztest_run) {
   char * s2 = V2.s; 
   char * s3 = V3.s; 
 
-  VERB0("nothing to see here, move along");
+  VERB0("Nothing to see here, move along");
 
   //char buf[32];
   //printf("eng_not(%lg, %s, %s) --> \"%s\"\n", d1, s2, s3, eng_not(buf, sizeof(buf), d1, s2, s3));
 
-  //lfsr_test(); 
+  //lfsr_test();
+
+  //prt_mmmst((double) myrank, "rank", "");
+ 
 }
 
 //----------------------------------------------------------------------------
@@ -787,6 +840,75 @@ ACTION_RUN(le_run) {
     default:
       ERRX("%s: internal error le_run invalid looptype %d", A.desc, lcur->type);
   }
+}
+
+//----------------------------------------------------------------------------
+// dbuf action handler
+//----------------------------------------------------------------------------
+enum dbuf_type {RAND22P, RAND22, OFS20};
+ENUM_START(etab_dbuf)  // Write buffer type
+ENUM_NAME("RAND22P", RAND22P)
+ENUM_NAME("RAND22", RAND22)
+ENUM_NAME("OFS20",  OFS20)
+ENUM_END(etab_dbuf, 0, NULL)
+
+#define PRIME_LT_64KI    65521 // A prime a little less than 2**16
+#define PRIME_75PCT_2MI 786431 // A prime about 75% of 2**20
+#define PRIME_LT_2MI   1048573 // A prime a little less that 2**20
+
+void dbuf_init(enum dbuf_type type, U64 size) {
+  rwbuf_len = size;
+  int rc;
+  size_t extra;
+
+  FREEX(wbuf_ptr);
+  FREEX(rbuf_ptr);
+
+  switch (type) {
+    case RAND22P:
+      extra = LFSR_22_CYCLE;
+      wbuf_bdy = 1;
+      wbuf_hash_mod = PRIME_LT_64KI;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + extra);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + extra, strerror(rc));
+      lfsr_22_byte_init_p();
+      lfsr_22_byte(wbuf_ptr, rwbuf_len + extra);
+      break;
+    case RAND22:
+      extra = LFSR_22_CYCLE;
+      wbuf_bdy = 1;
+      wbuf_hash_mod = PRIME_LT_2MI;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + extra);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + extra, strerror(rc));
+      lfsr_22_byte_init();
+      lfsr_22_byte(wbuf_ptr, rwbuf_len + extra);
+      break;
+    case OFS20:
+      extra = 1024 * 1024;
+      wbuf_bdy = sizeof(uint32_t); 
+      wbuf_hash_mod = 1024 * 1024;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + extra);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + extra, strerror(rc));
+      for (long i = 0; i<(rwbuf_len+extra)/sizeof(uint32_t); ++i) {
+        ((uint32_t *)wbuf_ptr)[i] = i * sizeof(uint32_t);
+      }
+      break;
+  }
+
+  rbuf_ptr = MALLOCX(rwbuf_len);
+
+  DBG3("dbuf_init type: %s size: %lld wbuf_ptr: 0x%lX",              \
+        enum_name(MY_MSG_CTX, &etab_dbuf, type), size, wbuf_ptr);  
+  IFDBG3( hex_dump(wbuf_ptr, 32) );                                             
+
+}
+
+ACTION_CHECK(dbuf_check) {
+  rwbuf_len = V1.u;
+}
+
+ACTION_RUN(dbuf_run) {
+  dbuf_init(V0.i, V1.u);
 }
 
 //----------------------------------------------------------------------------
@@ -1462,23 +1584,18 @@ static hio_dataset_mode_t hio_dataset_mode;
 static char * hio_element_name;
 static U64 hio_element_hash;
 #define EL_HASH_MODULUS 65521     // A prime a little less than 2**16
-//#define EL_HASH_MODULUS 786431  // A prime about 75% of 2**20
-//#define EL_HASH_MODULUS 1048573 // A prime a little less that 2**20
 static hio_return_t hio_rc_exp = HIO_SUCCESS;
 static I64 hio_cnt_exp = HIO_CNT_REQ;
 static I64 hio_dsid_exp = -999;
 static int hio_dsid_exp_set = 0;
 static int hio_fail = 0;
-static void * wbuf = NULL, *rbuf = NULL;
-static U64 bufsz = 0;
 static int hio_check = 0;
 static U64 hio_e_ofs;
 static I64 hseg_start = 0;
 static U64 rw_count[2];
-static ETIMER hio_hdaf_tmr, hio_api_tmr;
+static ETIMER hio_hdaf_tmr, local_tmr;
 double hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_her_time,
        hio_hec_time, hio_hdc_time, hio_hdf_time, hio_exc_time;
-
 
 #define HRC_TEST(API_NAME)  {                                                                \
   local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);           \
@@ -1542,9 +1659,9 @@ ACTION_RUN(hda_run) {
   DBG2("Calling hio_datset_alloc(context, &dataset, %s, %lld, %d(%s), %d(%s))", hio_dataset_name, hio_ds_id_req,
         hio_dataset_flags, V2.s, hio_dataset_mode, V3.s);
   ETIMER_START(&hio_hdaf_tmr);
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_alloc (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
-  hio_hda_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hda_time += ETIMER_ELAPSED(&local_tmr);
   DBG2("hda_run: dataset: %p", dataset);
   HRC_TEST(hio_dataset_alloc);
 }
@@ -1554,9 +1671,9 @@ ACTION_RUN(hda_run) {
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
   DBG2("calling hio_dataset_open(%p)", dataset);
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_open (dataset);
-  hio_hdo_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hdo_time += ETIMER_ELAPSED(&local_tmr);
   HRC_TEST(hio_dataset_open);
   if (HIO_SUCCESS == hrc) {
     hrc = hio_dataset_get_id(dataset, &hio_ds_id_act);
@@ -1576,38 +1693,30 @@ ACTION_RUN(hdo_run) {
 }
 
 ACTION_CHECK(heo_check) {
-  bufsz = V2.u;
+  if (rwbuf_len == 0) rwbuf_len = 20 * 1024 * 1024;
 }
 
 ACTION_RUN(heo_run) {
   hio_return_t hrc;
   hio_element_name = V0.s;
   int flag_i = V1.i;
-  bufsz = V2.u;
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_element_open (dataset, &element, hio_element_name, flag_i);
-  hio_heo_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_heo_time += ETIMER_ELAPSED(&local_tmr);
   HRC_TEST(hio_element_open)
 
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
+  if (! wbuf_ptr ) dbuf_init(RAND22P, 20 * 1024 * 1024); 
 
-  int rc = posix_memalign((void * *)&wbuf, 4096, bufsz + LFSR_22_CYCLE);
-  if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", bufsz + LFSR_22_CYCLE, strerror(rc));
-  lfsr_22_byte_init();
-  lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE);
-
-  rbuf = MALLOCX(bufsz);
-  hio_e_ofs = 0;
-
-  // Calculate element hash which is added to the offset for read verification
   char * hash_str = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
                                  hio_ds_id_act, hio_element_name,
                                  (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) ? myrank: 0);
-  hio_element_hash = crc32(0, hash_str, strlen(hash_str)) % EL_HASH_MODULUS;
+  hio_element_hash = BDYDN(crc32(0, hash_str, strlen(hash_str)) % wbuf_hash_mod, wbuf_bdy);
   DBG4("heo hash: \"%s\" 0x%04X", hash_str, hio_element_hash);
   FREEX(hash_str);
-  hio_exc_time += ETIMER_ELAPSED(&hio_api_tmr);
 
+  hio_e_ofs = 0;
+  hio_exc_time += ETIMER_ELAPSED(&local_tmr);
 }
 
 ACTION_RUN(hso_run) {
@@ -1623,7 +1732,7 @@ ACTION_RUN(hck_run) {
 
 ACTION_CHECK(hew_check) {
   U64 size = V1.u;
-  if (size > bufsz) ERRX("%s; size > bufsz", A.desc);
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
 }
 
 ACTION_RUN(hsega_run) {
@@ -1653,11 +1762,11 @@ ACTION_RUN(hew_run) {
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
-  ETIMER_START(&hio_api_tmr);
-  void * expected = wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
-  DBG2("hew: hio_element_hash: 0x%lX  wbuf: 0x%lX expexted-wbuf: 0x%lX", hio_element_hash, wbuf, expected - wbuf);  
+  void * expected = wbuf_ptr + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
+  DBG2("hew: hio_element_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", hio_element_hash, wbuf_ptr, expected - wbuf_ptr);  
+  ETIMER_START(&local_tmr);
   hcnt = hio_element_write (element, ofs_abs, 0, expected, 1, hreq);
-  hio_hew_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hew_time += ETIMER_ELAPSED(&local_tmr);
   HCNT_TEST(hio_element_write)
   rw_count[1] += hcnt;
 }
@@ -1671,7 +1780,7 @@ ACTION_RUN(hewr_run) {
 
 ACTION_CHECK(her_check) {
   U64 size = V1.u;
-  if (size > bufsz) ERRX("%s; size > bufsz", A.desc);
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
 }
 
 ACTION_RUN(her_run) {
@@ -1683,45 +1792,48 @@ ACTION_RUN(her_run) {
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("her el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
-  ETIMER_START(&hio_api_tmr);
-  hcnt = hio_element_read (element, ofs_abs, 0, rbuf, 1, hreq);
-  hio_her_time += ETIMER_ELAPSED(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
+  hcnt = hio_element_read (element, ofs_abs, 0, rbuf_ptr, 1, hreq);
+  hio_her_time += ETIMER_ELAPSED(&local_tmr);
   HCNT_TEST(hio_element_read)
   rw_count[0] += hcnt;
 
   if (hio_check) {
-    void * expected =  wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
+    ETIMER_START(&local_tmr);
+    void * expected =  wbuf_ptr + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
     void * mis_comp;
-    DBG2("her: hio_element_hash: 0x%lX  wbuf: 0x%lX expected-wbuf: 0x%lX", hio_element_hash, wbuf, expected - wbuf);  
+    DBG2("her: hio_element_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", hio_element_hash, wbuf_ptr, expected - wbuf_ptr);  
     // Force error for unit test
-    //*(char *)(rbuf+27) = '\0';
-    if ( ! (mis_comp = memdiff(rbuf, expected, hreq)) ) {
+    // *(char *)(rbuf_ptr+16) = '\0';
+    if ( ! (mis_comp = memdiff(rbuf_ptr, expected, hreq)) ) {
       VERB3("hio_element_read data check successful");
     } else {
       // Read data miscompare - dump lots of data about it
       local_fails++;
-      I64 offset = (char *)mis_comp - (char *)rbuf;
+      I64 offset = (char *)mis_comp - (char *)rbuf_ptr;
       I64 dump_start = MAX(0, offset - 16) & (~15);
       VERB0("Error: hio_element_read data check miscompare");
       VERB0("Element read offset: 0x%llX  %lld", ofs_abs, ofs_abs); 
       VERB0("Element read length: 0x%llX  %lld", hreq, hreq); 
-      VERB0("      Read addresss: 0x%llX", rbuf); 
+      VERB0("      Read addresss: 0x%llX", rbuf_ptr); 
       VERB0(" Miscompare address: 0x%llX", mis_comp); 
-      VERB0("  Miscompare offset: 0x%llX  %lld", mis_comp-rbuf, mis_comp-rbuf); 
+      VERB0("  Miscompare offset: 0x%llX  %lld", mis_comp-rbuf_ptr, mis_comp-rbuf_ptr); 
+
+      VERB0("Debug: wbuf_ptr addr: 0x%lX:", wbuf_ptr); hex_dump(wbuf_ptr, 32);
 
       VERB0("Miscompare expected data at offset 0x%llX %lld follows:", dump_start, dump_start);
-      hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 96);
+      hex_dump( wbuf_ptr + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 96);
 
       VERB0("Miscompare actual data at offset 0x%llX %lld follows:", dump_start, dump_start);
-      hex_dump( rbuf + dump_start, 96);
+      hex_dump( rbuf_ptr + dump_start, 96);
 
       VERB0("XOR of Expected addr: 0x%lX  Miscomp addr: 0x%lX", expected, mis_comp);
-      char * xorbuf = MALLOCX(hreq);
+      char * xorbuf_ptr = MALLOCX(hreq);
       for (int i=0; i<hreq; i++) {
-        ((char *)xorbuf)[i] = ((char *)rbuf)[i] ^ ((char *)expected)[i];
+        ((char *)xorbuf_ptr)[i] = ((char *)rbuf_ptr)[i] ^ ((char *)expected)[i];
       }
-      hex_dump( xorbuf, hreq);
-      FREEX(xorbuf);
+      hex_dump( xorbuf_ptr, hreq);
+      FREEX(xorbuf_ptr);
 
       char * dw_path = getenv("DW_JOB_STRIPED");
       if (dw_path) {
@@ -1732,7 +1844,7 @@ ACTION_RUN(her_run) {
         //                            root
         //                               ctx    dsn
         //                                         id              el_name
-        int len = snprintf(path, sizeof(path), "%s/%s.hio/%s/%lld/element_data.%s",
+        int len = snprintf(path, sizeof(path), "%s/%s.hio/%s/%"PRIi64"/element_data.%s",
                            dw_path, hio_context_name, hio_dataset_name,
                            hio_ds_id_act, hio_element_name);
         if (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) {
@@ -1753,10 +1865,13 @@ ACTION_RUN(her_run) {
             VERB0("File %s at offset 0x%lX:", path, ofs_abs);
             hex_dump(fbuf, hreq);  
             FREEX(fbuf);
+            rc = fclose(elf); 
+            if (rc != 0) VERB0("fclose failed rc: %d errno: %d", rc, errno);
           }
         } 
       }
     }
+    hio_exc_time += ETIMER_ELAPSED(&local_tmr);
   }
 }
 
@@ -1769,44 +1884,55 @@ ACTION_RUN(herr_run) {
 
 ACTION_RUN(hec_run) {
   hio_return_t hrc;
+  ETIMER_START(&local_tmr);
   hrc = hio_element_close(&element);
-  ETIMER_START(&hio_api_tmr);
-  HRC_TEST(hio_elemnt_close)
-  hio_hec_time += ETIMER_ELAPSED(&hio_api_tmr);
-  ETIMER_START(&hio_api_tmr);
-  wbuf = FREEX(wbuf);
-  rbuf = FREEX(rbuf);
-  hio_exc_time += ETIMER_ELAPSED(&hio_api_tmr);
-  bufsz = 0;
+  hio_hec_time += ETIMER_ELAPSED(&local_tmr);
+  HRC_TEST(hio_element_close)
 }
 
 #define GIGBIN (1024.0 * 1024.0 * 1024.0)
 
 ACTION_RUN(hdc_run) {
   hio_return_t hrc;
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_close(dataset);
-  hio_hdc_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hdc_time += ETIMER_ELAPSED(&local_tmr);
   HRC_TEST(hio_dataset_close)
 }
 
 ACTION_RUN(hdf_run) {
   hio_return_t hrc;
   DBG3("Calling hio_dataset_free(%p); dataset: %p", &dataset, dataset);
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_free(&dataset);
-  hio_hdf_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hdf_time += ETIMER_ELAPSED(&local_tmr);
+  ETIMER_START(&local_tmr);
   MPI_CK(MPI_Barrier(mpi_comm));
+  double bar_time = ETIMER_ELAPSED(&local_tmr);
   double hdaf_time = ETIMER_ELAPSED(&hio_hdaf_tmr);
+  HRC_TEST(hio_dataset_close)
   U64 rw_count_sum[2];
   MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   DBG3("After hio_dataset_free(); dataset: %p", dataset);
   IFDBG3( hex_dump(&dataset, sizeof(dataset)) );
-  HRC_TEST(hio_dataset_close)
-  double una_time = hdaf_time - (hio_hda_time + hio_hdo_time + hio_heo_time + hio_hew_time +
-                                 hio_her_time + hio_hec_time + hio_hdc_time + hio_hdf_time + hio_exc_time);
+  double una_time = hdaf_time - (hio_hda_time + hio_hdo_time + hio_heo_time + hio_hew_time + hio_her_time
+                                 + hio_hec_time + hio_hdc_time + hio_hdf_time + bar_time + hio_exc_time);
   VERB2("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
   VERB2("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
+  
+  prt_mmmst(hio_hda_time, " hio_dataset_allocate time", "S");
+  prt_mmmst(hio_hdo_time, "     hio_dataset_open time", "S");
+  prt_mmmst(hio_heo_time, "     hio_element_open time", "S");
+  prt_mmmst(hio_hew_time, "    hio_element_write time", "S");
+  prt_mmmst(hio_her_time, "     hio_element_read time", "S");
+  prt_mmmst(hio_hec_time, "    hio_element_close time", "S");
+  prt_mmmst(hio_hdc_time, "    hio_dataset_close time", "S");
+  prt_mmmst(hio_hdf_time, "     hio_dataset_free time", "S");
+  prt_mmmst(bar_time,     "    post free barrier time", "S");
+  prt_mmmst(hio_exc_time, "  excluded data check time", "S");
+  prt_mmmst(hdaf_time,    "        hda-hdf total time", "S");
+  prt_mmmst(una_time,     "      unaccounted for time", "S");
+
   if (myrank == 0) {
     hdaf_time -= hio_exc_time;
     char b1[32], b2[32], b3[32], b4[32], b5[32];
@@ -2095,7 +2221,7 @@ enum ptype {
   UINT = CVT_NNINT,
   PINT = CVT_PINT,
   DOUB = CVT_DOUB,
-  STR, HFLG, HDSM, HERR, HULM, HDSI, DWST, ONFF, NONE };
+  STR, DBUF, HFLG, HDSM, HERR, HULM, HDSI, DWST, ONFF, NONE };
 
 struct parse {
   char * cmd;
@@ -2118,6 +2244,7 @@ struct parse {
   {"ls",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
   #endif
   {"le",    {NONE, NONE, NONE, NONE, NONE}, loop_check,    le_run      },
+  {"dbuf",  {DBUF, UINT, NONE, NONE, NONE}, dbuf_check,    dbuf_run    },
   {"o",     {UINT, NONE, NONE, NONE, NONE}, NULL,          stdout_run  },
   {"e",     {UINT, NONE, NONE, NONE, NONE}, NULL,          stderr_run  },
   {"s",     {DOUB, NONE, NONE, NONE, NONE}, sleep_check,   sleep_run   },
@@ -2154,7 +2281,7 @@ struct parse {
   {"hda",   {STR,  HDSI, HFLG, HDSM, NONE}, NULL,          hda_run     },
   {"hdo",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdo_run     },
   {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
-  {"heo",   {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
+  {"heo",   {STR,  HFLG, NONE, NONE, NONE}, heo_check,     heo_run     },
   {"hso",   {UINT, NONE, NONE, NONE, NONE}, NULL,          hso_run     },
   {"hsega", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsega_run   },
   {"hsegr", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsegr_run   },
@@ -2283,6 +2410,9 @@ void parse_action() {
                 break;
               case STR:
                 nact.v[j].s = tokv[t];
+                break;
+              case DBUF:
+                decode(&etab_dbuf, tokv[t], "Data buffer pattern type", nact.desc, &nact.v[j]);
                 break;
               #ifdef HIO
               case HFLG:

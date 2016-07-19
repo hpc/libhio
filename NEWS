@@ -1,7 +1,7 @@
 HIO NEWS
 ========
 
-Last updated 2016-07-12
+Last updated 2016-07-19
 
 Release hio.1.4.0.0-rc1
 
@@ -14,6 +14,14 @@ files. file_per_node is valid for both unique and shared datasets but
 strided mode is only valid for shared datasets. The default mode for
 shared datasets is has been changed from basic to strided. No change
 was made to the default file mode for unique datasets.
+
+Release hio.1.3.0.5
+
+This release adds additional performance instrumentation and diagnostic
+messages on test failure.  A new action "dbuf" is added to xexec to specify
+the write data pattern used for data compare. The test cases have been updated
+to specify the pattern previously used by default. 
+>>>>>>> e8bb9ee... test enhancements and NEWS update for 1.3.0.5
 
 Release hio.1.3.0.4
 
@@ -44,7 +52,7 @@ at https://github.com/hpc/libhio .  We're still working out our release
 procedures, so for now the release is designated by the tag hio.1.3.0.0.
 
 Changes since the rc version are primarily fixes and performance enhancements 
-to optimixed mode.  Additionally, there are a number of minor test fixes and
+to optimised mode.  Additionally, there are a number of minor test fixes and
 functional enhancements.
 
 Release hio.1.3.0.0-rc1:

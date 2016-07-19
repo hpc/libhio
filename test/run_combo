@@ -38,7 +38,7 @@ synexit() {
   echo ""
   echo "  Options:"
   echo "    -t <test> [<test>...]  Tests to invoke"
-  echo "    -s <size>         Per rank run sizes t|s|m|l|x|y|z  (default s)"
+  echo "    -s <size>         Per rank run sizes u|t|s|m|l|x|y|z  (default s)"
   echo "       <totsz>[,<blksz>][,<nseg>]  where:"
   echo "                      totsz - total size per rank in MiB"
   echo "                      blksz - size of each write/read in KiB"
