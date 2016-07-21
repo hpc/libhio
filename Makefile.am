@@ -11,8 +11,12 @@
 
 ACLOCAL_AMFLAGS=-I m4
 
-SUBDIRS = src design test
+dirs = src design test
+if HDF5_AVAILABLE
+dirs += hdf5-hio
+endif
 
+SUBDIRS = ${dirs}
 EXTRA_DIST = hiobuild extra/json-c-0.12-nodoc-patched.tar.gz extra/json-c.patch \
 	extra/json_rename.h
 DISTCLEANFILES = libhio.pc
@@ -22,5 +26,8 @@ pkgconfig_DATA=libhio.pc
 
 docs:
 	make -C design docs
+if HDF5_AVAILABLE
+	make -C hdf5-hio/doc
+endif
 
 dist: dist-bzip2
