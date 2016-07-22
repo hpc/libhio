@@ -442,6 +442,7 @@ int hioi_dataset_close_internal (hio_dataset_t dataset);
  * Initialize dataset synchonization structures.
  *
  * @param[in] dataset dataset handle
+ * @param[in] stripes number of stripe structures to allocate
  *
  * This function initialized the synchronization structures used for
  * weak coordination with optimized mode. This function currently sets
@@ -449,7 +450,7 @@ int hioi_dataset_close_internal (hio_dataset_t dataset);
  * available block offset(s) and mutex(es). In the future this may change
  * if corrdination over several nodes improves performance.
  */
-int hioi_dataset_shared_init (hio_dataset_t dataset);
+int hioi_dataset_shared_init (hio_dataset_t dataset, int stripes);
 
 /**
  * Finalize dataset synchronization structures.

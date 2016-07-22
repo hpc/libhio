@@ -133,6 +133,12 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                    "dataset_expected_size", HIO_CONFIG_TYPE_INT64, NULL,
                    "Expected global size of this dataset", 0);
 
+  /* default to a megabyte for the buffer size */
+  new_dataset->ds_buffer_size = 1 << 20;
+  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_buffer_size,
+                   "dataset_buffer_size", HIO_CONFIG_TYPE_INT64, NULL,
+                   "Buffer size to use for aggregating read and write operations", 0);
+
   /* set up performance variables */
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bread, "bytes_read",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset instance", 0);

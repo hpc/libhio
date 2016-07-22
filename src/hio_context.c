@@ -324,6 +324,9 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
     return rc;
   }
 
+  hioi_config_add (context, &context->c_object, &context->c_enable_tracing,
+                   "enable_tracing", HIO_CONFIG_TYPE_BOOL, NULL, "Enable full tracing", 0);
+
   hioi_config_add (context, &context->c_object, &context->c_verbose,
                    "verbose", HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
 
