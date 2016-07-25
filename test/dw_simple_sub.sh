@@ -204,7 +204,7 @@ else
   echo "#DW jobdw type=cache access_mode=striped pfs=$dir capacity=1GiB" >> $job_file
 fi
 echo "echo \"\$(date) $pkg version $ver ($mode) start\"" >> $job_file
-echo "set | egrep \"^PBS|^DW|^HOST\"" >> $job_file
+echo "set | egrep \"^PBS|^MOAB|^DW|^HOST\"" >> $job_file
 echo "echo \"$dashes\"" >> $job_file
 echo "echo \"CHECK: The following commands should complete without error\"" >> $job_file
 echo "echo \"CHECK: The next find command should show 3 files: change_me, delete_me, keep_me\"" >> $job_file
