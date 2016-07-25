@@ -21,6 +21,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <signal.h>
+#include <execinfo.h>
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
@@ -203,6 +204,7 @@ char * help =
   #endif // HIO
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
+  "  segv <rank>   force SIGSEGV on selected rank or all ranks (-1)\n" 
   "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines [1]\n"
   "                <file> = \"@ENV\" searches environment\n"
   "\n"
@@ -2179,6 +2181,29 @@ ACTION_RUN(exit_run) {
   exit(V0.u);
 }
 
+ACTION_RUN(segv_run) {
+  I64 whichrank = V0.u;
+  int force_segv = 1;
+
+  #ifdef MPI
+    int mpi_init_flag, mpi_final_flag;
+    MPI_Initialized(&mpi_init_flag);
+    if (mpi_init_flag) {
+      MPI_Finalized(&mpi_final_flag);
+      if (! mpi_final_flag) {
+        if (-1 == whichrank || myrank == whichrank) force_segv = 1;
+        else force_segv = 0;
+      } 
+    }
+  #endif // MPI
+
+  if (force_segv) {
+    VERB0("Forcing SIGSEGV");
+    * (volatile char *) 0 = '\0';
+  }
+
+}
+
 //----------------------------------------------------------------------------
 // grep action handler
 //----------------------------------------------------------------------------
@@ -2312,6 +2337,7 @@ struct parse {
   {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",     {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
   {"grep",  {STR, STR,   NONE, NONE, NONE}, grep_check,    grep_run    },
+  {"segv",  {SINT, NONE, NONE, NONE, NONE}, NULL,          segv_run    },
 };
 
 //----------------------------------------------------------------------------
@@ -2487,6 +2513,70 @@ void run_action() {
 
 }
 
+//----------------------------------------------------------------------------
+// Signal handler - init and run
+//----------------------------------------------------------------------------
+
+void xexec_signal_handler(int signum, siginfo_t *siginfo  , void * ptr) {
+  MSGE("xexec received signal %d (%s) from pid: %d", signum, sys_siglist[signum], siginfo->si_pid);
+
+  #ifdef __linux__
+    psiginfo(siginfo, "xexec");
+  #endif
+
+  // Print backtrace on signals potentially caused by program error
+  if ( SIGILL  == signum ||
+       SIGABRT == signum ||
+       SIGFPE  == signum ||
+       SIGBUS  == signum ||
+       SIGSEGV == signum ) {
+    void * buf[128];
+    int n = backtrace(buf, DIM1(buf));
+    backtrace_symbols_fd(buf, n, STDERR_FILENO);
+    fflush(stderr);
+  }
+
+}
+
+void sig_add(int signum) {
+  struct sigaction sa;
+   
+  sa.sa_sigaction = xexec_signal_handler;
+  // Provide siginfo structure and reset signal handler to default
+  sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+  sigaction(signum, &sa, NULL);
+}
+
+void sig_init(void) {
+  // Intercept every known signal
+  sig_add(SIGHUP);
+  sig_add(SIGINT);
+  sig_add(SIGQUIT);
+  sig_add(SIGILL);
+  sig_add(SIGABRT);
+  sig_add(SIGKILL);
+  sig_add(SIGBUS);
+  sig_add(SIGFPE);
+  sig_add(SIGSEGV);
+  sig_add(SIGSYS);
+  sig_add(SIGPIPE);
+  sig_add(SIGALRM);
+  sig_add(SIGTERM);
+  sig_add(SIGSTOP);
+  sig_add(SIGTSTP);
+  sig_add(SIGCONT);
+  sig_add(SIGCHLD);
+  sig_add(SIGTTIN);
+  sig_add(SIGTTOU);
+  sig_add(SIGIO);
+  sig_add(SIGXCPU);
+  sig_add(SIGXFSZ);
+  sig_add(SIGVTALRM);
+  sig_add(SIGPROF);
+  sig_add(SIGWINCH);
+  sig_add(SIGUSR1);
+  sig_add(SIGUSR2);
+}
 
 //----------------------------------------------------------------------------
 // Main - write help, call parser / dispatcher
@@ -2500,6 +2590,8 @@ int main(int argc, char * * argv) {
 
   msg_context_init(MY_MSG_CTX, 0, 0);
   get_id();
+
+  sig_init();
 
   add2tokv(argc-1, argv+1); // Make initial copy of argv so im works
 
