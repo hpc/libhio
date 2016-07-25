@@ -50,7 +50,7 @@ void msg_context_set_debug(MSG_CONTEXT *msgctx, int debug_level) {
 
 void msg_context_free(MSG_CONTEXT *msgctx) {}
 
-void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...) {
+void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, int flush, const char *format, ...) {
   va_list args;
   char msg_buf[1024];
   char time_str[64];
@@ -63,6 +63,7 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...) {
   vsnprintf(msg_buf, sizeof(msg_buf), format, args);
   va_end(args);
   fprintf(stream, "%s %s%s\n", time_str, msgctx->id_string, msg_buf);
+  if (flush) fflush(stream); 
 }
 
 //----------------------------------------------------------------------------

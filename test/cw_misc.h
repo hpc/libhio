@@ -51,7 +51,7 @@ void msg_context_init(MSG_CONTEXT *msgctx, int verbose_level, int debug_level);
 void msg_context_set_verbose(MSG_CONTEXT *msgctx, int verbose_level);
 void msg_context_set_debug(MSG_CONTEXT *msgctx, int debug_level);
 void msg_context_free(MSG_CONTEXT *msgctx);
-void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...);
+void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, int flush, const char *format, ...);
 
 //----------------------------------------------------------------------------
 // Preprocessor variable MY_MSG_CTX must be defined to an expression that
@@ -65,8 +65,8 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...);
 //   msg_context_init(MY_MSG_CTX, 1, 3);
 //   MY_MSG_CTX->id_string = "cw_misc_test ";
 //----------------------------------------------------------------------------
-#define MSG(...)   msg_writer((MY_MSG_CTX), (MY_MSG_CTX)->std_file, __VA_ARGS__);
-#define MSGE(...)  msg_writer((MY_MSG_CTX), (MY_MSG_CTX)->err_file, __VA_ARGS__);
+#define MSG(...)   msg_writer((MY_MSG_CTX), (MY_MSG_CTX)->std_file, 0, __VA_ARGS__);
+#define MSGE(...)  msg_writer((MY_MSG_CTX), (MY_MSG_CTX)->err_file, 1, __VA_ARGS__);
 
 #define ERRX(...) {                  \
   MSGE("Error: " __VA_ARGS__);       \
