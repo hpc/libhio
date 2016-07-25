@@ -152,7 +152,7 @@ msg "buildall $args: Starting at `date`"
 autogen=0
 incremental=0
 tree=$(dirname ${BASH_SOURCE[0]})   # -t defaults to location of this script
-tarname="libhio-1.3"
+tarname="libhio-1.4"
 dir_suffix=""        # Directory suffix - used to force version specific name on remote directory
 
 goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel tt-gnu bu-gnu bu-cray"
