@@ -113,6 +113,9 @@ char * help =
   "  ls <seconds>  like lt, but synchronized via MPI_Bcast from rank 0\n"
   #endif
   "  le            loop end; loops may be nested up to 16 deep\n"
+  "  ifr <rank>    execute following if rank matches, always exec if mpi not init'd\n"
+  "                <rank> = -1 tests last rank, -2, -3, etc. similarly\n"
+  "  eif           terminates ifr conditional, may not be nested\n"
   "  o <count>     write <count> lines to stdout\n"
   "  e <count>     write <count> lines to stderr\n"
   "  s <seconds>   sleep for <seconds>\n"
@@ -204,7 +207,7 @@ char * help =
   #endif // HIO
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
-  "  segv <rank>   force SIGSEGV on selected rank or all ranks (-1)\n" 
+  "  segv          force SIGSEGV\n" 
   "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines [1]\n"
   "                <file> = \"@ENV\" searches environment\n"
   "\n"
@@ -345,10 +348,25 @@ static U64 wbuf_bdy;
              0, mpi_comm));                              \
     }                                                    \
     MPI_CK(MPI_Barrier(mpi_comm));
+
 #else
   #define RANK_SERIALIZE_START
   #define RANK_SERIALIZE_END
 #endif
+
+int mpi_active(void) {
+  #ifdef MPI
+    int mpi_init_flag, mpi_final_flag;
+    MPI_Initialized(&mpi_init_flag);
+    if (mpi_init_flag) {
+      MPI_Finalized(&mpi_final_flag);
+      if (! mpi_final_flag) {
+        return 1;
+      } 
+    }
+  #endif 
+  return 0;
+}
 
 #define R0_OR_VERB_START                                                                  \
   if ( (MY_MSG_CTX)->verbose_level >= VERB_LEV_MULTI ) RANK_SERIALIZE_START;              \
@@ -369,18 +387,13 @@ void get_id() {
   if (p) *p = '\0';
 
   #ifdef MPI
+  if (mpi_active()) {  
+    MPI_CK(MPI_Comm_rank(mpi_comm, &myrank));
+    sprintf(tmp_id+strlen(tmp_id), ".%d", myrank);
+    MPI_CK(MPI_Comm_size(mpi_comm, &mpi_size));
+    sprintf(tmp_id+strlen(tmp_id), "/%d", mpi_size);
+  } else {
   mpi_size = 0;
-  { int mpi_init_flag, mpi_final_flag;
-    MPI_Initialized(&mpi_init_flag);
-    if (mpi_init_flag) {
-      MPI_Finalized(&mpi_final_flag);
-      if (! mpi_final_flag) {
-        MPI_CK(MPI_Comm_rank(mpi_comm, &myrank));
-        sprintf(tmp_id+strlen(tmp_id), ".%d", myrank);
-        MPI_CK(MPI_Comm_size(mpi_comm, &mpi_size));
-        sprintf(tmp_id+strlen(tmp_id), "/%d", mpi_size);
-      }
-    }
   }
   #endif // MPI
   strcat(tmp_id, " ");
@@ -842,6 +855,48 @@ ACTION_RUN(le_run) {
     default:
       ERRX("%s: internal error le_run invalid looptype %d", A.desc, lcur->type);
   }
+}
+
+//----------------------------------------------------------------------------
+// ifr, eif action handler
+//----------------------------------------------------------------------------
+int ifr_depth = 0;
+int ife_num;
+
+ACTION_CHECK(ifr_check) {
+  if (ifr_depth > 0) 
+    ERRX("%s: nested ifr", A.desc);
+  ifr_depth++; 
+}
+
+ACTION_CHECK(eif_check) {
+  if (ifr_depth != 1) 
+    ERRX("%s: ife without preceeding ifr", A.desc);
+  ifr_depth--;
+  ife_num = A.actn - 1;
+}
+
+ACTION_RUN(ifr_run) {
+  int req_rank = V0.u;
+  int cond = false;  // false --> don't run body of ifr
+  
+  if (mpi_active()) {
+    if (req_rank >= 0) {
+      if (myrank == req_rank) cond = true;
+    } else {
+      if ( myrank == mpi_size + req_rank) cond = true;
+    } 
+  } else {
+    cond = true;
+  }
+  
+  if (!cond) *pactn = ife_num;
+
+  DBG4("ifr done req_rank: %d cond: %d actn: %d", req_rank, cond, *pactn);
+}
+
+ACTION_RUN(eif_run) {
+  DBG4("ife done actn: %d", *pactn);
 }
 
 //----------------------------------------------------------------------------
@@ -2182,26 +2237,8 @@ ACTION_RUN(exit_run) {
 }
 
 ACTION_RUN(segv_run) {
-  I64 whichrank = V0.u;
-  int force_segv = 1;
-
-  #ifdef MPI
-    int mpi_init_flag, mpi_final_flag;
-    MPI_Initialized(&mpi_init_flag);
-    if (mpi_init_flag) {
-      MPI_Finalized(&mpi_final_flag);
-      if (! mpi_final_flag) {
-        if (-1 == whichrank || myrank == whichrank) force_segv = 1;
-        else force_segv = 0;
-      } 
-    }
-  #endif // MPI
-
-  if (force_segv) {
-    VERB0("Forcing SIGSEGV");
-    * (volatile char *) 0 = '\0';
-  }
-
+  VERB0("Forcing SIGSEGV");
+  * (volatile char *) 0 = '\0';
 }
 
 //----------------------------------------------------------------------------
@@ -2265,6 +2302,8 @@ struct parse {
   {"lc",    {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
   {"lcr",   {UINT, UINT, NONE, NONE, NONE}, loop_check,    lcr_run     },
   {"lt",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
+  {"ifr",   {SINT, NONE, NONE, NONE, NONE}, ifr_check,     ifr_run     },
+  {"eif",   {NONE, NONE, NONE, NONE, NONE}, eif_check,     eif_run     },
   #ifdef MPI
   {"ls",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
   #endif
@@ -2336,8 +2375,8 @@ struct parse {
   #endif  // HIO
   {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",     {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
-  {"grep",  {STR, STR,   NONE, NONE, NONE}, grep_check,    grep_run    },
-  {"segv",  {SINT, NONE, NONE, NONE, NONE}, NULL,          segv_run    },
+  {"grep",  {STR,  STR,  NONE, NONE, NONE}, grep_check,    grep_run    },
+  {"segv",  {NONE, NONE, NONE, NONE, NONE}, NULL,          segv_run    },
 };
 
 //----------------------------------------------------------------------------
@@ -2471,7 +2510,7 @@ void parse_action() {
           }
           nact.runner = parse[i].runner;
           add2actv(&nact);
-          DBG2("Checking %s", nact.desc);
+          DBG2("Checking %s action.actn: %d", nact.desc, nact.actn);
           if (parse[i].checker) parse[i].checker(&actv[actc-1], t);
           break; // break for i loop over parse table
         }
@@ -2480,6 +2519,7 @@ void parse_action() {
     }
   }
   if (lcur-lctl > 0) ERRX("Unterminated loop - more loop starts than loop ends");
+  if (ifr_depth != 0) ERRX("Unterminated ifr - ifr without eif");
   if (comment_depth > 0) ERRX("Unterminated comment - more comment starts than comment ends");
   IFDBG4( for (int a=0; a<actc; a++) DBG0("actv[%d].desc: %s", a, actv[a].desc) );
   DBG1("Parse complete actc: %d", actc);
@@ -2499,11 +2539,12 @@ void run_action() {
   #endif
 
   while ( ++a < actc ) {
-    VERB2("--- Running %s", actv[a].desc);
-    // Runner routine may modify variable a for looping
+    VERB2("--- Running %s; action[%d].actn: %d", actv[a].desc, a, actv[a].actn);
+    // Runner routine may modify variable a for looping or conditional
+    int old_a = a;
     errno = 0;
     if (actv[a].runner) actv[a].runner(&actv[a], &a);
-    DBG3("Done %s; fails: %d qof: %d", actv[a].desc, local_fails, quit_on_fail);
+    DBG3("Done %s; fails: %d qof: %d actn: %d", actv[old_a].desc, local_fails, quit_on_fail, a);
     if (quit_on_fail != 0 && local_fails >= quit_on_fail) {
       VERB0("Quiting due to fails: %d >= qof: %d", local_fails, quit_on_fail);
       break;
@@ -2518,10 +2559,11 @@ void run_action() {
 //----------------------------------------------------------------------------
 
 void xexec_signal_handler(int signum, siginfo_t *siginfo  , void * ptr) {
-  MSGE("xexec received signal %d (%s) from pid: %d", signum, sys_siglist[signum], siginfo->si_pid);
+  // Verbose name for this routine to better show up on backtrace
+  MSGE("xexec received signal: %d (%s) from pid: %d", signum, sys_siglist[signum], siginfo->si_pid);
 
   #ifdef __linux__
-    psiginfo(siginfo, "xexec");
+    psiginfo(siginfo, "xexec received signal:");
   #endif
 
   // Print backtrace on signals potentially caused by program error
@@ -2617,16 +2659,9 @@ int main(int argc, char * * argv) {
   int rc = (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
 
   #ifdef MPI
-  if (rc != EXIT_SUCCESS) {
-    int mpi_init_flag, mpi_final_flag;
-    MPI_Initialized(&mpi_init_flag);
-    if (mpi_init_flag) {
-      MPI_Finalized(&mpi_final_flag);
-      if (! mpi_final_flag) {
-        VERB0("MPI_abort due to error exit from main with MPI active rc: %d", rc);
-        MPI_CK(MPI_Abort(mpi_comm, rc));
-      }
-    }
+  if (rc != EXIT_SUCCESS && mpi_active()) {
+    VERB0("MPI_abort due to error exit from main with MPI active rc: %d", rc);
+    MPI_CK(MPI_Abort(mpi_comm, rc));
   }
   #endif // MPI
 

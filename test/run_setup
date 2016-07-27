@@ -69,7 +69,9 @@ synexit() {
   echo "    -a                Clean dirs After running"
   echo "    -q                Query data size. Output value like \"32GiB\" and exit"
   echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
-  echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
+  echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage."
+  echo "       n<dw_nodes>    Or, if it starts with \"n\" request enough to allocate"
+  echo "                      on that many DataWarp nodes based on granularity"
   echo "    -k knl|haswell    Adds :<type> to msub -l option, influences -p default"
   echo "    -m <msub_args>    Additional arguments for msub (use with -b)"
   echo "    -u <uber command and args>  Use to invoke a debugger (not to call a taxi)"
@@ -120,8 +122,12 @@ check_rc(){
 
 # Function to build run script and submit batch job if batch mode
 batch_sub() {
-  # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
-  dw_cap="$(( (($1 * 21 / 20 * $dw_alloc_pct / 100) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
+  if [[ -z $dw_cap_override ]]; then
+    # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
+    dw_cap="$(( (($1 * 21 / 20 * $dw_alloc_pct / 100) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
+  else
+    dw_cap=$dw_cap_override
+  fi 
   if [[ $query_size -eq 1 ]]; then
     echo $dw_cap
     exit 0
@@ -162,6 +168,7 @@ batch_sub() {
 
     afterparm=""
     if [[ $after -gt 0 ]]; then afterparm="-a"; fi
+    echo "# Submit Args: $args" >>$jobsh
     echo "$0 -s $size $afterparm -w $dw_alloc_mode -v $verbose_lev -d $debug_lev" >> $jobsh
 
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
@@ -509,6 +516,21 @@ nblk=$(($totsz / $blksz))
 nblkpseg=$(($totsz / $nseg / $blksz))
 segsz=$(($blksz * $nblkpseg))
 
+if [[ ${dw_alloc_pct:0:1} -eq "n" ]]; then
+  . $MODULESHOME/init/bash
+  module load dws
+  out=($(dwstat -b))
+  dw_gran=${out[9]}
+  dw_nodes=${dw_alloc_pct:1}
+  # request (nodes - 1/2) * gran, rounded to GiB
+  dw_cap_override="$(( ( ($dw_nodes * $dw_gran) - ($dw_gran / 2) ) / $cons_gi ))GiB"
+  if [[ $query_size -eq 0 ]]; then
+    msg "run_setup: dw_gran: $((dw_gran/$cons_gi)) GiB  dw_nodes: $dw_nodes  dw_cap_override: $dw_cap_override GiB"
+  fi
+  # treat like -x 100 from here on
+  dw_alloc_pct="100"
+fi
+
 # Check -w (dw_alloc_mode) option
 case $dw_alloc_mode in
   0 ) ;;
@@ -516,7 +538,6 @@ case $dw_alloc_mode in
   2 ) ;;
   * ) synexit "invalid -w option $dw_alloc_mode";;
 esac
-
 
 # Following commands for actually running, i.e., not batch submission
 if [[ $batch -eq 0 ]]; then
