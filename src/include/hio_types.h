@@ -416,6 +416,9 @@ struct hio_context {
 
   /** size of a dataset object */
   size_t             c_ds_size;
+
+  bool               c_enable_tracing;
+  char              *c_trace_format;
 };
 
 struct hio_dataset_data_t {
@@ -599,6 +602,9 @@ struct hio_dataset {
   /** dataset open function (data) */
   hio_fs_attr_t       ds_fsattr;
 
+  /** buffer size to allocate for aggregating reads/writes */
+  uint64_t            ds_buffer_size;
+
   hio_buffer_t        ds_buffer;
 
 #if HIO_MPI_HAVE(3)
@@ -623,8 +629,12 @@ typedef struct hio_file_t {
   FILE     *f_hndl;
   /** file descriptor */
   int       f_fd;
+  /** file identifier */
+  int       f_bid;
   /** current offset in the file */
   uint64_t  f_offset;
+  /** element associated with the file (if any) */
+  hio_element_t f_element;
 } hio_file_t;
 
 struct hio_request {

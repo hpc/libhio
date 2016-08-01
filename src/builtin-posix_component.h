@@ -27,16 +27,6 @@ typedef enum builtin_posix_dataset_fmode {
   HIO_FILE_MODE_STRIDED,
 } builtin_posix_dataset_fmode_t;
 
-
-typedef struct builtin_posix_file_t {
-  /** file handle */
-  hio_file_t f_file;
-  /** hio element */
-  hio_element_t f_element;
-  /** file block id */
-  int f_bid;
-} builtin_posix_file_t;
-
 /* data types */
 typedef struct builtin_posix_module_t {
   hio_module_t base;
@@ -48,7 +38,7 @@ typedef struct builtin_posix_module_dataset_t {
   struct hio_dataset base;
 
   /** open backing files */
-  builtin_posix_file_t files[HIO_POSIX_MAX_OPEN_FILES];
+  hio_file_t files[HIO_POSIX_MAX_OPEN_FILES];
 
   /** base path of this manifest */
   char *base_path;
@@ -75,6 +65,9 @@ typedef struct builtin_posix_module_dataset_t {
 
   /** number of files to use with strided mode */
   int                 ds_fcount;
+
+  /** trace file */
+  FILE               *ds_trace_fh;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;

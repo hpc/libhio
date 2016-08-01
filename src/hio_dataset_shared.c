@@ -72,10 +72,9 @@ int hioi_dataset_buffer_flush (hio_dataset_t dataset) {
 
 #if HIO_MPI_HAVE(3)
 
-int hioi_dataset_shared_init (hio_dataset_t dataset) {
+int hioi_dataset_shared_init (hio_dataset_t dataset, int stripes) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  int stripes = 1;
-  size_t ds_buffer_size = 512 * 1024;
+  size_t ds_buffer_size = dataset->ds_buffer_size;
   size_t control_block_size;
   MPI_Win shared_win;
   MPI_Aint data_size;
