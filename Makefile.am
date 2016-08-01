@@ -14,7 +14,7 @@ ACLOCAL_AMFLAGS=-I m4
 SUBDIRS = src design test
 
 EXTRA_DIST = hiobuild extra/json-c-0.12-nodoc-patched.tar.gz extra/json-c.patch \
-	extra/json_rename.h
+	extra/json_rename.h extra/bzip2-1.0.6-patched.tbz2
 DISTCLEANFILES = libhio.pc
 
 pkgconfigdir=$(libdir)/pkgconfig

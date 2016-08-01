@@ -35,6 +35,7 @@ libhio_la_SOURCES = hio_context.c hio_component.c hio_var.c hio_crc.c \
 	api/element_read.c api/dataset_unlink.c api/dataset_get_id.c \
 	api/element_size.c api/dataset_alloc.c api/object_name.c \
 	libconfig_parser_a-config_parser.c
+libhio_la_LIBADD=
 if INTERNAL_JSON_C
 # just link in the json objects directly
 json_objects = $(top_builddir)/extra/json/build/arraylist.lo $(top_builddir)/extra/json/build/debug.lo \
@@ -45,7 +46,7 @@ json_objects = $(top_builddir)/extra/json/build/arraylist.lo $(top_builddir)/ext
 # include both the archive (for the dynamic library) and the object files (for the static library)
 libhio_la_LDFLAGS += --whole-archive $(top_builddir)/extra/json/build/.libs/libjson-c.la --no-whole-archive \
 	-version-info 1:0:0
-libhio_la_LIBADD = $(json_objects)
+libhio_la_LIBADD += $(json_objects)
 libhio_la_CPPFLAGS += -I$(top_builddir)/extra/json/json-c-0.12 -I$(top_builddir)/extra/json/build
 $(top_builddir)/extra/json/build/arraylist.lo: json
 $(top_builddir)/extra/json/build/debug.lo: json
@@ -61,6 +62,26 @@ $(top_builddir)/extra/json/build/.libs/libjson-c.la: json
 .PHONY: json
 json:
 	make -C $(top_builddir)/extra/json/build
+endif
+if INTERNAL_BZ2
+bzip_base=$(top_builddir)/extra/bzip2/bzip2-1.0.6
+bzip2_objects = $(bzip_base)/blocksort.lo $(bzip_base)/bzlib.lo \
+	$(bzip_base)/compress.lo $(bzip_base)/crctable.lo \
+	$(bzip_base)/decompress.lo $(bzip_base)/huffman.lo \
+	$(bzip_base)/randtable.lo
+libhio_la_LIBADD += $(bzip2_objects)
+libhio_la_CPPFLAGS += -I$(bzip_base)
+$(bzip_base)/blocksort.lo: bzip2
+$(bzip_base)/bzlib.lo: bzip2
+$(bzip_base)/compress.lo: bzip2
+$(bzip_base)/crctable.lo: bzip2
+$(bzip_base)/decompress.lo: bzip2
+$(bzip_base)/huffman.lo: bzip2
+$(bzip_base)/randtable.lo: bzip2
+.PHONY: bzip2
+bzip2:
+	-d $(bzip_base)/.deps || mkdir $(bzip_base)/.deps
+	make -C $(bzip_base) libbz2.a CC="$(abs_top_builddir)/libtool --tag=CC --mode=compile ${CC}"
 endif
 
 if DATAWARP_AVAILABLE

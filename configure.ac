@@ -51,6 +51,7 @@ HIO_CHECK_DATAWARP
 HIO_CHECK_XPMEM
 HIO_CHECK_LUSTRE
 HIO_CHECK_CVERSION
+HIO_CHECK_BZ2
 
 if test $hio_use_mpi = 0 ; then
     AC_MSG_CHECKING([for craypich])
@@ -85,8 +86,6 @@ AC_CHECK_HEADERS_ONCE([strings.h sys/types.h sys/time.h pthread.h dlfcn.h sys/st
 AC_CHECK_FUNCS_ONCE([access gettimeofday stat statfs MPI_Win_allocate_shared \
                      MPI_Comm_split_type MPI_Win_flush])
 AC_SEARCH_LIBS([dlopen],[dl],[hio_dynamic_component=1],[hio_dynamic_component=0])
-
-AC_CHECK_LIB([bz2],[BZ2_bzBuffToBuffCompress],[],[AC_MSG_ERROR([could not find working zlib])])
 
 AX_PTHREAD([])
 
