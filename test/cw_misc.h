@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <time.h>
 #include <sys/time.h>
 
@@ -190,13 +191,17 @@ char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val);
 // Sets *val to an enum value or OR of values for multiple types
 int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * val);
 
+// Modifies *val according to +/- flagged enum names (must be multiple type)
+// On return, set = bits to set, clear = ~(bits top clear)
+int flag2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * set, int * clear);
+
 // Returns a list of enum names prefixed by "one of" or "one or more of".  List
 // must be freed by caller.
 char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr);
 
 //----------------------------------------------------------------------------
 // hex_dump - dumps size bytes of *data to stdout. Looks like:
-// [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
+// [000000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
 //----------------------------------------------------------------------------
 void hex_dump(void *data, int size);
 

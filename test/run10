@@ -52,7 +52,6 @@ cmdrc="
   hda NTN_DS 97 READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her -$blk $blk
   le
@@ -81,7 +80,6 @@ cmdrp="
   hda NTN_DS 97 READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her -$blk $blk
   le

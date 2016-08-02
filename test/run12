@@ -42,7 +42,6 @@ cmdr="
   hda NTN_DS 97 READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   srr 100
   lcr $nblk $nblkM
     herr 0 $blksz $blkszM 32

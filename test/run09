@@ -75,7 +75,6 @@ cmdr="
   hda NTNDS 97 READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le
@@ -85,17 +84,16 @@ cmdr="
   hda NTNDS ID_HIGHEST READ UNIQUE
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le
   hec hdc hdf
 
-  qof 2 hxdi 96
+  opt +ROF 2 hxdi 96
   hda NTNDS ID_NEWEST READ UNIQUE hdo
+  opt -ROF 
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le

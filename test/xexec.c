@@ -50,7 +50,7 @@
 // debug message level is set via the "d <n>" action to the level of the
 // individual debug message.  Compiling in all debug messages via -DDBGLEV=5
 // will noticeably impact the performance of high speed loops such as
-// "vt" or "fr" due to the time required to repeatedly test the debug level.
+// "vt" or "nr" due to the time required to repeatedly test the debug level.
 // You have been warned !
 //----------------------------------------------------------------------------
 #ifndef DBGMAXLEV
@@ -75,7 +75,7 @@
 
 //----------------------------------------------------------------------------
 // Features to add: mpi sr swap, file write & read,
-// flap seq validation, more flexible fr striding
+// flap seq validation, more flexible nr striding
 //----------------------------------------------------------------------------
 
 char * help =
@@ -100,7 +100,10 @@ char * help =
   "                4 = 3 + detailed action progress messages\n"
   "                5 = 4 + detailed repetitive action progress messages - if\n"
   "                enabled at compile time which will impact performance.\n"
-  "  qof <number>  Quit after <number> of failures. 0 = never, default is 1.\n"
+  "  opt +-<option> ...  Set (+) or unset (-) options. Valid options are:\n"
+  "                %s\n"
+  "                Initial value is: %s plus env XEXEC_OPT\n"
+  "                ? displays current set options\n"
   "  name <test name> Set test name for final success / fail message\n"
   "  im <file>     imbed a file of actions at this point, - means stdin\n"
   "  srr <seed>    seed random rank - seed RNG with <seed> mixed with rank (if MPI)\n"
@@ -134,17 +137,22 @@ char * help =
   "  mb            issue MPI_Barrier()\n"
   "  mgf           gather failures - send fails to and only report success from rank 0\n"
   "  mf            issue MPI_Finalize()\n"
+  "  fo <file> <mode> Issue fopen for a file, %%r or %%p in path will be expanded to MPI\n"
+  "                rank or PID. <mode> is fopen mode string.\n"
+  "  fw <offset> <size>  Write relative to current file offset\n"
+  "  fr <offset> <size>  Read relative to current file offset\n"
+  "  fc            Issue fclose for file\n"  
   "  fctw <dir> <num files> <file size> <block size> File coherency test - write files\n"
   "                from rank 0\n"
   "  fctr <dir> <num files> <file size> <block size> File coherency test - read files\n"
   "                from all non-zero ranks \n"
   "  fget <file>   fopen(), fgets() to eof, fclose()\n"
   #endif
-  "  fi <size> <count>\n"
+  "  ni <size> <count>\n"
   "                Creates <count> blocks of <size> doubles each.  All\n"
   "                but one double in each block is populated with sequential\n"
   "                values starting with 1.0.\n"
-  "  fr <rep> <stride>\n"
+  "  nr <rep> <stride>\n"
   "                The values in each block are added and written to the\n"
   "                remaining double in the block. The summing of the block is\n"
   "                repeated <rep> times.  All <count> blocks are processed in\n"
@@ -152,7 +160,7 @@ char * help =
   "                computed and compared with an expected value.\n"
   "                <size> must be 2 or greater, <count> must be 1 greater than\n"
   "                a multiple of <stride>.\n"
-  "  ff            Free allocated blocks\n"
+  "  nf            Free allocated blocks\n"
   "  hx <min> <max> <blocks> <limit> <count>\n"
   "                Perform <count> malloc/touch/free cycles on memory blocks ranging\n"
   "                in size from <min> to <max>.  Allocate no more than <limit> bytes\n"
@@ -175,7 +183,7 @@ char * help =
   "  hew <offset> <size> Element write, offset relative to current element offset\n"
   "  her <offset> <size> Element read, offset relative to current element offset\n"
   "  hewr <offset> <min> <max> <align> Element write random size, offset relative to current element offset\n"
-  "  herr <offset> <min> <max> <align> Element read random size, offset relative to cucrrent element offset\n"
+  "  herr <offset> <min> <max> <align> Element read random size, offset relative to current element offset\n"
   "  hsega <start> <size_per_rank> <rank_shift> Activate absolute segmented\n"
   "                addressing. Actual offset now ofs + <start> + rank*size\n"
   "  hsegr <start> <size_per_rank> <rank_shift> Activate relative segmented\n"
@@ -185,7 +193,6 @@ char * help =
   "  hdf           Dataset free\n"
   "  hdu <name> <id> CURRENT|FIRST|ALL  Dataset unlink\n"
   "  hf            Fini\n"
-  "  hck <ON|OFF>  Enable read data checking [2]\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
   "  hxdi <id> Expect dataset ID on next hdo\n"
@@ -196,7 +203,7 @@ char * help =
   "                \"hvp p total\" will print all perf vars containing \"total\" in the name\n"
   "  hvsc <name> <value>  Set hio context variable\n"
   "  hvsd <name> <value>  Set hio dataset variable\n"
-  "  hvse <name> <value>  Set hio elementq variable\n"
+  "  hvse <name> <value>  Set hio element variable\n"
   #if HIO_USE_DATAWARP
   "  dwds <directory> Issue dw_wait_directory_stage\n"
   "  dsdo <dw_dir> <pfs_dir> <type> Issue dw_stage_directory_out\n"
@@ -224,6 +231,7 @@ char * help =
   "\n"
   " Example action sequences:\n"
   "    v 1 d 1\n"
+  "    opt +ROF-RCHK\n"
   "    lc 3 s 0 le\n"
   "    lt 3 s 1 le\n"
   "    o 3 e 2\n"
@@ -231,7 +239,7 @@ char * help =
   #ifdef MPI
   "    mi mb mf\n"
   #endif // MPI
-  "    fi 32 1M fr 8 1 ff\n"
+  "    ni 32 1M nr 8 1 nf\n"
   "    x 99\n"
   "\n"
   #ifndef MPI
@@ -264,10 +272,31 @@ const int myrank = 0;
 int tokc = 0;
 char * * tokv = NULL;
 
+enum options {
+  OPT_ROF      =  1,  // Run on Failure
+  OPT_RCHK     =  2,  // Read Data Check
+  OPT_XPERF    =  4,  // Extended Performance Messages
+  OPT_PERFXCHK =  8,  // Exclude check time from Performance messages
+  OPT_PAVM     = 16   // Pavilion Messages
+};
+
+static enum options options = 0;
+
+ENUM_START(etab_opt)
+ENUM_NAMP(OPT_, ROF)
+ENUM_NAMP(OPT_, RCHK)
+ENUM_NAMP(OPT_, XPERF)
+ENUM_NAMP(OPT_, PERFXCHK)
+ENUM_NAMP(OPT_, PAVM)
+ENUM_END(etab_opt, 1, "+")
+
+static char * options_init = "-ROF+RCHK+XPERF-PERFXCHK-PAVM"; 
+
 typedef struct pval {
   U64 u;
   char * s;
   int i;  // Use for enums
+  int c;  // Use for disabling enum bits
   double d;
   regex_t * rxp;  // Compiled regular expressions
 } PVAL;
@@ -308,10 +337,12 @@ MSG_CONTEXT my_msg_context;
 // Common read / write buffer pointers, etc.  Set by dbuf action.
 static void * wbuf_ptr = NULL;
 static void * rbuf_ptr = NULL;
-static size_t rwbuf_len = 0;  // length not counting pattern overun area
-static U64 wbuf_hash_mod;  // Element hash modulus
-static U64 wbuf_bdy;
+static size_t rwbuf_len = 0;          // length not counting pattern overun area
+static U64 wbuf_data_object_hash_mod; // data_object hash modulus
+static U64 wbuf_bdy;                  // wbuf address boundary
+static U64 wbuf_repeat_len;           // repeat length of wbuf pattern
 
+static ETIMER local_tmr;
 //----------------------------------------------------------------------------
 // Common subroutines and macros
 //----------------------------------------------------------------------------
@@ -531,6 +562,7 @@ ssize_t fread_rd (FILE *file, void *ptr, size_t count) {
 // If MPI & Rank 0, VERB1 message with collective min/mean/max/stddev/total
 // Always VERB2 local value message
 //----------------------------------------------------------------------------
+#ifdef MPI
 struct mm_val_s {
   double val;
   char id[24];
@@ -554,6 +586,7 @@ void min_max_who(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype) 
     }
   }
 }
+#endif // MPI
 
 void prt_mmmst(double val, char * desc, char * unit) {
   #ifdef MPI
@@ -594,11 +627,11 @@ void prt_mmmst(double val, char * desc, char * unit) {
                              eng_not(b4, sizeof(b4), sd,   "D6.4", ""),
                              eng_not(b5, sizeof(b5), sum,  "D6.4", ""), unit,
                              mmr.min.id, mmr.max.id);
-    }
+    } else {
   #endif
-
-  char b1[32];  
-  VERB2("%s: %s %s", desc, eng_not(b1, sizeof(b1), val, "D6.4", unit)); 
+    char b1[32];  
+    VERB1("%s: %s", desc, eng_not(b1, sizeof(b1), val, "D6.4", unit));
+  } 
 }
 
 //----------------------------------------------------------------------------
@@ -613,7 +646,7 @@ ACTION_RUN(ztest_run) {
   char * s2 = V2.s; 
   char * s3 = V3.s; 
 
-  VERB0("Nothing to see here, move along");
+  VERB0("Nothing to see here, move along", i0, d1, s2, s3); // Vars passed to avoid warning
 
   //char buf[32];
   //printf("eng_not(%lg, %s, %s) --> \"%s\"\n", d1, s2, s3, eng_not(buf, sizeof(buf), d1, s2, s3));
@@ -658,13 +691,37 @@ ACTION_RUN(debug_run) {
 }
 
 //----------------------------------------------------------------------------
-// qof (quit on fail) action handlers
+// opt (set option flag) action handler
 //----------------------------------------------------------------------------
-ACTION_RUN(qof_run) {
-  quit_on_fail = V0.u;
-  VERB1("Quit on fail count set to %d", quit_on_fail);
+
+void parse_opt(char *ctx, char *flags, int *set, int *clear) {
+  int rc = flag2enum(MY_MSG_CTX, &etab_opt, flags, set, clear);
+  if (rc) ERRX("%s; invalid option. Valid values are +/- %s", ctx, enum_list(MY_MSG_CTX, &etab_opt));
+  DBG4("%s: flags: %s set: 0x%X  clear: 0x%X", ctx, flags, *set, *clear);
 }
 
+void show_opt(char *ctx, int val) {
+  char * opt_desc;
+  enum2str(MY_MSG_CTX, &etab_opt, val, &opt_desc);
+  VERB1("%s options: %s", ctx, opt_desc);
+  FREEX(opt_desc);
+}
+
+ACTION_CHECK(opt_check) {
+  char * flags = V0.s;
+  if (0 == strcmp("?", flags)) V0.c = ~(V0.i = 0);
+  else parse_opt(A.desc, flags, &V0.i, &V0.c);
+  DBG4("opt: flags: %s set: 0x%X  clear: 0x%X \n", flags, V0.i, V0.c);
+}
+
+ACTION_RUN(opt_run) {
+  if (0 == V0.i && ~0 == V0.c) show_opt(A.desc, options);
+  else options = V0.c & (V0.i | options); 
+}
+
+//----------------------------------------------------------------------------
+// name action handler
+//----------------------------------------------------------------------------
 ACTION_RUN(name_run) {
   test_name = V0.s;
 }
@@ -900,7 +957,7 @@ ACTION_RUN(eif_run) {
 }
 
 //----------------------------------------------------------------------------
-// dbuf action handler
+// dbuf action handler and related data validation routines
 //----------------------------------------------------------------------------
 enum dbuf_type {RAND22P, RAND22, OFS20};
 ENUM_START(etab_dbuf)  // Write buffer type
@@ -916,37 +973,36 @@ ENUM_END(etab_dbuf, 0, NULL)
 void dbuf_init(enum dbuf_type type, U64 size) {
   rwbuf_len = size;
   int rc;
-  size_t extra;
 
   FREEX(wbuf_ptr);
   FREEX(rbuf_ptr);
 
   switch (type) {
     case RAND22P:
-      extra = LFSR_22_CYCLE;
       wbuf_bdy = 1;
-      wbuf_hash_mod = PRIME_LT_64KI;
-      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + extra);
-      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + extra, strerror(rc));
+      wbuf_repeat_len = LFSR_22_CYCLE;
+      wbuf_data_object_hash_mod = PRIME_LT_64KI;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + wbuf_repeat_len);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + wbuf_repeat_len, strerror(rc));
       lfsr_22_byte_init_p();
-      lfsr_22_byte(wbuf_ptr, rwbuf_len + extra);
+      lfsr_22_byte(wbuf_ptr, rwbuf_len + wbuf_repeat_len);
       break;
     case RAND22:
-      extra = LFSR_22_CYCLE;
       wbuf_bdy = 1;
-      wbuf_hash_mod = PRIME_LT_2MI;
-      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + extra);
-      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + extra, strerror(rc));
+      wbuf_repeat_len = LFSR_22_CYCLE;
+      wbuf_data_object_hash_mod = PRIME_LT_2MI;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + wbuf_repeat_len);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + wbuf_repeat_len, strerror(rc));
       lfsr_22_byte_init();
-      lfsr_22_byte(wbuf_ptr, rwbuf_len + extra);
+      lfsr_22_byte(wbuf_ptr, rwbuf_len + wbuf_repeat_len);
       break;
     case OFS20:
-      extra = 1024 * 1024;
       wbuf_bdy = sizeof(uint32_t); 
-      wbuf_hash_mod = 1024 * 1024;
-      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + extra);
-      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + extra, strerror(rc));
-      for (long i = 0; i<(rwbuf_len+extra)/sizeof(uint32_t); ++i) {
+      wbuf_repeat_len = 1024 * 1024;
+      wbuf_data_object_hash_mod = 1024 * 1024;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + wbuf_repeat_len);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + wbuf_repeat_len, strerror(rc));
+      for (long i = 0; i<(rwbuf_len+wbuf_repeat_len)/sizeof(uint32_t); ++i) {
         ((uint32_t *)wbuf_ptr)[i] = i * sizeof(uint32_t);
       }
       break;
@@ -968,6 +1024,58 @@ ACTION_RUN(dbuf_run) {
   dbuf_init(V0.i, V1.u);
 }
 
+// Returns a pointer into wbuf based on offset and data object hash
+void * get_wbuf_ptr(char * ctx, U64 offset, U64 data_object_hash) {
+  void * expected = wbuf_ptr + ( (offset + data_object_hash) % wbuf_repeat_len);
+  DBG2("%s: object_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", ctx, data_object_hash, wbuf_ptr, expected - wbuf_ptr);  
+  return expected;
+}
+
+// Convert string that uniquely identifies a data object into a hash
+U64 get_data_object_hash(char * id_string) {
+  U64 obj_hash = BDYDN(crc32(0, id_string, strlen(id_string)) % wbuf_data_object_hash_mod, wbuf_bdy);
+  DBG4("data_object_hash: \"%s\" 0x%lX", id_string, obj_hash);
+  return obj_hash;
+}
+
+int check_read_data(char * ctx, void * buf, size_t len, U64 offset, U64 data_object_hash) {
+  int rc;
+  void * expected = get_wbuf_ptr("hew", offset, data_object_hash);
+  void * mis_comp;
+  if ( ! (mis_comp = memdiff(buf, expected, len)) ) {
+    rc = 0;
+    VERB3("hio_element_read data check successful");
+  } else {
+    // Read data miscompare - dump lots of data about it
+    rc = 1;
+    I64 misc_ofs = (char *)mis_comp - (char *)buf;
+    I64 dump_start = MAX(0, misc_ofs - 16) & (~15);
+    VERB0("Error: %s data check miscompare", ctx);
+    VERB0("       Data offset: 0x%llX  %lld", offset, offset); 
+    VERB0("       Data length: 0x%llX  %lld", len, len); 
+    VERB0("      Data address: 0x%llX", buf); 
+    VERB0("Miscompare address: 0x%llX", mis_comp); 
+    VERB0(" Miscompare offset: 0x%llX  %lld", mis_comp-buf, mis_comp-buf); 
+
+    VERB0("Debug: wbuf_ptr addr: 0x%lX:", wbuf_ptr); hex_dump(wbuf_ptr, 32);
+
+    VERB0("Miscompare expected data at offset 0x%llX %lld follows:", dump_start, dump_start);
+    hex_dump( expected + dump_start, 96);
+
+    VERB0("Miscompare actual data at offset 0x%llX %lld follows:", dump_start, dump_start);
+    hex_dump( buf + dump_start, 96);
+
+    VERB0("XOR of Expected addr: 0x%lX  Miscomp addr: 0x%lX", expected, mis_comp);
+    char * xorbuf_ptr = MALLOCX(len);
+    for (int i=0; i<len; i++) {
+      ((char *)xorbuf_ptr)[i] = ((char *)buf)[i] ^ ((char *)expected)[i];
+    }
+    hex_dump( xorbuf_ptr, len);
+    FREEX(xorbuf_ptr);
+
+  }
+  return rc;
+}
 //----------------------------------------------------------------------------
 // o, e (stdout, stderr) action handlers
 //----------------------------------------------------------------------------
@@ -1269,32 +1377,244 @@ ACTION_RUN(fget_run) {
 }
 
 //----------------------------------------------------------------------------
-// fi, fr, ff (floating point addition init, run, free) action handlers
+// fo, fw, fr, gc file access action handler
+//----------------------------------------------------------------------------
+
+// Substitite rank & PID for %r and %p in string.  Must be free'd by caller
+char * str_sub(char * string) {
+  size_t needed = strlen(string) + 1;
+  size_t dlen = needed + 16; // A little extra so hopefully realloc not needed
+  char * dest = MALLOCX(dlen);
+  char *s = string;
+  char *d = dest;
+  
+  while (*s) {
+    if ('%' == *s) {
+      s++;
+      switch (*s) {
+        case 'p':
+        case 'r':
+          needed += 8;
+          if (dlen < needed) {
+            size_t pos = d - dest;
+            dlen = needed;
+            dest = REALLOCX(dest, dlen);
+            d = dest + pos; 
+          }
+          d += sprintf(d, "%0.8d", (*s == 'p') ? getpid(): (mpi_active() ? myrank: 0) );
+          s++;
+          break;
+        case '%': 
+          *d++ = '%';
+          break;
+        default: 
+          *d++ = *s++;
+      }
+    } else {
+      *d++ = *s++;
+    }      
+  }
+  *d = '\0';
+  return dest;
+}
+
+static int fio_o_count = 0;
+static char * fio_path = NULL;
+static FILE * fio_file;
+static U64 fio_ofs;
+static U64 fio_id_hash;
+static U64 fio_rw_count[2]; // read, write byte counts
+ETIMER fio_foc_tmr;
+double fio_o_time, fio_w_time, fio_r_time, fio_exc_time, fio_c_time;
+
+#define IF_ERRNO(COND, FMT, ...)                                                 \
+  if ( (COND) ) {                                                                \
+    VERB0(FMT " failed.  errno: %d (%s)", __VA_ARGS__, errno, strerror(errno));  \
+    local_fails++;                                                               \
+  }
+
+
+ACTION_CHECK(fo_check) {
+  if (fio_o_count++ != 0) ERRX("nested fo");
+  if (rwbuf_len == 0) rwbuf_len = 20 * 1024 * 1024;
+} 
+
+ACTION_RUN(fo_run) {
+  fio_path = str_sub(V0.s);
+  char * mode = V1.s;
+
+  fio_o_time = fio_w_time = fio_r_time = fio_exc_time = fio_c_time = 0;
+  fio_ofs = 0;
+
+  if (! wbuf_ptr ) dbuf_init(RAND22, 20 * 1024 * 1024); 
+  fio_id_hash = get_data_object_hash(fio_path);
+  if (mpi_active()) MPI_CK(MPI_Barrier(mpi_comm));
+
+  ETIMER_START(&fio_foc_tmr);
+  ETIMER_START(&local_tmr);
+  fio_file = fopen(fio_path, mode);
+  IF_ERRNO( !fio_file, "fo: fopen(%s, %s)", fio_path, mode );
+  fio_rw_count[0] = fio_rw_count[1] = 0;
+} 
+
+ACTION_CHECK(fw_check) {
+  U64 size = V1.u;
+  if (fio_o_count != 1) ERRX("fw without preceeding fo");
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
+} 
+  
+
+ACTION_RUN(fw_run) {
+  ssize_t len_act;
+  I64 ofs_param = V0.u;
+  U64 len_req = V1.u;
+  U64 ofs_abs;
+
+  ofs_abs = fio_ofs + ofs_param;
+  DBG2("fw ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", fio_ofs, ofs_param, ofs_abs, len_req);
+  void * expected = get_wbuf_ptr("fw", ofs_abs, fio_id_hash);
+  ETIMER_START(&local_tmr);
+
+  if (fio_ofs != ofs_abs) {
+    int rc = fseeko(fio_file, ofs_abs, SEEK_SET); 
+    IF_ERRNO( rc, "fw: fseek(%s, %lld, SEEK_SET)", fio_path, ofs_abs);
+    fio_ofs = ofs_abs;
+  }
+
+  len_act = fwrite_rd(fio_file, expected, len_req);
+  fio_w_time += ETIMER_ELAPSED(&local_tmr);
+  fio_ofs += len_act;
+  IF_ERRNO( len_act != len_req, "fw: fwrite(%s, , %lld) len_act: %lld", fio_path, len_req, len_act);
+  fio_rw_count[1] += len_act;
+}
+
+ACTION_CHECK(fr_check) {
+  U64 size = V1.u;
+  if (fio_o_count != 1) ERRX("fr without preceeding fo");
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
+}
+ 
+ACTION_RUN(fr_run) {
+  ssize_t len_act;
+  I64 ofs_param = V0.u;
+  U64 len_req = V1.u;
+  U64 ofs_abs;
+
+  ofs_abs = fio_ofs + ofs_param;
+  DBG2("fr ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", fio_ofs, ofs_param, ofs_abs, len_req);
+
+  ETIMER_START(&local_tmr);
+
+  if (fio_ofs != ofs_abs) {
+    int rc = fseeko(fio_file, ofs_abs, SEEK_SET); 
+    IF_ERRNO( rc, "fr: fseek(%s, %lld, SEEK_SET)", fio_path, ofs_abs);
+    fio_ofs = ofs_abs;
+  }
+
+  len_act = fread_rd(fio_file, rbuf_ptr, len_req);
+  fio_r_time += ETIMER_ELAPSED(&local_tmr);
+  fio_ofs += len_act;
+  IF_ERRNO( len_act != len_req, "fr: fread(%s, , %lld) len_act: %lld", fio_path, len_req, len_act);
+  
+  if (options & OPT_RCHK) {
+    ETIMER_START(&local_tmr);
+    // Force error for unit test
+    // *(char *)(rbuf_ptr+16) = '\0';
+    int rc = check_read_data("fread", rbuf_ptr, len_req, ofs_abs, fio_id_hash);
+    if (rc) { 
+      local_fails++;
+    }
+    fio_exc_time += ETIMER_ELAPSED(&local_tmr);
+  }
+  fio_rw_count[0] += len_act;
+}
+
+ACTION_CHECK(fc_check) {
+  if (fio_o_count != 1) ERRX("fc without preceeding fo");
+  fio_o_count--;
+}
+
+ACTION_RUN(fc_run) {
+  int rc;
+
+  ETIMER_START(&local_tmr);
+  rc = fclose(fio_file);
+  fio_c_time += ETIMER_ELAPSED(&local_tmr);
+
+  ETIMER_START(&local_tmr);
+  if (mpi_active()) MPI_CK(MPI_Barrier(mpi_comm));
+  double bar_time = ETIMER_ELAPSED(&local_tmr);
+  double foc_time = ETIMER_ELAPSED(&fio_foc_tmr);
+
+  IF_ERRNO( rc, "fc: fclose(%s)", fio_path);
+
+  double una_time = foc_time - (fio_o_time + fio_w_time + fio_r_time +
+                                fio_c_time + bar_time + fio_exc_time);
+
+  char * desc = "         data check time"; 
+  if (options & OPT_PERFXCHK) desc = "excluded data check time"; 
+
+  if (options & OPT_XPERF) {  
+    prt_mmmst(fio_o_time,   "              fopen time", "S");
+    prt_mmmst(fio_w_time,   "             fwrite time", "S");
+    prt_mmmst(fio_r_time,   "              fread time", "S");
+    prt_mmmst(fio_c_time,   "             fclose time", "S");
+    prt_mmmst(bar_time,     "post fclose barrier time", "S");
+    prt_mmmst(fio_exc_time, desc,                       "S");
+    prt_mmmst(foc_time,     " fopen-fclose total time", "S");
+    prt_mmmst(una_time,     "    unaccounted for time", "S");
+  }
+
+  U64 rw_count_sum[2];
+  if (mpi_active()) {
+    #ifdef MPI
+      MPI_CK(MPI_Reduce(fio_rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
+    #endif  
+  } else {
+    rw_count_sum[0] = fio_rw_count[0];
+    rw_count_sum[1] = fio_rw_count[1];
+  }
+  
+  if (0 == myrank) {
+    if (options & OPT_PERFXCHK) foc_time -= fio_exc_time;
+    char b1[32], b2[32], b3[32], b4[32], b5[32];
+    VERB1("fo-fc R/W Size: %s %s  Time: %s  R/W Speed: %s %s",
+          eng_not(b1, sizeof(b1), (double)rw_count_sum[0],    "B6.4", "B"),
+          eng_not(b2, sizeof(b2), (double)rw_count_sum[1],    "B6.4", "B"),
+          eng_not(b3, sizeof(b3), (double)foc_time,           "D6.4", "S"),
+          eng_not(b4, sizeof(b4), rw_count_sum[0] / foc_time, "B6.4", "B/S"),
+          eng_not(b5, sizeof(b5), rw_count_sum[1] / foc_time, "B6.4", "B/S"));
+  }        
+  fio_path = FREEX(fio_path);
+}
+
+//----------------------------------------------------------------------------
+// ni, nr, nf (floating point addition init, run, free) action handlers
 //----------------------------------------------------------------------------
 static double * nums;
 static U64 flap_size = 0, count;
 
-ACTION_CHECK(fi_check) {
+ACTION_CHECK(ni_check) {
   flap_size = V0.u;
   count = V1.u;
   if (flap_size < 2) ERRX("%s; size must be at least 2", A.desc);
 }
 
-ACTION_CHECK(fr_check) {
+ACTION_CHECK(nr_check) {
   U64 rep = V0.u;
   U64 stride = V1.u;
 
-  if (!flap_size) ERRX("%s; fr without prior fi", A.desc);
+  if (!flap_size) ERRX("%s; nr without prior ni", A.desc);
   if ((count-1)%stride != 0) ERRX("%s; count-1 must equal a multiple of stride", A.desc);
   if (rep<1) ERRX("%s; rep must be at least 1", A.desc);
 }
 
-ACTION_CHECK(ff_check) {
-  if (!flap_size) ERRX("%s; ff without prior fi", A.desc);
+ACTION_CHECK(nf_check) {
+  if (!flap_size) ERRX("%s; nf without prior ni", A.desc);
   flap_size = 0;
 }
 
-ACTION_RUN(fi_run) {
+ACTION_RUN(ni_run) {
   flap_size = V0.u;
   count = V1.u;
   U64 N = flap_size * count;
@@ -1311,7 +1631,7 @@ ACTION_RUN(fi_run) {
   }
 }
 
-ACTION_RUN(fr_run) {
+ACTION_RUN(nr_run) {
   double sum, delta_t, predicted;
   U64 b, ba, r, d, fp_add_ct, max_val;
   U64 N = flap_size * count;
@@ -1355,11 +1675,13 @@ ACTION_RUN(fr_run) {
 
   delta_t = ETIMER_ELAPSED(&tmr);
 
-  VERB2("flapper done; predicted: %e sum: %e delta: %e", predicted, sum, sum - predicted);
+  VERB2("flapper done; FP Adds %llu, predicted: %e sum: %e delta: %e", fp_add_ct, predicted, sum, sum - predicted);
   VERB2("FP Adds: %llu, time: %f Seconds, MFLAPS: %e", fp_add_ct, delta_t, (double)fp_add_ct / delta_t / 1000000.0);
+  prt_mmmst(delta_t, " Add time", "S");
+  prt_mmmst((double)fp_add_ct / delta_t, "FLAP rate", "F/S" );
 }
 
-ACTION_RUN(ff_run) {
+ACTION_RUN(nf_run) {
   flap_size = 0;
   FREEX(nums);
 }
@@ -1646,11 +1968,10 @@ static I64 hio_cnt_exp = HIO_CNT_REQ;
 static I64 hio_dsid_exp = -999;
 static int hio_dsid_exp_set = 0;
 static int hio_fail = 0;
-static int hio_check = 0;
 static U64 hio_e_ofs;
 static I64 hseg_start = 0;
-static U64 rw_count[2];
-static ETIMER hio_hdaf_tmr, local_tmr;
+static U64 hio_rw_count[2];
+static ETIMER hio_hdaf_tmr;
 double hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_her_time,
        hio_hec_time, hio_hdc_time, hio_hdf_time, hio_exc_time;
 
@@ -1708,7 +2029,7 @@ ACTION_RUN(hda_run) {
   hio_ds_id_req = V1.u;
   hio_dataset_flags = V2.i;
   hio_dataset_mode = V3.i;
-  rw_count[0] = rw_count[1] = 0;
+  hio_rw_count[0] = hio_rw_count[1] = 0;
   MPI_CK(MPI_Barrier(mpi_comm));
   hio_hda_time = hio_hdo_time = hio_heo_time = hio_hew_time = hio_her_time =
                  hio_hec_time = hio_hdc_time = hio_hdf_time = hio_exc_time = 0.0;
@@ -1765,12 +2086,12 @@ ACTION_RUN(heo_run) {
   ETIMER_START(&local_tmr);
   if (! wbuf_ptr ) dbuf_init(RAND22P, 20 * 1024 * 1024); 
 
-  char * hash_str = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
-                                 hio_ds_id_act, hio_element_name,
-                                 (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) ? myrank: 0);
-  hio_element_hash = BDYDN(crc32(0, hash_str, strlen(hash_str)) % wbuf_hash_mod, wbuf_bdy);
-  DBG4("heo hash: \"%s\" 0x%04X", hash_str, hio_element_hash);
-  FREEX(hash_str);
+  char * element_id = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
+                                   hio_ds_id_act, hio_element_name,
+                                   (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) ? myrank: 0);
+  hio_element_hash = get_data_object_hash(element_id);
+  //hio_element_hash = BDYDN(crc32(0, element_id, strlen(element_id)) % wbuf_data_object_hash_mod, wbuf_bdy);
+  FREEX(element_id);
 
   hio_e_ofs = 0;
   hio_exc_time += ETIMER_ELAPSED(&local_tmr);
@@ -1778,13 +2099,6 @@ ACTION_RUN(heo_run) {
 
 ACTION_RUN(hso_run) {
   hio_e_ofs = V0.u;
-}
-
-ACTION_RUN(hck_run) {
-  hio_check = V0.i;
-  R0_OR_VERB_START
-    VERB1("HIO read data checking is now %s", V0.s);
-  R0_OR_VERB_END
 }
 
 ACTION_CHECK(hew_check) {
@@ -1819,13 +2133,12 @@ ACTION_RUN(hew_run) {
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
-  void * expected = wbuf_ptr + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
-  DBG2("hew: hio_element_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", hio_element_hash, wbuf_ptr, expected - wbuf_ptr);  
+  void * expected = get_wbuf_ptr("hew", ofs_abs, hio_element_hash);
   ETIMER_START(&local_tmr);
   hcnt = hio_element_write (element, ofs_abs, 0, expected, 1, hreq);
   hio_hew_time += ETIMER_ELAPSED(&local_tmr);
   HCNT_TEST(hio_element_write)
-  rw_count[1] += hcnt;
+  hio_rw_count[1] += hcnt;
 }
 
 // Randomize length, then call hew action handler
@@ -1853,45 +2166,15 @@ ACTION_RUN(her_run) {
   hcnt = hio_element_read (element, ofs_abs, 0, rbuf_ptr, 1, hreq);
   hio_her_time += ETIMER_ELAPSED(&local_tmr);
   HCNT_TEST(hio_element_read)
-  rw_count[0] += hcnt;
+  hio_rw_count[0] += hcnt;
 
-  if (hio_check) {
+  if (options & OPT_RCHK) {
     ETIMER_START(&local_tmr);
-    void * expected =  wbuf_ptr + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE);
-    void * mis_comp;
-    DBG2("her: hio_element_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", hio_element_hash, wbuf_ptr, expected - wbuf_ptr);  
     // Force error for unit test
     // *(char *)(rbuf_ptr+16) = '\0';
-    if ( ! (mis_comp = memdiff(rbuf_ptr, expected, hreq)) ) {
-      VERB3("hio_element_read data check successful");
-    } else {
-      // Read data miscompare - dump lots of data about it
+    int rc = check_read_data("hio_element_read", rbuf_ptr, hreq, ofs_abs, hio_element_hash);
+    if (rc) { 
       local_fails++;
-      I64 offset = (char *)mis_comp - (char *)rbuf_ptr;
-      I64 dump_start = MAX(0, offset - 16) & (~15);
-      VERB0("Error: hio_element_read data check miscompare");
-      VERB0("Element read offset: 0x%llX  %lld", ofs_abs, ofs_abs); 
-      VERB0("Element read length: 0x%llX  %lld", hreq, hreq); 
-      VERB0("      Read addresss: 0x%llX", rbuf_ptr); 
-      VERB0(" Miscompare address: 0x%llX", mis_comp); 
-      VERB0("  Miscompare offset: 0x%llX  %lld", mis_comp-rbuf_ptr, mis_comp-rbuf_ptr); 
-
-      VERB0("Debug: wbuf_ptr addr: 0x%lX:", wbuf_ptr); hex_dump(wbuf_ptr, 32);
-
-      VERB0("Miscompare expected data at offset 0x%llX %lld follows:", dump_start, dump_start);
-      hex_dump( wbuf_ptr + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 96);
-
-      VERB0("Miscompare actual data at offset 0x%llX %lld follows:", dump_start, dump_start);
-      hex_dump( rbuf_ptr + dump_start, 96);
-
-      VERB0("XOR of Expected addr: 0x%lX  Miscomp addr: 0x%lX", expected, mis_comp);
-      char * xorbuf_ptr = MALLOCX(hreq);
-      for (int i=0; i<hreq; i++) {
-        ((char *)xorbuf_ptr)[i] = ((char *)rbuf_ptr)[i] ^ ((char *)expected)[i];
-      }
-      hex_dump( xorbuf_ptr, hreq);
-      FREEX(xorbuf_ptr);
-
       char * dw_path = getenv("DW_JOB_STRIPED");
       if (dw_path) {
         // Attempt to dump the datawarp physical file data directly (without HIO) 
@@ -1905,7 +2188,7 @@ ACTION_RUN(her_run) {
                            dw_path, hio_context_name, hio_dataset_name,
                            hio_ds_id_act, hio_element_name);
         if (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) {
-          snprintf(path+len, sizeof(path)-len, ".%05d", myrank);
+          snprintf(path+len, sizeof(path)-len, ".%08d", myrank);
         }
 
         FILE * elf = fopen(path, "r");
@@ -1918,7 +2201,7 @@ ACTION_RUN(her_run) {
           } else {
             char * fbuf = MALLOCX(hreq);
             ssize_t count = fread_rd(elf, fbuf, hreq);
-            if (count != hreq) VERB0("Warning: fread_rd count: %ld, request: %ld", count, hreq);
+            if (count != hreq) VERB0("Warning: fread_rd count: %ld, len_req: %ld", count, hreq);
             VERB0("File %s at offset 0x%lX:", path, ofs_abs);
             hex_dump(fbuf, hreq);  
             FREEX(fbuf);
@@ -1930,6 +2213,7 @@ ACTION_RUN(her_run) {
     }
     hio_exc_time += ETIMER_ELAPSED(&local_tmr);
   }
+
 }
 
 // Randomize length, then call her action handler
@@ -1968,40 +2252,45 @@ ACTION_RUN(hdf_run) {
   double bar_time = ETIMER_ELAPSED(&local_tmr);
   double hdaf_time = ETIMER_ELAPSED(&hio_hdaf_tmr);
   HRC_TEST(hio_dataset_close)
-  U64 rw_count_sum[2];
-  MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
+  U64 hio_rw_count_sum[2];
+  MPI_CK(MPI_Reduce(hio_rw_count, hio_rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   DBG3("After hio_dataset_free(); dataset: %p", dataset);
   IFDBG3( hex_dump(&dataset, sizeof(dataset)) );
   double una_time = hdaf_time - (hio_hda_time + hio_hdo_time + hio_heo_time + hio_hew_time + hio_her_time
                                  + hio_hec_time + hio_hdc_time + hio_hdf_time + bar_time + hio_exc_time);
-  VERB2("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
-  VERB2("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
-  
-  prt_mmmst(hio_hda_time, " hio_dataset_allocate time", "S");
-  prt_mmmst(hio_hdo_time, "     hio_dataset_open time", "S");
-  prt_mmmst(hio_heo_time, "     hio_element_open time", "S");
-  prt_mmmst(hio_hew_time, "    hio_element_write time", "S");
-  prt_mmmst(hio_her_time, "     hio_element_read time", "S");
-  prt_mmmst(hio_hec_time, "    hio_element_close time", "S");
-  prt_mmmst(hio_hdc_time, "    hio_dataset_close time", "S");
-  prt_mmmst(hio_hdf_time, "     hio_dataset_free time", "S");
-  prt_mmmst(bar_time,     "    post free barrier time", "S");
-  prt_mmmst(hio_exc_time, "  excluded data check time", "S");
-  prt_mmmst(hdaf_time,    "        hda-hdf total time", "S");
-  prt_mmmst(una_time,     "      unaccounted for time", "S");
+ 
+  char * desc = "           data check time"; 
+  if (options & OPT_PERFXCHK) desc = "  excluded data check time";
+ 
+  if (options & OPT_XPERF) {  
+    prt_mmmst(hio_hda_time, " hio_dataset_allocate time", "S");
+    prt_mmmst(hio_hdo_time, "     hio_dataset_open time", "S");
+    prt_mmmst(hio_heo_time, "     hio_element_open time", "S");
+    prt_mmmst(hio_hew_time, "    hio_element_write time", "S");
+    prt_mmmst(hio_her_time, "     hio_element_read time", "S");
+    prt_mmmst(hio_hec_time, "    hio_element_close time", "S");
+    prt_mmmst(hio_hdc_time, "    hio_dataset_close time", "S");
+    prt_mmmst(hio_hdf_time, "     hio_dataset_free time", "S");
+    prt_mmmst(bar_time,     "    post free barrier time", "S");
+    prt_mmmst(hio_exc_time, desc ,                        "S");
+    prt_mmmst(hdaf_time,    "        hda-hdf total time", "S");
+    prt_mmmst(una_time,     "      unaccounted for time", "S");
+  }
 
   if (myrank == 0) {
-    hdaf_time -= hio_exc_time;
+    if (options & OPT_PERFXCHK) hdaf_time -= hio_exc_time;
     char b1[32], b2[32], b3[32], b4[32], b5[32];
     VERB1("hda-hdf R/W Size: %s %s  Time: %s  R/W Speed: %s %s",
-          eng_not(b1, sizeof(b1), (double)rw_count_sum[0],     "B6.4", "B"),
-          eng_not(b2, sizeof(b2), (double)rw_count_sum[1],     "B6.4", "B"),
+          eng_not(b1, sizeof(b1), (double)hio_rw_count_sum[0],     "B6.4", "B"),
+          eng_not(b2, sizeof(b2), (double)hio_rw_count_sum[1],     "B6.4", "B"),
           eng_not(b3, sizeof(b3), (double)hdaf_time,           "D6.4", "S"),
-          eng_not(b4, sizeof(b4), rw_count_sum[0] / hdaf_time, "B6.4", "B/S"),
-          eng_not(b5, sizeof(b5), rw_count_sum[1] / hdaf_time, "B6.4", "B/S"));
-
-    printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / hdaf_time / GIGBIN );
-    printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / hdaf_time / GIGBIN );
+          eng_not(b4, sizeof(b4), hio_rw_count_sum[0] / hdaf_time, "B6.4", "B/S"),
+          eng_not(b5, sizeof(b5), hio_rw_count_sum[1] / hdaf_time, "B6.4", "B/S"));
+    
+    if (options & OPT_PAVM) {
+      printf("<td> Read_speed %f GiB/S\n", hio_rw_count_sum[0] / hdaf_time / GIGBIN );
+      printf("<td> Write_speed %f GiB/S\n", hio_rw_count_sum[1] / hdaf_time / GIGBIN );
+    }
   }
 }
 
@@ -2295,7 +2584,7 @@ struct parse {
   {"ztest", {SINT, DOUB, STR,  STR,  NONE}, NULL,          ztest_run   },   // For testing code fragments  
   {"v",     {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
   {"d",     {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
-  {"qof",   {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
+  {"opt",   {STR,  NONE, NONE, NONE, NONE}, opt_check,     opt_run     },
   {"name",  {STR,  NONE, NONE, NONE, NONE}, NULL,          name_run    },
   {"im",    {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
   {"srr",   {SINT, NONE, NONE, NONE, NONE}, NULL,          srr_run     },
@@ -2330,10 +2619,14 @@ struct parse {
   {"fctw",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctw_run    },
   {"fctr",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctr_run    },
   {"fget",  {STR,  NONE, NONE, NONE, NONE}, NULL,          fget_run    },
+  {"fo",    {STR,  STR,  NONE, NONE, NONE}, fo_check,      fo_run      },
+  {"fw",    {SINT, UINT, NONE, NONE, NONE}, fw_check,      fw_run      },
+  {"fr",    {SINT, UINT, NONE, NONE, NONE}, fr_check,      fr_run      },
+  {"fc",    {NONE, NONE, NONE, NONE, NONE}, fc_check,      fc_run      },
   #endif
-  {"fi",    {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
-  {"fr",    {PINT, PINT, NONE, NONE, NONE}, fr_check,      fr_run      },
-  {"ff",    {NONE, NONE, NONE, NONE, NONE}, ff_check,      fr_run      },
+  {"ni",    {UINT, PINT, NONE, NONE, NONE}, ni_check,      ni_run      },
+  {"nr",    {PINT, PINT, NONE, NONE, NONE}, nr_check,      nr_run      },
+  {"nf",    {NONE, NONE, NONE, NONE, NONE}, nf_check,      nf_run      },
   {"hx",    {UINT, UINT, UINT, UINT, UINT}, hx_check,      hx_run      },
   #ifdef DLFCN
   {"dlo",   {STR,  NONE, NONE, NONE, NONE}, dlo_check,     dlo_run     },
@@ -2344,7 +2637,6 @@ struct parse {
   {"hi",    {STR,  STR,  NONE, NONE, NONE}, NULL,          hi_run      },
   {"hda",   {STR,  HDSI, HFLG, HDSM, NONE}, NULL,          hda_run     },
   {"hdo",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdo_run     },
-  {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
   {"heo",   {STR,  HFLG, NONE, NONE, NONE}, heo_check,     heo_run     },
   {"hso",   {UINT, NONE, NONE, NONE, NONE}, NULL,          hso_run     },
   {"hsega", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsega_run   },
@@ -2539,14 +2831,14 @@ void run_action() {
   #endif
 
   while ( ++a < actc ) {
-    VERB2("--- Running %s; action[%d].actn: %d", actv[a].desc, a, actv[a].actn);
+    VERB2("--- Running %s", actv[a].desc);
     // Runner routine may modify variable a for looping or conditional
     int old_a = a;
     errno = 0;
     if (actv[a].runner) actv[a].runner(&actv[a], &a);
-    DBG3("Done %s; fails: %d qof: %d actn: %d", actv[old_a].desc, local_fails, quit_on_fail, a);
-    if (quit_on_fail != 0 && local_fails >= quit_on_fail) {
-      VERB0("Quiting due to fails: %d >= qof: %d", local_fails, quit_on_fail);
+    DBG3("Done %s; fails: %d ROF: %d actn: %d", actv[old_a].desc, local_fails, (options & OPT_ROF) ? 1: 0, a);
+    if (local_fails > 0 && !(options & OPT_ROF)) {
+      VERB0("Quiting due to fails: %d and ROF not set", local_fails);
       break;
     }
   }
@@ -2625,20 +2917,36 @@ void sig_init(void) {
 //----------------------------------------------------------------------------
 int main(int argc, char * * argv) {
 
-  if (argc <= 1 || 0 == strncmp("-h", argv[1], 2)) {
-    fprintf(stdout, help, cvt_num_suffix());
-    return 1;
-  }
 
   msg_context_init(MY_MSG_CTX, 0, 0);
   get_id();
 
-  sig_init();
+  if (argc <= 1 || 0 == strncmp("-h", argv[1], 2)) {
+    fprintf(stdout, help, enum_list(MY_MSG_CTX, &etab_opt),
+            options_init, cvt_num_suffix());
+    return 1;
+  }
 
+  sig_init();
   add2tokv(argc-1, argv+1); // Make initial copy of argv so im works
 
+  // Parse init and env option values
+  int set, clear, newopt, rc;
+  char * xexec_opt = getenv("XEXEC_OPT");
+
+  parse_opt("internal options_init", options_init, &set, &clear);
+  newopt = clear & set;
+
+  if (xexec_opt) { 
+    parse_opt("XEXEC_OPT env var", xexec_opt, &set, &clear);
+    newopt = clear & (set | newopt);
+  }   
+ 
   // Make two passes through args, first to check, second to run.
+  options = newopt;
   parse_action();
+
+  options = newopt;
   run_action();
 
   // Suppress SUCCESS result message from all but rank 0
@@ -2651,12 +2959,14 @@ int main(int argc, char * * argv) {
           local_fails + global_fails, test_name);
 
     // Pavilion message
-    printf("<result> %s <<< xexec done.  Test name: %s  Fails: %d >>>\n",
-           (local_fails + global_fails) ? "fail" : "pass",
-           test_name, local_fails + global_fails);
+    if (options & OPT_PAVM) {
+      printf("<result> %s <<< xexec done.  Test name: %s  Fails: %d >>>\n",
+             (local_fails + global_fails) ? "fail" : "pass",
+             test_name, local_fails + global_fails);
+    }
   }
 
-  int rc = (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
+  rc = (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
 
   #ifdef MPI
   if (rc != EXIT_SUCCESS && mpi_active()) {

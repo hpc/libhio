@@ -231,11 +231,11 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
 
   if (etptr->multiple) {
-    char * string = STRDUPX(name);
+    char * namec = STRDUPX(name);
     char * token, *saveptr;
     int myval = 0;
 
-    token = strtok_r(string, etptr->delim, &saveptr);
+    token = strtok_r(namec, etptr->delim, &saveptr);
     while (token) {
     ENUM_NAME_VAL_PAIR nv = {token, 0};
       ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
@@ -247,6 +247,7 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
       token = strtok_r(NULL, etptr->delim, &saveptr);
     }
     if (rc == 0) *val = myval;
+    FREEX(namec);
   } else {
     ENUM_NAME_VAL_PAIR nv = {name, 0};
     ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
@@ -256,6 +257,43 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
       rc = -1;
     }
   }
+  return rc;
+}
+
+int flag2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * set, int * clear) {
+  int rc = 0;
+  // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
+  if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
+
+  if (!etptr->multiple) ERRX("flag2enum called for enum type non-multiple");
+  char * namec = STRDUPX(name);
+  char * token, *saveptr;
+  char * delim = "+-";
+  int myset = 0, myclear= ~0;
+
+  token = strtok_r(namec, delim, &saveptr);
+  while (token) {
+    ENUM_NAME_VAL_PAIR nv = {token, 0};
+    ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
+    if (nvp) {
+      size_t ofs = token - namec;
+      char op = (0 == ofs) ? '+': name[ofs-1];
+      if ('+' == op) {
+        myset |= nvp->val;
+      } else {
+        myclear &= ~(nvp->val);
+      } 
+      // printf("tok: %s  delim: %c val: 0x%X \n", token, op, *val);
+    } else {
+      rc = -1;
+    }
+    token = strtok_r(NULL, delim, &saveptr);
+  }
+  if (0 ==rc) {
+    *set = myset;
+    *clear = myclear;
+  }
+  FREEX(namec);
   return rc;
 }
 
@@ -277,7 +315,7 @@ char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr) {
 
 //----------------------------------------------------------------------------
 // hex_dump - dumps size bytes of *data to stdout. Looks like:
-// [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
+// [000000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
 //----------------------------------------------------------------------------
 void hex_dump(void *data, int size) {
     unsigned char *p = data;

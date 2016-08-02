@@ -42,7 +42,6 @@ cmdr="
   hda NT1_DS 98 READ SHARED hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nseg
     hsegr 0 $segsz 17
     lc $nblkpseg
