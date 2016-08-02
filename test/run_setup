@@ -85,15 +85,15 @@ synexit() {
 # Functions for run_setup and test scripts to use
 #----------------------------------------------------------------------------
 cmd() {
-  echo "$host ---> $*"
+  echo "`date \"$datefmt\"` $host ---> $*"
   eval "$*"
   return $?
 }
 
 msglog=""
 msg() {
-  echo "$host $*"
-  if [[ -n $msglog ]]; then echo "$host $*" >> $msglog; fi
+  echo "`date \"$datefmt\"` $host run_setup: $*"
+  if [[ -n $msglog ]]; then echo "`date \"$datefmt\"` $host run_setup: $*" >> $msglog; fi
 }
 
 errx() {
@@ -148,7 +148,7 @@ batch_sub() {
     done
     jobout="$rundir/job.$jobname.out"
     msglog="$rundir/job.$jobname.jobid"
-    msg "run_setup: `date \"$datefmt\"` Job $jobname $args"
+    msg "`date \"$datefmt\"` Job $jobname $args"
 
     echo "#! /bin/bash" > $jobsh
     proc_parm=""
@@ -194,7 +194,7 @@ batch_sub() {
     echo "----------------------------------------------------------------------" >> $msglog 
 
     mcmd="$mcmd $jobsh"
-    msg "run_setup: ---> $mcmd"
+    msg "---> $mcmd"
     msub_msg=`$mcmd 2>&1`
 
     shopt -s nocasematch
@@ -203,7 +203,7 @@ batch_sub() {
     else
       jobid=${msub_msg#$'\n'}
       echo "$jobid" > $lastjob
-      msg "run_setup: `date \"$datefmt\"` job $jobname ID: $jobid submitted"
+      msg "`date \"$datefmt\"` job $jobname ID: $jobid submitted"
     fi
     shopt -u nocasematch
     msglog=""
@@ -525,7 +525,7 @@ if [[ ${dw_alloc_pct:0:1} -eq "n" ]]; then
   # request (nodes - 1/2) * gran, rounded to GiB
   dw_cap_override="$(( ( ($dw_nodes * $dw_gran) - ($dw_gran / 2) ) / $cons_gi ))GiB"
   if [[ $query_size -eq 0 ]]; then
-    msg "run_setup: dw_gran: $((dw_gran/$cons_gi)) GiB  dw_nodes: $dw_nodes  dw_cap_override: $dw_cap_override GiB"
+    msg "dw_gran: $((dw_gran/$cons_gi)) GiB  dw_nodes: $dw_nodes  dw_cap_override: $dw_cap_override GiB"
   fi
   # treat like -x 100 from here on
   dw_alloc_pct="100"
@@ -547,7 +547,7 @@ if [[ $batch -eq 0 ]]; then
 
   if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
   elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
-  else errx "run_setup: OSTYPE \"$OSTYPE\" not recognized"; fi
+  else errx "OSTYPE \"$OSTYPE\" not recognized"; fi
 
   # Load module environment recorded at build
   mod_script="hiobuild.modules.bash"
@@ -613,20 +613,20 @@ if [[ $batch -eq 0 ]]; then
 
   if [[ $query_size -eq 0 ]]; then
     # Display results of run_setup
-    msg "run_setup:                      Args: \"$args\""
-    msg "run_setup:                       PWD: \"$PWD\""
-    msg "run_setup:                     build: \"$build\""
-    msg "run_setup:                      libs: \"$libs\""
-    msg "run_setup:                    mpicmd: \"$mympicmd\""
-    msg "run_setup:           nodes/ranks/ppn: $nodes / $ranks / $ppn"
-    msg "run_setup:                      size: \"$size\""
-    msg "run_setup:               totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
-    msg "run_setup:        nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"
-    msg "run_setup:    verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
+    msg "                     Args: \"$args\""
+    msg "                      PWD: \"$PWD\""
+    msg "                    build: \"$build\""
+    msg "                     libs: \"$libs\""
+    msg "                   mpicmd: \"$mympicmd\""
+    msg "          nodes/ranks/ppn: $nodes / $ranks / $ppn"
+    msg "                     size: \"$size\""
+    msg "              totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
+    msg "       nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"
+    msg "   verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
 
     # Pretty print all HIO_ variables
     for var in ${!HIO_*}; do
-      msg "run_setup: $(printf '%*s: "%s"' 25 $var ${!var})"
+      msg "$(printf '%*s: "%s"' 25 $var ${!var})"
     done
 
     if [[ -z $HIO_TEST_ROOTS ]]; then msg "Warning: HIO_TEST_ROOTS not set or defaulted"; fi
