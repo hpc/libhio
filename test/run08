@@ -67,7 +67,6 @@ cmdr="
   hda NTNDS 99 READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le

@@ -62,7 +62,6 @@ cmdr="
   hda NTN_DS 99 READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le
@@ -72,7 +71,6 @@ cmdr="
   hda NTN_DS ID_NEWEST READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le
@@ -82,7 +80,6 @@ cmdr="
   hda NTN_DS ID_HIGHEST READ UNIQUE hdo
   heo MY_EL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le
