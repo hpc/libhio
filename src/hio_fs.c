@@ -139,7 +139,6 @@ static int hioi_fs_open_lustre (hio_context_t context, const char *path, hio_fs_
 static int hioi_fs_open_datawarp (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr,
 				  int flags, int mode) {
 #if defined(DW_SUPER_MAGIC)
-  struct lov_user_md lum;
   int rc, fd;
 
   fd = open (path, flags, mode);
