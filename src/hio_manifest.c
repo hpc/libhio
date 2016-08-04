@@ -20,6 +20,11 @@
 #include <unistd.h>
 #include <bzlib.h>
 
+#if !defined(__STRICT_ANSI__)
+/* silence pedantic error about extension usage in json-c */
+#define __STRICT_ANSI__
+#endif
+
 #include <json.h>
 
 #define HIO_MANIFEST_VERSION "3.0"
@@ -136,7 +141,6 @@ static json_object *hio_manifest_generate_simple_3_0 (hio_dataset_t dataset) {
   hio_object_t hio_object = &dataset->ds_object;
   json_object *top, *config;
   int rc, config_count;
-  char *string_tmp;
 
   top = json_object_new_object ();
   if (NULL == top) {
@@ -215,9 +219,7 @@ static json_object *hio_manifest_generate_simple_3_0 (hio_dataset_t dataset) {
  */
 static json_object *hio_manifest_generate_3_0 (hio_dataset_t dataset) {
   json_object *elements, *top;
-  hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_element_t element;
-  int rc;
 
   top = hio_manifest_generate_simple_3_0 (dataset);
   if (NULL == top || 0 == hioi_list_length (&dataset->ds_elist)) {
@@ -353,7 +355,6 @@ int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t
 }
 
 int hioi_manifest_save (hio_dataset_t dataset, const unsigned char *manifest_data, size_t data_size, const char *path) {
-  const char *extension = strrchr (path, '.') + 1;
   int rc;
 
   errno = 0;
@@ -515,7 +516,7 @@ static int hioi_manifest_parse_elements_2_0 (hio_dataset_t dataset, json_object 
 static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   json_object *elements_object;
-  unsigned long mode = 0, size, value;
+  unsigned long mode = 0, size;
   const char *tmp_string;
   long status;
   int rc;
@@ -608,7 +609,7 @@ static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object) 
 static int hioi_manifest_parse_3_0 (hio_dataset_t dataset, json_object *object) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   json_object *elements_object, *config;
-  unsigned long mode = 0, size, value;
+  unsigned long mode = 0, size;
   const char *tmp_string;
   long status;
   int rc;

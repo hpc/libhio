@@ -350,11 +350,10 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsig
   return rc;
 }
 
-static int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
+int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc) {
   hio_context_t context = (hio_context_t) dataset->ds_object.parent;
   int *ranks = NULL, *all_ranks, rank_count = 0, io_leader, mpirc;
   MPI_Comm io_comm;
-  long ar_data[5];
 
   /* first reduce the current error code */
   mpirc = MPI_Allreduce (MPI_IN_PLACE, &rc, 1, MPI_INT, MPI_MIN, context->c_comm);
@@ -427,7 +426,7 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
 
   hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Opening dataset %s::%" PRIu64 " with flags 0x%x "
             "with backend module %p", dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags,
-            module);
+            (void *) module);
 
   /* Several things need to be done here:
    * 1) check if the user is requesting a specific dataset or the newest available,

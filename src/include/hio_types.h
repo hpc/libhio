@@ -108,7 +108,7 @@ static inline bool hioi_list_empty (hio_list_t *list) {
 }
 
 
-static size_t hioi_list_length (hio_list_t *list) {
+static inline size_t hioi_list_length (hio_list_t *list) {
   hio_list_t *item = list;
   size_t count = 0;
 

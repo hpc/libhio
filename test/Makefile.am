@@ -30,5 +30,6 @@ endif
 test01_x_SOURCES = test01.c
 xexec_x_SOURCES = xexec.c cw_misc.c cw_misc.h
 
-xexec_x_CFLAGS = -DMPI -DHIO -DDLFCN
+# NTH: override configure CFLAGS warnings/pedantic for now
+xexec_x_CFLAGS = -DMPI -DHIO -DDLFCN -w -Wno-pedantic
 xexec_x_LDFLAGS = -ldl -lm

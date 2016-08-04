@@ -271,6 +271,16 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
  * @param[in] rc            current return code for consensus
  */
 int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsigned char *manifest, size_t manifest_size, int rc);
+
+/**
+ * @brief scatter dataset configuration to all relevant processes
+ *
+ * @param[in] dataset       dataset to scatter
+ * @param[in] manifest      manifest data to scatter
+ * @param[in] manifest_size size of manifest data
+ * @param[in] rc            current return code for consensus
+ */
+int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc);
 #endif
 
 /**

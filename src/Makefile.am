@@ -71,17 +71,6 @@ bzip2_objects = $(bzip_base)/blocksort.lo $(bzip_base)/bzlib.lo \
 	$(bzip_base)/randtable.lo
 libhio_la_LIBADD += $(bzip2_objects)
 libhio_la_CPPFLAGS += -I$(bzip_base)
-$(bzip_base)/blocksort.lo: bzip2
-$(bzip_base)/bzlib.lo: bzip2
-$(bzip_base)/compress.lo: bzip2
-$(bzip_base)/crctable.lo: bzip2
-$(bzip_base)/decompress.lo: bzip2
-$(bzip_base)/huffman.lo: bzip2
-$(bzip_base)/randtable.lo: bzip2
-.PHONY: bzip2
-bzip2:
-	-d $(bzip_base)/.deps || mkdir $(bzip_base)/.deps
-	make -C $(bzip_base) libbz2.a CC="$(abs_top_builddir)/libtool --tag=CC --mode=compile ${CC}"
 endif
 
 if DATAWARP_AVAILABLE

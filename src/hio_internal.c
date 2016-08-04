@@ -511,8 +511,6 @@ int hioi_file_close (hio_file_t *file) {
 }
 
 int64_t hioi_file_seek (hio_file_t *file, int64_t offset, int whence) {
-  int64_t new_offset;
-
   if (SEEK_SET == whence && offset == file->f_offset) {
     return file->f_offset;
   }

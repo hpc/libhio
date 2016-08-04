@@ -28,6 +28,8 @@ AC_DEFUN([HIO_CHECK_BZ2],[
         if test ! "$?" = "0" ; then
             AC_ERROR([failed to decompress bzip2])
         fi
+        # For libtool need a .deps directory
+        mkdir extra/bzip2/bzip2-1.0.6/.deps
     fi
 
     AM_CONDITIONAL([INTERNAL_BZ2], [test $with_external_bz2 = no])
