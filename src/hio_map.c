@@ -242,7 +242,6 @@ static int hioi_dataset_map_insert (hio_dataset_map_data_t *map, int *node_leade
 
     if (bucket_full) {
       /* move on to next bucket */
-      bucket_full = false;
       ++hash;
     } else {
       /* sleep a little while before trying again */
@@ -641,7 +640,7 @@ static int hioi_dataset_map_lookup_segment (hio_element_t element, int64_t app_o
 
 int hioi_dataset_map_translate_offset (hio_element_t element, uint64_t app_offset,
                                        int *file_index, uint64_t *offset, size_t *length) {
-  hio_map_segment_t segment;
+  hio_map_segment_t segment = {.key = {.ms_aoff = 0, .ms_size = 0}, .value = {.ms_findex = -1, .ms_foff = -1}};
   uint64_t base, bound;
   int rc;
 

@@ -193,7 +193,7 @@ static int hioi_context_scatter (hio_context_t context) {
 int hioi_context_generate_leader_list (hio_context_t context) {
   int color = (0 == context->c_shared_rank) ? 0 : MPI_UNDEFINED;
   MPI_Comm leader_comm;
-  int my_rank, rc;
+  int my_rank = 0, rc;
 
   if (NULL != context->c_node_leaders) {
     return HIO_SUCCESS;

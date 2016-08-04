@@ -110,7 +110,6 @@ void hioi_dump_writer(hio_context_t context, const char * header, const void * d
     if (strlen(hexstr) > 0) {
         if (skipped > 0) {
            fprintf(stderr, "%s        %d identical lines skipped\n", hdr_buf, skipped);
-           skipped = 0;
         }
         /* print rest of buffer if not empty */
         fprintf(stderr, "%s[%4.4s]   %-50.50s  %s\n", hdr_buf, addrstr, hexstr, charstr);
@@ -496,12 +495,16 @@ int hioi_string_scatter (hio_context_t context, char **string) {
 }
 
 int hioi_file_close (hio_file_t *file) {
-  int rc;
+  int rc = 0;
 
   if (file->f_hndl) {
     rc = fclose (file->f_hndl);
   } else if (-1 != file->f_fd) {
     rc = close (file->f_fd);
+  }
+
+  if (0 != rc) {
+    rc = hioi_err_errno (errno);
   }
 
   file->f_fd = -1;

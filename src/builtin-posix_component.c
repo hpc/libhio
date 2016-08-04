@@ -179,6 +179,10 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
       }
     }
 
+    if (0 == num_set_ids) {
+      break;
+    }
+
     *headers = (hio_dataset_header_t *) calloc (num_set_ids, sizeof (**headers));
     assert (NULL != *headers);
 
@@ -286,7 +290,7 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
 
     dir = opendir (posix_dataset->base_path);
     if (NULL == dir) {
-      rc = hioi_err_errno (errno);
+      num_manifest_ids = hioi_err_errno (errno);
       break;
     }
 
@@ -325,11 +329,13 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
     closedir (dir);
   }
 
-  num_manifest_ids /= context->c_node_count;
+  if (num_manifest_ids > 0) {
+    num_manifest_ids /= context->c_node_count;
+  }
 
   MPI_Bcast (&num_manifest_ids, 1, MPI_INT, 0, context->c_node_leader_comm);
 
-  if (0 != num_manifest_ids) {
+  if (0 < num_manifest_ids) {
     *manifest_ids = (int *) malloc (num_manifest_ids * sizeof (int));
     assert (NULL != *manifest_ids);
 
@@ -341,7 +347,7 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
 
   *count = num_manifest_ids;
 
-  return HIO_SUCCESS;
+  return num_manifest_ids >= 0 ? HIO_SUCCESS : num_manifest_ids;
 }
 #endif /* HIO_MPI_HAVE(3) */
 
@@ -471,6 +477,88 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
   return HIO_SUCCESS;
 }
 
+#if HIO_MPI_HAVE(3)
+static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_dataset) {
+  hio_context_t context = hioi_object_context ((hio_object_t) posix_dataset);
+  size_t manifest_size = 0, manifest_id_count = 0;
+  unsigned char *manifest = NULL;
+  int rc = HIO_SUCCESS;
+  int *manifest_ids;
+  char *path;
+
+  if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
+    /* only read the manifest this rank wrote */
+    manifest_id_count = 1;
+    manifest_ids = malloc (sizeof (*manifest_ids));
+    manifest_ids[0] = context->c_rank;
+  } else {
+    rc = builtin_posix_module_dataset_manifest_list (posix_dataset, &manifest_ids, &manifest_id_count);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+  }
+
+  for (size_t i = 0 ; i < manifest_id_count ; ++i) {
+    if (-1 == manifest_ids[i]) {
+      /* nothing more to do */
+      break;
+    }
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: reading manifest data from id %x\n",
+              manifest_ids[i]);
+
+    /* when writing the manifest in optimized mode each IO manager writes its own manifest. try
+     * to open the manifest. if a manifest does not exist then it is likely this rank did not
+     * write a manifest. IO managers will distribute the manifest data to the appropriate ranks
+     * in hioi_dataset_scatter(). */
+    rc = asprintf (&path, "%s/manifest.%x.json.bz2", posix_dataset->base_path, manifest_ids[i]);
+    assert (0 < rc);
+
+    if (access (path, F_OK)) {
+      free (path);
+      /* Check for a non-bzip'd manifest file. */
+      rc = asprintf (&path, "%s/manifest.%x.json", posix_dataset->base_path, manifest_ids[i]);
+      assert (0 < rc);
+      if (access (path, F_OK)) {
+        /* no manifest found. this might be a non-optimized file format or this rank may not be an
+         * IO master rank. */
+        free (path);
+        path = NULL;
+      }
+    }
+
+    if (path) {
+      unsigned char *tmp = NULL;
+      size_t tmp_size = 0;
+      /* read the manifest if it exists */
+      rc = hioi_manifest_read (path, &tmp, &tmp_size);
+      if (HIO_SUCCESS == rc) {
+        rc = hioi_manifest_merge_data2 (&manifest, &manifest_size, tmp, tmp_size);
+        free (tmp);
+      }
+
+      free (path);
+
+      if (HIO_SUCCESS != rc) {
+        break;
+      }
+    }
+  }
+
+  /* share dataset information with all processes on this node */
+  if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
+    rc = hioi_dataset_scatter_unique (&posix_dataset->base, manifest, manifest_size, rc);
+  } else {
+    rc = hioi_dataset_scatter_comm (&posix_dataset->base, context->c_shared_comm, manifest, manifest_size, rc);
+  }
+
+  free (manifest_ids);
+  free (manifest);
+
+  return rc;
+}
+#endif
+
 static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_dataset_t dataset) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
@@ -570,80 +658,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
 
 #if HIO_MPI_HAVE(3)
   if (!(dataset->ds_flags & HIO_FLAG_CREAT) && HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
-    size_t manifest_id_count = 0;
-    int *manifest_ids;
-
-    if (HIO_SET_ELEMENT_UNIQUE == dataset->ds_mode) {
-      /* only read the manifest this rank wrote */
-      manifest_ids = malloc (sizeof (*manifest_ids));
-      manifest_ids[0] = context->c_rank;
-    } else {
-      rc = builtin_posix_module_dataset_manifest_list (posix_dataset, &manifest_ids, &manifest_id_count);
-    }
-
-    if (manifest_id_count) {
-      manifest = NULL;
-      manifest_size = 0;
-
-      for (size_t i = 0 ; i < manifest_id_count ; ++i) {
-        if (-1 == manifest_ids[i]) {
-          /* nothing more to do */
-          break;
-        }
-
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: reading manifest data from id %x\n",
-                  manifest_ids[i]);
-
-        /* when writing the manifest in optimized mode each IO manager writes its own manifest. try
-         * to open the manifest. if a manifest does not exist then it is likely this rank did not
-         * write a manifest. IO managers will distribute the manifest data to the appropriate ranks
-         * in hioi_dataset_scatter(). */
-        rc = asprintf (&path, "%s/manifest.%x.json.bz2", posix_dataset->base_path, manifest_ids[i]);
-        assert (0 < rc);
-
-        if (access (path, F_OK)) {
-          free (path);
-          /* Check for a non-bzip'd manifest file. */
-          rc = asprintf (&path, "%s/manifest.%x.json", posix_dataset->base_path, manifest_ids[i]);
-          assert (0 < rc);
-          if (access (path, F_OK)) {
-            /* no manifest found. this might be a non-optimized file format or this rank may not be an
-             * IO master rank. */
-            free (path);
-            path = NULL;
-          }
-        }
-
-        if (path) {
-          unsigned char *tmp = NULL;
-          size_t tmp_size = 0;
-          /* read the manifest if it exists */
-          rc = hioi_manifest_read (path, &tmp, &tmp_size);
-          if (HIO_SUCCESS == rc) {
-            rc = hioi_manifest_merge_data2 (&manifest, &manifest_size, tmp, tmp_size);
-            free (tmp);
-          }
-
-          free (path);
-
-          if (HIO_SUCCESS != rc) {
-            break;
-          }
-        }
-      }
-
-      free (manifest_ids);
-    }
-
-#if HIO_MPI_HAVE(1)
-    /* share dataset information with all processes on this node */
-    if (HIO_SET_ELEMENT_UNIQUE == dataset->ds_mode) {
-      rc = hioi_dataset_scatter_unique (dataset, manifest, manifest_size, rc);
-    } else {
-      rc = hioi_dataset_scatter_comm (dataset, context->c_shared_comm, manifest, manifest_size, rc);
-    }
-#endif
-    free (manifest);
+    rc = bultin_posix_scatter_data (posix_dataset);
     if (HIO_SUCCESS != rc) {
       free (posix_dataset->base_path);
       return rc;
@@ -906,6 +921,10 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
                      element->e_rank);
     } else {
       rc = asprintf (&path, "%s/element_data.%s", posix_dataset->base_path, element_name);
+    }
+
+    if (0 > rc) {
+      return hioi_err_errno (errno);
     }
   }
 
@@ -1272,7 +1291,7 @@ static ssize_t builtin_posix_module_element_read_strided_internal (builtin_posix
   uint64_t start, stop;
   int rc;
 
-  if (!(count * size)) {
+  if (0 == count || 0 == size) {
     return 0;
   }
 

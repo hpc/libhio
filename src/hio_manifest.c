@@ -824,7 +824,7 @@ int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data,
   json_object *object;
   int rc;
 
-  if (data_size < 2) {
+  if (data_size < 2 || NULL == data) {
     return HIO_ERR_BAD_PARAM;
   }
 
@@ -904,8 +904,8 @@ int hioi_manifest_read (const char *path, unsigned char **manifest_out, size_t *
 
 int hioi_manifest_load (hio_dataset_t dataset, const char *path) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  unsigned char *manifest;
-  size_t manifest_size;
+  unsigned char *manifest = NULL;
+  size_t manifest_size = 0;
   int rc;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest for %s:%" PRIu64
@@ -943,9 +943,13 @@ static bool hioi_manifest_compare_json (json_object *object1, json_object *objec
 static int hioi_manifest_array_find_matching (json_object *array, json_object *object, const char *key) {
   int array_size = json_object_array_length (array);
   const char *value = NULL;
+  int rc;
 
   if (NULL != key) {
-    (void) hioi_manifest_get_string (object, key, &value);
+    rc = hioi_manifest_get_string (object, key, &value);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
   } else {
     value = json_object_get_string (object);
   }
@@ -956,7 +960,10 @@ static int hioi_manifest_array_find_matching (json_object *array, json_object *o
 
     assert (array_object);
     if (NULL != key) {
-      (void) hioi_manifest_get_string (array_object, key, &value1);
+      rc = hioi_manifest_get_string (array_object, key, &value1);
+      if (HIO_SUCCESS != rc) {
+        return rc;
+      }
     } else {
       value1 = json_object_get_string (array_object);
     }
@@ -1235,10 +1242,25 @@ int hioi_manifest_ranks (const unsigned char *manifest, size_t manifest_size, in
       assert (NULL != element);
 
       rc = hioi_manifest_get_number (element, HIO_MANIFEST_PROP_RANK, &rank);
+      if (HIO_SUCCESS != rc) {
+        break;
+      }
+
       if (!(rank_map[rank >> 3] & (1 << (rank & 0x7)))) {
         ranks[0][manifest_ranks++] = (int) rank;
         rank_map[rank >> 3] |= 1 << (rank & 0x7);
       }
+    }
+
+    if (HIO_SUCCESS != rc) {
+      break;
+    }
+
+    if (0 == manifest_ranks) {
+      free (*ranks);
+      *ranks = NULL;
+      rc = HIO_ERR_BAD_PARAM;
+      break;
     }
 
     /* shrink the array if there were fewer ranks than elements */
@@ -1270,7 +1292,7 @@ int hioi_manifest_ranks (const unsigned char *manifest, size_t manifest_size, in
 }
 
 int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path) {
-  unsigned char *manifest;
+  unsigned char *manifest = NULL;
   size_t manifest_size;
   json_object *object;
   int rc;
@@ -1286,7 +1308,7 @@ int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *head
   }
 
   rc = hioi_manifest_read (path, &manifest, &manifest_size);
-  if (HIO_SUCCESS != rc) {
+  if (HIO_SUCCESS != rc || NULL == manifest) {
     return rc;
   }
 

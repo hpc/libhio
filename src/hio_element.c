@@ -100,7 +100,12 @@ int hioi_element_close_internal (hio_element_t element) {
   if (0 == --element->e_open_count && hioi_dataset_doing_io (dataset)) {
     if (dataset->ds_flags & HIO_FLAG_WRITE) {
       hioi_object_unlock (&dataset->ds_object);
+
       rc = hio_element_flush (element, HIO_FLUSH_MODE_LOCAL);
+      if (HIO_SUCCESS != rc) {
+        return rc;
+      }
+
       hioi_object_lock (&dataset->ds_object);
     }
 
@@ -170,6 +175,8 @@ int hioi_element_add_segment (hio_element_t element, int file_index, uint64_t fi
     }
   }
 
+  assert (0 == element->e_scount || element->e_sarray);
+
   for (seg_index = 0 ; seg_index < element->e_scount ; ++seg_index) {
     segment = element->e_sarray + seg_index;
     if (segment->seg_offset > app_offset) {
@@ -186,6 +193,8 @@ int hioi_element_add_segment (hio_element_t element, int file_index, uint64_t fi
 
     element->e_sarray = (hio_manifest_segment_t *) tmp;
   }
+
+  assert (element->e_sarray);
 
   segment = element->e_sarray + seg_index;
   if (element->e_scount != seg_index) {

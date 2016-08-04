@@ -400,7 +400,7 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
     }
 
     if (NULL == realpath (path, tmp)) {
-      rc = hioi_err_errno (errno);
+      fs_attr->fs_type = hioi_err_errno (errno);
       break;
     }
 

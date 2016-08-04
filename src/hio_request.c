@@ -51,9 +51,7 @@ int hio_request_test_internal (hio_request_t *requests, int nrequests, ssize_t *
       }
 
       ++ncomplete;
-    }
-
-    if (requests[i]->req_complete) {
+    } else if (requests[i]->req_complete) {
       if (complete) {
         complete[i] = true;
       }

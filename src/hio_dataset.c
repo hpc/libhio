@@ -198,7 +198,7 @@ hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *da
 int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, unsigned char **data_out, size_t *data_size_out,
                                        bool compress_data, bool simple) {
   hio_context_t context = (hio_context_t) dataset->ds_object.parent;
-  long int recv_size_left = 0, recv_size_right = 0, send_size;
+  long int recv_size_left = 0, recv_size_right = 0, send_size, alloc_size;
   int left, right, parent, c_rank, c_size, rc, nreqs = 0;
   unsigned char *remote_data;
   MPI_Request reqs[2];
@@ -242,7 +242,13 @@ int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, uns
 
     hioi_timed_call(MPI_Waitall (nreqs, reqs, MPI_STATUSES_IGNORE));
 
-    remote_data = malloc (recv_size_right > recv_size_left ? recv_size_right : recv_size_left);
+    alloc_size = recv_size_right > recv_size_left ? recv_size_right : recv_size_left;
+    if (0 >= alloc_size) {
+      /* internal error for now */
+      return HIO_ERROR;
+    }
+
+    remote_data = malloc (alloc_size);
     if (NULL == remote_data) {
       return HIO_ERR_OUT_OF_RESOURCE;
     }
