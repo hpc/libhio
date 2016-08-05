@@ -49,7 +49,6 @@ LT_INIT
 HIO_CHECK_JSON
 HIO_CHECK_DATAWARP
 HIO_CHECK_XPMEM
-HIO_CHECK_LUSTRE
 HIO_CHECK_CVERSION
 HIO_CHECK_BZ2
 
@@ -70,6 +69,7 @@ if test $hio_use_mpi ; then
    HIO_CHECK_MPI_FEATURES
 fi
 
+#Check for HDF5
 HIO_CHECK_HDF5
 
 # Checks for programs.
@@ -93,6 +93,9 @@ AX_PTHREAD([])
 
 LIBS="$PTHREAD_LIBS $LIBS"
 CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
+
+#Check for LUSTRE 
+HIO_CHECK_LUSTRE
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
