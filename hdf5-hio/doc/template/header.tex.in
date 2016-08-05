@@ -23,9 +23,9 @@
 \newcommand{\+}{}
 
 % Generation time
-\newcommand{\hdfhioversion}{HDF5 HIO Plugin 1.0}
+\newcommand{\hdfhioversion}{@PACKAGE@ Version @VERSION@}
 \newcommand{\hdfhiodoctype}{API Document}
-\newcommand{\generated}{Generated Thursday June 16, 2016 at  2:22 PM MDT}
+\newcommand{\generated}{Generated @HIO_BUILD_TIMESTAMP@}
 
 % Page & text layout
 \usepackage{geometry}
@@ -140,7 +140,7 @@
 
 		\vspace*{0.7cm} % Space between the start of the title and the top of the grey box
 		
-		\hfill hdf5hio \\
+		\hfill @PACKAGE@ \\
 		\centering \fontsize{20pt}{50pt}\selectfont 
 		\hfill \hdfhioversion{} \\
 		\hfill \hdfhiodoctype{} \par
