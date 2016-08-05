@@ -240,15 +240,18 @@ clean_cmd="
 
 # Function to clean data roots, i.e., create or empty them out
 clean_roots() {
+  if [[ ${OSTYPE:0:6} != "darwin" ]]; then
+    # Running on a cluster - record some physical node information
+    cmd "aprun -n 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo|sort|uniq -c\""
+    (export TERM=dumb; cmd "aprun -n 1 lstopo --of ascii -p")
+    cmd "aprun -n 1 lstopo --of console -p"
+  fi
+
   allroots=${1-$HIO_TEST_ROOTS}
   IFS=","; read -ra root <<< "$allroots"; unset IFS
   for r in "${root[@]}"; do
     shopt -s nocasematch
     if [[ "$r" == "dw" || "$r" == "datawarp" ]]; then
-
-    # Not the right place for this, need a location that will run only on cluster
-    cmd "aprun -n 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo|sort|uniq -c\""
-
       clean=""
       if [[ -n $DW_JOB_STRIPED    ]]; then clean=$DW_JOB_STRIPED; fi
       if [[ -n $HIO_datawarp_root ]]; then clean=$HIO_datawarp_root; fi
@@ -427,7 +430,7 @@ while getopts "hs:r:n:p:v:d:bcw:ax:k:m:u:q" optname; do
   esac
 done
 shift $((OPTIND - 1 ))
-if [[ -n $1 ]]; then synexit "extra parameters"; fi
+if [[ -n $1 ]]; then synexit "extra parameters: \"$*\""; fi
 
 case $proc_type in
   ""      ) ppn_def=2;;
