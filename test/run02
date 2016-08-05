@@ -19,9 +19,10 @@ batch_sub $(( $ranks * $blksz * $nblk ))
 cmdw="
   name run02w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
   hi MYCTX $HIO_TEST_ROOTS
   hda NTNDS 97 WRITE,CREAT UNIQUE hdo
-  heo MYEL WRITE,CREAT,TRUNC 20Mi
+  heo MYEL WRITE,CREAT,TRUNC
   hvp c. .
   lc $nblk
     hew 0 $blksz
@@ -32,11 +33,11 @@ cmdw="
 cmdr="
   name run02r v $verbose_lev d $debug_lev mi 32
   /@@ Read and write N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
   hi MYCTX $HIO_TEST_ROOTS
   hda NTNDS 97 READ UNIQUE hdo
-  heo MYEL READ 20Mi
+  heo MYEL READ
   hvp c. .
-  hck on
   lc $nblk
     her 0 $blksz
   le
@@ -44,8 +45,17 @@ cmdr="
 "
 
 clean_roots $HIO_TEST_ROOTS
+
 myrun .libs/xexec.x $cmdw
-myrun .libs/xexec.x $cmdr
+# Don't read if write failed
+if [[ max_rc -eq 0 ]]; then
+  myrun .libs/xexec.x $cmdr
+  # If first read fails, try again to see if problem persists
+  if [[ max_rc -ne 0 ]]; then
+    myrun .libs/xexec.x $cmdr
+  fi
+fi
+  
 check_rc
 if [[ $max_rc -eq 0 && $after -gt 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi
 exit $max_rc

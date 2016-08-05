@@ -24,6 +24,11 @@
 
 #include <datawarp.h>
 
+#ifdef HIO_DATAWARP_DEBUG_LOG
+  #include <datawarpLogger.h>
+  #include <stdarg.h>
+#endif
+
 /**
  * builtin datawarp module
  *
@@ -65,6 +70,23 @@ static hio_var_enum_t builtin_datawarp_stage_modes = {
   .values = builtin_datawarp_stage_mode_values,
 };
 
+#ifdef HIO_DATAWARP_DEBUG_LOG
+static void datawarp_debug_logger(uint64_t flags, void *data, char *file,
+                                  const char *func, unsigned int line,
+                                  const char *fmt, ...) {
+  hio_context_t context = (hio_context_t) data;
+  va_list args;
+  char buf[512];
+  
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args); 
+  va_end(args);
+  hioi_log (context, HIO_VERBOSE_ERROR, "DataWarp debug: %s/%s/%u %s",
+            file, func, line, buf);
+  return;
+}
+#endif
+
 static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset);
 
 static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hio_dataset_t dataset) {
@@ -77,6 +99,18 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
 
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp/dataset_open: opening dataset %s:%lu",
             hioi_object_identifier (dataset), (unsigned long) dataset->ds_id);
+
+  #ifdef HIO_DATAWARP_DEBUG_LOG
+    /* If datawarp debug log mask non-zero, install debug message handler */
+    if (context->c_dw_debug_mask) {
+      context->c_dw_debug_installed = true;
+      INSTALL_LOGGING_CALLBACK(DATAWARP_LOG_KEY, datawarp_debug_logger);
+      INSTALL_LOGGING_DATA(DATAWARP_LOG_KEY, context);
+      INSTALL_LOGGING_MASK(DATAWARP_LOG_KEY, context->c_dw_debug_mask);
+    } else {
+      context->c_dw_debug_installed = false;
+    }
+  #endif
 
   /* open the posix dataset */
   rc = datawarp_module->posix_open (&posix_module->base, dataset);
@@ -140,7 +174,6 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
               "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  hioi_object_identifier(dataset),
               dataset->ds_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
 
-    stage_mode = datawarp_dataset->stage_mode;
     if (-1 == datawarp_dataset->stage_mode) {
       stage_mode = DW_STAGE_AT_JOB_END;
     }
@@ -153,7 +186,8 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
     }
 
     rc = dw_stage_directory_out (dataset_path, pfs_path, stage_mode);
-
+    free (pfs_path);
+    free (dataset_path);
     if (0 != rc) {
       hioi_err_push (HIO_ERROR, &dataset->ds_object, "builtin-datawarp/dataset_close: error starting "
                     "data stage on dataset %s::%lld. DWRC: %d", hioi_object_identifier (dataset), dataset->ds_id, rc);
@@ -170,11 +204,9 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
  
       free (pfs_path);
       free (dataset_path);
+
       return HIO_ERROR;
     }
-
-    free (pfs_path);
-    free (dataset_path);
 
 
     if (DW_STAGE_AT_JOB_END == stage_mode) {
@@ -255,8 +287,9 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
 
 static int builtin_datawarp_module_fini (struct hio_module_t *module) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
+  hio_context_t context = module->context;
 
-  hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Finalizing datawarp filesystem module for data root %s",
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Finalizing datawarp filesystem module for data root %s",
 	    module->data_root);
 
   free (datawarp_module->pfs_path);
@@ -269,6 +302,14 @@ static int builtin_datawarp_module_fini (struct hio_module_t *module) {
     free (module);
   }
 
+  #ifdef HIO_DATAWARP_DEBUG_LOG
+    /* If datawarp debug logger previously installed, remove it */
+    if (context->c_dw_debug_installed) {
+      INSTALL_LOGGING_MASK(DATAWARP_LOG_KEY, 0);
+      INSTALL_LOGGING_CALLBACK(DATAWARP_LOG_KEY, NULL);
+      context->c_dw_debug_installed = false;
+    }
+  #endif
   return HIO_SUCCESS;
 }
 

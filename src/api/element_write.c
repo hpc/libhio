@@ -70,7 +70,7 @@ int hioi_dataset_buffer_append (hio_dataset_t dataset, hio_element_t element, of
       /* add buffering time to the overall write time */
       dataset->ds_stat.s_wtime += stop - start;
 
-      if (block) {
+      if (block - to_write) {
         rc = hioi_dataset_buffer_flush (dataset);
         if (HIO_SUCCESS != rc) {
           break;

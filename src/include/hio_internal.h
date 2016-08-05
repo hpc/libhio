@@ -18,8 +18,8 @@
 #define HIO_INTERNAL_H
 
 #include "hio_config.h"
-
 #include "hio_types.h"
+#include "hio_var.h"
 
 #include <stddef.h>
 #include <inttypes.h>
@@ -120,7 +120,7 @@ char * hioi_msg_time(char * time_buf, size_t len);
               __VA_ARGS__);                                                       \
   }
 
-void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t size);
+void hioi_dump_writer(hio_context_t context, const char * header, const void * data, size_t size);
 
 #define hioi_dump(context, level, pointer, length)                                \
   if ((context)->c_verbose >= level) {                                            \
@@ -260,20 +260,41 @@ void hioi_object_release (hio_object_t object);
 hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64_t id,
                                   int flags, hio_dataset_mode_t mode);
 
+#if HIO_MPI_HAVE(1)
 /**
- * @brief scatter dataset configuration to all processes
+ * @brief scatter dataset configuration to all processes in a communicator
  *
- * @param[in] dataset     dataset to scatter
- * @param[in] rc          current return code
+ * @param[in] dataset       dataset to scatter
+ * @param[in] comm          MPI communicator
+ * @param[in] manifest      manifest data to scatter
+ * @param[in] manifest_size size of manifest data
+ * @param[in] rc            current return code for consensus
  */
-int hioi_dataset_scatter (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc);
+int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsigned char *manifest, size_t manifest_size, int rc);
+
+/**
+ * @brief scatter dataset configuration to all relevant processes
+ *
+ * @param[in] dataset       dataset to scatter
+ * @param[in] manifest      manifest data to scatter
+ * @param[in] manifest_size size of manifest data
+ * @param[in] rc            current return code for consensus
+ */
+int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc);
+#endif
 
 /**
  * @brief gather dataset configuration from all processes
  *
  * @param[in] dataset     dataset to gather
  */
-int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out, bool compress_data);
+int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out, bool compress_data,
+                                  bool simple);
+
+#if HIO_MPI_HAVE(1)
+int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, unsigned char **data_out, size_t *data_size_out,
+                                       bool compress_data, bool simple);
+#endif
 
 /**
  * Add an element to a dataset
@@ -316,8 +337,8 @@ hio_request_t hioi_request_alloc (hio_context_t context);
 
 void hioi_request_release (hio_request_t request);
 
-int hioi_element_add_segment (hio_element_t element, int file_index, uint64_t file_offset, uint64_t app_offset,
-                              size_t seg_length);
+int hioi_element_add_segment (hio_element_t element, int file_index, uint64_t file_offset,
+                              uint64_t app_offset, size_t seg_length);
 
 int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int rank,
                               off_t *offset, size_t *length);
@@ -327,14 +348,17 @@ int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int ra
 /**
  * @brief Serialize the manifest in the dataset
  *
- * @param[in]  dataset   dataset to serialize
- * @param[out] data      serialized data
- * @param[out] data_size size of serialized data
+ * @param[in]  dataset       dataset to serialize
+ * @param[out] data          serialized data
+ * @param[out] data_size     size of serialized data
+ * @param[in]  compress_data if true will use bzip2 compression
+ * @param[in]  simple        return only the manifest header data
  *
  * This function serializes the local data associated with the dataset and returns a buffer
  * containing the serialized data.
  */
-int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data);
+int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data,
+                             bool simple);
 
 int hioi_manifest_read (const char *path, unsigned char **manifest_out, size_t *manifest_size_out);
 
@@ -347,7 +371,7 @@ int hioi_manifest_read (const char *path, unsigned char **manifest_out, size_t *
  * This function serializes the local data associated with the dataset and saves it
  * to the specified file.
  */
-int hioi_manifest_save (hio_dataset_t dataset, const char *path);
+int hioi_manifest_save (hio_dataset_t dataset, const unsigned char *manifest_data, size_t data_size, const char *path);
 
 int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
 int hioi_manifest_load (hio_dataset_t dataset, const char *path);
@@ -378,16 +402,19 @@ int hioi_manifest_ranks (const unsigned char *manifest, size_t manifest_size, in
  */
 int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path);
 
-
 /* context functions */
 
 static inline bool hioi_context_using_mpi (hio_context_t context) {
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   return context->c_use_mpi;
 #endif
 
   return false;
 }
+
+#if HIO_MPI_HAVE(3)
+int hioi_context_generate_leader_list (hio_context_t context);
+#endif
 
 /**
  * @brief Query filesystem attributes
@@ -407,30 +434,25 @@ static inline bool hioi_context_using_mpi (hio_context_t context) {
  */
 int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *attributes);
 
+/**
+ * @brief Set filesystem striping attributes on a path
+ *
+ * @param[in] path    filesystem path valid for fs_attr
+ * @param[in] fs_attr filesystem attributes to set
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_NOT_AVAILABLE on failure
+ */
+int hioi_fs_set_stripe (const char *path, hio_fs_attr_t *fs_attr);
+
 int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset);
 int hioi_dataset_close_internal (hio_dataset_t dataset);
-
-/**
- * Add a file to the dataset file list
- *
- * @param[in] dataset dataset handle
- * @param[in] filename data file to add (relative to manifest base path)
- *
- * @returns index for this file
- *
- * This function adds a filename to the list of files backing the dataset.
- * The file list is used to relate element segments back to the file
- * backing the segment. It is safe to call this function with the same
- * filename argument multiple times. In this case the filename is added
- * by the first call but subsequent calls just return the index returned
- * by the first call.
- */
-int hioi_dataset_add_file (hio_dataset_t dataset, const char *filename);
 
 /**
  * Initialize dataset synchonization structures.
  *
  * @param[in] dataset dataset handle
+ * @param[in] stripes number of stripe structures to allocate
  *
  * This function initialized the synchronization structures used for
  * weak coordination with optimized mode. This function currently sets
@@ -438,7 +460,7 @@ int hioi_dataset_add_file (hio_dataset_t dataset, const char *filename);
  * available block offset(s) and mutex(es). In the future this may change
  * if corrdination over several nodes improves performance.
  */
-int hioi_dataset_shared_init (hio_dataset_t dataset);
+int hioi_dataset_shared_init (hio_dataset_t dataset, int stripes);
 
 /**
  * Finalize dataset synchronization structures.
@@ -547,4 +569,17 @@ void hioi_file_flush (hio_file_t *file);
 #else
 #define hioi_timed_call(call) call
 #endif
+
+#if HIO_MPI_HAVE(3)
+/* functions to build/search the manifest map */
+int hioi_dataset_generate_map (hio_dataset_t dataset);
+int hioi_dataset_map_release (hio_dataset_t dataset);
+int hioi_dataset_map_translate_offset (hio_element_t element, uint64_t app_offset, int *file_index,
+                                       uint64_t *offset, size_t *length);
+#endif
+
+/* internal version of hio_config_get_info that doesn't strdup the name */
+int hioi_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+                          bool *read_only);
+
 #endif /* !defined(HIO_INTERNAL_H) */

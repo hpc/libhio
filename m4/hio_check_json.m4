@@ -31,6 +31,9 @@ else
     cd "${srcdir}"
     abs_srcdir=`pwd`
     cd "${abs_builddir}"
+    hio_JSON_CFLAGS_save="${CFLAGS}"
+    # Turn off warnings for sub-packages
+    CFLAGS="${CFLAGS} -w"
     AC_MSG_NOTICE([configuring json-c])
     rm -rf extra/json
     mkdir -p extra/json/build
@@ -41,6 +44,7 @@ else
     else
         "${abs_srcdir}"/extra/json/json-c-0.12/configure --disable-shared --enable-static --with-pic --enable-silent-rules CC="$CC" &> config.out
     fi
+    CFLAGS="${hio_JSON_CFLAGS_save}"
     cd "${abs_builddir}"
     if test ! "$?" = "0" ; then
         AC_ERROR([failed to configure json-c])

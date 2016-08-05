@@ -50,7 +50,7 @@ void msg_context_set_debug(MSG_CONTEXT *msgctx, int debug_level) {
 
 void msg_context_free(MSG_CONTEXT *msgctx) {}
 
-void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...) {
+void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, int flush, const char *format, ...) {
   va_list args;
   char msg_buf[1024];
   char time_str[64];
@@ -63,6 +63,7 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, const char *format, ...) {
   vsnprintf(msg_buf, sizeof(msg_buf), format, args);
   va_end(args);
   fprintf(stream, "%s %s%s\n", time_str, msgctx->id_string, msg_buf);
+  if (flush) fflush(stream); 
 }
 
 //----------------------------------------------------------------------------
@@ -230,11 +231,11 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
 
   if (etptr->multiple) {
-    char * string = STRDUPX(name);
+    char * namec = STRDUPX(name);
     char * token, *saveptr;
     int myval = 0;
 
-    token = strtok_r(string, etptr->delim, &saveptr);
+    token = strtok_r(namec, etptr->delim, &saveptr);
     while (token) {
     ENUM_NAME_VAL_PAIR nv = {token, 0};
       ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
@@ -246,6 +247,7 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
       token = strtok_r(NULL, etptr->delim, &saveptr);
     }
     if (rc == 0) *val = myval;
+    FREEX(namec);
   } else {
     ENUM_NAME_VAL_PAIR nv = {name, 0};
     ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
@@ -255,6 +257,43 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
       rc = -1;
     }
   }
+  return rc;
+}
+
+int flag2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * set, int * clear) {
+  int rc = 0;
+  // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
+  if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
+
+  if (!etptr->multiple) ERRX("flag2enum called for enum type non-multiple");
+  char * namec = STRDUPX(name);
+  char * token, *saveptr;
+  char * delim = "+-";
+  int myset = 0, myclear= ~0;
+
+  token = strtok_r(namec, delim, &saveptr);
+  while (token) {
+    ENUM_NAME_VAL_PAIR nv = {token, 0};
+    ENUM_NAME_VAL_PAIR *nvp = bsearch(&nv, etptr->nv_by_name, etptr->nv_count, sizeof(ENUM_NAME_VAL_PAIR), enum_name_compare);
+    if (nvp) {
+      size_t ofs = token - namec;
+      char op = (0 == ofs) ? '+': name[ofs-1];
+      if ('+' == op) {
+        myset |= nvp->val;
+      } else {
+        myclear &= ~(nvp->val);
+      } 
+      // printf("tok: %s  delim: %c val: 0x%X \n", token, op, *val);
+    } else {
+      rc = -1;
+    }
+    token = strtok_r(NULL, delim, &saveptr);
+  }
+  if (0 ==rc) {
+    *set = myset;
+    *clear = myclear;
+  }
+  FREEX(namec);
   return rc;
 }
 
@@ -276,14 +315,14 @@ char * enum_list(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr) {
 
 //----------------------------------------------------------------------------
 // hex_dump - dumps size bytes of *data to stdout. Looks like:
-// [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
+// [000000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
 //----------------------------------------------------------------------------
 void hex_dump(void *data, int size) {
     unsigned char *p = data;
     unsigned char c;
     int n;
     char bytestr[4] = {0};
-    char addrstr[10] = {0};
+    char addrstr[12] = {0};
     char hexstr[ 16*3 + 5] = {0};
     char hexprev[ 16*3 + 5] = {0};
     char charstr[16*1 + 5] = {0};
@@ -291,7 +330,7 @@ void hex_dump(void *data, int size) {
     for(n=1;n<=size;n++) {
         if (n%16 == 1) {
             /* store address for this line */
-            snprintf(addrstr, sizeof(addrstr), "%.4lx", p-(unsigned char *)data);
+            snprintf(addrstr, sizeof(addrstr), "%.6lx", p-(unsigned char *)data);
         }
 
         c = *p;
@@ -316,7 +355,7 @@ void hex_dump(void *data, int size) {
                 printf("        %d identical lines skipped\n", skipped);
                 skipped = 0;
               }
-              printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
+              printf("[%6.6s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
               strcpy(hexprev, hexstr);
             }
             hexstr[0] = 0;
@@ -335,7 +374,7 @@ void hex_dump(void *data, int size) {
            skipped = 0;
         }
         /* print rest of buffer if not empty */
-        printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
+        printf("[%6.6s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
     }
 }
 
@@ -527,7 +566,7 @@ I64 GetCPUaffinity(void) {
 //    eng_not(buf, sizeof(buf), 0.00835, "D5.4", "Sec") returns "8.3500 mSec" 
 //-------------------------------------------------------------------------------
 char * eng_not(char * buf, size_t len, double val, char * format, char * unit) {
-  static const char *pref[] = {"y", "z", "a", "f", "p", "n", "u", "m", "", 
+  static const char *pref[] = {"y", "z", "a", "f", "p", "n", "u", "m", " ", 
                                "k", "M", "G", "T", "P", "E", "Z", "Y"};
   int zofs = 8; // pref[8] is the empty prefix "" for multiplier 1.0 
   double lval, mant;

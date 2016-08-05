@@ -153,7 +153,7 @@ static int hioi_config_set_value_internal (hio_context_t context, hio_var_t *var
     }
 
     if (found) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting enumeration value to %llu", intval);
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting enumeration value to %" PRIu64, intval);
     } else {
       hioi_log (context, HIO_VERBOSE_WARN, "Invalid enumeration value provided for variable %s. Got %s",
                 var->var_name, strval);
@@ -456,7 +456,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
     }
   }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     MPI_Bcast (&data_size, 1, MPI_UNSIGNED, 0, context->c_comm);
   }
@@ -484,7 +484,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
     close (fd);
   }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     MPI_Bcast (buffer, data_size, MPI_BYTE, 0, context->c_comm);
   }
@@ -662,8 +662,8 @@ int hio_config_get_count (hio_object_t object, int *count) {
   return HIO_SUCCESS;
 }
 
-int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
-                         bool *read_only) {
+int hioi_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+                          bool *read_only) {
   hio_var_t *var;
 
   if (NULL == object || index < 0) {
@@ -677,7 +677,7 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
   var = object->configuration.vars + index;
 
   if (name) {
-    *name = strdup (var->var_name);
+    *name = var->var_name;
   }
 
   if (type) {
@@ -695,6 +695,21 @@ int hio_config_get_info (hio_object_t object, int index, char **name, hio_config
   return HIO_SUCCESS;
 }
 
+int hio_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
+                         bool *read_only) {
+  int rc;
+
+  rc = hioi_config_get_info (object, index, name, type, read_only);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  if (NULL != name && NULL != *name) {
+    *name = strdup (*name);
+  }
+
+  return HIO_SUCCESS;
+}
 
 /* performance variables */
 int hio_perf_get_count (hio_object_t object, int *count) {

@@ -21,6 +21,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <signal.h>
+#include <execinfo.h>
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
@@ -49,7 +50,7 @@
 // debug message level is set via the "d <n>" action to the level of the
 // individual debug message.  Compiling in all debug messages via -DDBGLEV=5
 // will noticeably impact the performance of high speed loops such as
-// "vt" or "fr" due to the time required to repeatedly test the debug level.
+// "vt" or "nr" due to the time required to repeatedly test the debug level.
 // You have been warned !
 //----------------------------------------------------------------------------
 #ifndef DBGMAXLEV
@@ -74,7 +75,7 @@
 
 //----------------------------------------------------------------------------
 // Features to add: mpi sr swap, file write & read,
-// flap seq validation, more flexible fr striding
+// flap seq validation, more flexible nr striding
 //----------------------------------------------------------------------------
 
 char * help =
@@ -99,7 +100,10 @@ char * help =
   "                4 = 3 + detailed action progress messages\n"
   "                5 = 4 + detailed repetitive action progress messages - if\n"
   "                enabled at compile time which will impact performance.\n"
-  "  qof <number>  Quit after <number> of failures. 0 = never, default is 1.\n"
+  "  opt +-<option> ...  Set (+) or unset (-) options. Valid options are:\n"
+  "                %s\n"
+  "                Initial value is: %s plus env XEXEC_OPT\n"
+  "                ? displays current set options\n"
   "  name <test name> Set test name for final success / fail message\n"
   "  im <file>     imbed a file of actions at this point, - means stdin\n"
   "  srr <seed>    seed random rank - seed RNG with <seed> mixed with rank (if MPI)\n"
@@ -112,6 +116,9 @@ char * help =
   "  ls <seconds>  like lt, but synchronized via MPI_Bcast from rank 0\n"
   #endif
   "  le            loop end; loops may be nested up to 16 deep\n"
+  "  ifr <rank>    execute following if rank matches, always exec if mpi not init'd\n"
+  "                <rank> = -1 tests last rank, -2, -3, etc. similarly\n"
+  "  eif           terminates ifr conditional, may not be nested\n"
   "  o <count>     write <count> lines to stdout\n"
   "  e <count>     write <count> lines to stderr\n"
   "  s <seconds>   sleep for <seconds>\n"
@@ -130,17 +137,22 @@ char * help =
   "  mb            issue MPI_Barrier()\n"
   "  mgf           gather failures - send fails to and only report success from rank 0\n"
   "  mf            issue MPI_Finalize()\n"
+  "  fo <file> <mode> Issue fopen for a file, %%r or %%p in path will be expanded to MPI\n"
+  "                rank or PID. <mode> is fopen mode string.\n"
+  "  fw <offset> <size>  Write relative to current file offset\n"
+  "  fr <offset> <size>  Read relative to current file offset\n"
+  "  fc            Issue fclose for file\n"  
   "  fctw <dir> <num files> <file size> <block size> File coherency test - write files\n"
   "                from rank 0\n"
   "  fctr <dir> <num files> <file size> <block size> File coherency test - read files\n"
   "                from all non-zero ranks \n"
   "  fget <file>   fopen(), fgets() to eof, fclose()\n"
   #endif
-  "  fi <size> <count>\n"
+  "  ni <size> <count>\n"
   "                Creates <count> blocks of <size> doubles each.  All\n"
   "                but one double in each block is populated with sequential\n"
   "                values starting with 1.0.\n"
-  "  fr <rep> <stride>\n"
+  "  nr <rep> <stride>\n"
   "                The values in each block are added and written to the\n"
   "                remaining double in the block. The summing of the block is\n"
   "                repeated <rep> times.  All <count> blocks are processed in\n"
@@ -148,7 +160,7 @@ char * help =
   "                computed and compared with an expected value.\n"
   "                <size> must be 2 or greater, <count> must be 1 greater than\n"
   "                a multiple of <stride>.\n"
-  "  ff            Free allocated blocks\n"
+  "  nf            Free allocated blocks\n"
   "  hx <min> <max> <blocks> <limit> <count>\n"
   "                Perform <count> malloc/touch/free cycles on memory blocks ranging\n"
   "                in size from <min> to <max>.  Allocate no more than <limit> bytes\n"
@@ -159,6 +171,9 @@ char * help =
   "  dls <symbol>  Issue dlsym for specified symbol in most recently opened library\n"
   "  dlc           Issue dlclose for most recently opened library\n"
   #endif // DLFCN
+  "  dbuf RAND22 | RAND22P | OFS20  <size>  Allocates and initializes data buffer\n"
+  "                with pattern used for read data check.  Write and read patterns\n"
+  "                must match.\n"
   #ifdef HIO
   "  hi  <name> <data_root>  Init hio context\n"
   "  hda <name> <id> <flags> <mode> Dataset allocate\n"
@@ -168,7 +183,7 @@ char * help =
   "  hew <offset> <size> Element write, offset relative to current element offset\n"
   "  her <offset> <size> Element read, offset relative to current element offset\n"
   "  hewr <offset> <min> <max> <align> Element write random size, offset relative to current element offset\n"
-  "  herr <offset> <min> <max> <align> Element read random size, offset relative to cucrrent element offset\n"
+  "  herr <offset> <min> <max> <align> Element read random size, offset relative to current element offset\n"
   "  hsega <start> <size_per_rank> <rank_shift> Activate absolute segmented\n"
   "                addressing. Actual offset now ofs + <start> + rank*size\n"
   "  hsegr <start> <size_per_rank> <rank_shift> Activate relative segmented\n"
@@ -178,7 +193,6 @@ char * help =
   "  hdf           Dataset free\n"
   "  hdu <name> <id> CURRENT|FIRST|ALL  Dataset unlink\n"
   "  hf            Fini\n"
-  "  hck <ON|OFF>  Enable read data checking [2]\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
   "  hxdi <id> Expect dataset ID on next hdo\n"
@@ -189,7 +203,7 @@ char * help =
   "                \"hvp p total\" will print all perf vars containing \"total\" in the name\n"
   "  hvsc <name> <value>  Set hio context variable\n"
   "  hvsd <name> <value>  Set hio dataset variable\n"
-  "  hvse <name> <value>  Set hio elementq variable\n"
+  "  hvse <name> <value>  Set hio element variable\n"
   #if HIO_USE_DATAWARP
   "  dwds <directory> Issue dw_wait_directory_stage\n"
   "  dsdo <dw_dir> <pfs_dir> <type> Issue dw_stage_directory_out\n"
@@ -200,6 +214,7 @@ char * help =
   #endif // HIO
   "  k <signal>    raise <signal> (number)\n"
   "  x <status>    exit with <status>\n"
+  "  segv          force SIGSEGV\n" 
   "  grep <regex> <file>  Search <file> and print (verbose 1) matching lines [1]\n"
   "                <file> = \"@ENV\" searches environment\n"
   "\n"
@@ -216,6 +231,7 @@ char * help =
   "\n"
   " Example action sequences:\n"
   "    v 1 d 1\n"
+  "    opt +ROF-RCHK\n"
   "    lc 3 s 0 le\n"
   "    lt 3 s 1 le\n"
   "    o 3 e 2\n"
@@ -223,7 +239,7 @@ char * help =
   #ifdef MPI
   "    mi mb mf\n"
   #endif // MPI
-  "    fi 32 1M fr 8 1 ff\n"
+  "    ni 32 1M nr 8 1 nf\n"
   "    x 99\n"
   "\n"
   #ifndef MPI
@@ -256,10 +272,31 @@ const int myrank = 0;
 int tokc = 0;
 char * * tokv = NULL;
 
+enum options {
+  OPT_ROF      =  1,  // Run on Failure
+  OPT_RCHK     =  2,  // Read Data Check
+  OPT_XPERF    =  4,  // Extended Performance Messages
+  OPT_PERFXCHK =  8,  // Exclude check time from Performance messages
+  OPT_PAVM     = 16   // Pavilion Messages
+};
+
+static enum options options = 0;
+
+ENUM_START(etab_opt)
+ENUM_NAMP(OPT_, ROF)
+ENUM_NAMP(OPT_, RCHK)
+ENUM_NAMP(OPT_, XPERF)
+ENUM_NAMP(OPT_, PERFXCHK)
+ENUM_NAMP(OPT_, PAVM)
+ENUM_END(etab_opt, 1, "+")
+
+static char * options_init = "-ROF+RCHK+XPERF-PERFXCHK-PAVM"; 
+
 typedef struct pval {
   U64 u;
   char * s;
   int i;  // Use for enums
+  int c;  // Use for disabling enum bits
   double d;
   regex_t * rxp;  // Compiled regular expressions
 } PVAL;
@@ -297,6 +334,15 @@ ACTION * actv;
 MSG_CONTEXT my_msg_context;
 #define MY_MSG_CTX (&my_msg_context)
 
+// Common read / write buffer pointers, etc.  Set by dbuf action.
+static void * wbuf_ptr = NULL;
+static void * rbuf_ptr = NULL;
+static size_t rwbuf_len = 0;          // length not counting pattern overun area
+static U64 wbuf_data_object_hash_mod; // data_object hash modulus
+static U64 wbuf_bdy;                  // wbuf address boundary
+static U64 wbuf_repeat_len;           // repeat length of wbuf pattern
+
+static ETIMER local_tmr;
 //----------------------------------------------------------------------------
 // Common subroutines and macros
 //----------------------------------------------------------------------------
@@ -333,10 +379,25 @@ MSG_CONTEXT my_msg_context;
              0, mpi_comm));                              \
     }                                                    \
     MPI_CK(MPI_Barrier(mpi_comm));
+
 #else
   #define RANK_SERIALIZE_START
   #define RANK_SERIALIZE_END
 #endif
+
+int mpi_active(void) {
+  #ifdef MPI
+    int mpi_init_flag, mpi_final_flag;
+    MPI_Initialized(&mpi_init_flag);
+    if (mpi_init_flag) {
+      MPI_Finalized(&mpi_final_flag);
+      if (! mpi_final_flag) {
+        return 1;
+      } 
+    }
+  #endif 
+  return 0;
+}
 
 #define R0_OR_VERB_START                                                                  \
   if ( (MY_MSG_CTX)->verbose_level >= VERB_LEV_MULTI ) RANK_SERIALIZE_START;              \
@@ -357,18 +418,13 @@ void get_id() {
   if (p) *p = '\0';
 
   #ifdef MPI
+  if (mpi_active()) {  
+    MPI_CK(MPI_Comm_rank(mpi_comm, &myrank));
+    sprintf(tmp_id+strlen(tmp_id), ".%d", myrank);
+    MPI_CK(MPI_Comm_size(mpi_comm, &mpi_size));
+    sprintf(tmp_id+strlen(tmp_id), "/%d", mpi_size);
+  } else {
   mpi_size = 0;
-  { int mpi_init_flag, mpi_final_flag;
-    MPI_Initialized(&mpi_init_flag);
-    if (mpi_init_flag) {
-      MPI_Finalized(&mpi_final_flag);
-      if (! mpi_final_flag) {
-        MPI_CK(MPI_Comm_rank(mpi_comm, &myrank));
-        sprintf(tmp_id+strlen(tmp_id), ".%d", myrank);
-        MPI_CK(MPI_Comm_size(mpi_comm, &mpi_size));
-        sprintf(tmp_id+strlen(tmp_id), "/%d", mpi_size);
-      }
-    }
   }
   #endif // MPI
   strcat(tmp_id, " ");
@@ -394,18 +450,25 @@ void lfsr_22_byte(unsigned char * p, U64 len) {
 }
 
 void lfsr_22_byte_init(void) {
+  srandom(15485863); // The 1 millionth prime
+  for (int i = 0; i<sizeof(lfsr_state); ++i) {
+    lfsr_state[i] = random() % 256;
+  }
+}
+
+void lfsr_22_byte_init_p(void) {
   // Use a very simple PRNG to initialize lfsr_state
   int prime = 15485863; // The 1 millionth prime
   lfsr_state[0] = 0xA5;
   for (int i = 1; i<sizeof(lfsr_state); ++i) {
     lfsr_state[i] = (lfsr_state[i-1] * prime) % 256;
   }
-
   // Cycle a few times to mix things up
   unsigned char t[1000];
   lfsr_22_byte(t, sizeof(t));
 }
 
+# if 1
 void lfsr_test(void) {
   // A few tests for lfsr properties
   U64 size = 8 * 1024 * 1024;
@@ -419,12 +482,28 @@ void lfsr_test(void) {
   lfsr_22_byte(buf, size);
 
   printf("buf:\n");
-  hex_dump(buf, 64);
+  hex_dump(buf, 256);
 
   printf("buf + %d:\n", LFSR_22_CYCLE);
-  hex_dump(buf+LFSR_22_CYCLE, 64);
+  hex_dump(buf+LFSR_22_CYCLE, 256);
 
-  #if 0
+  int b[8] = {0,0,0,0,0,0,0,0};
+  int j = 0;
+  for (int i = 0; i<256; ++i) {
+    int n = ((unsigned char *)buf)[i];
+    j += n;
+    for (int k=0; k<8; ++k) {
+      unsigned char m = 1 << k;
+      if (m & n) b[k]++;
+    }
+       
+  }
+  VERB0("j: %d", j);
+  for (int k=0; k<8; ++k) {
+    VERB0("b[%d]: %d", k, b[k]);
+  } 
+
+
   for (int j=0; j<100; ++j) {
     int sum = 0;
     for (int i=0; i<100; ++i) {
@@ -441,38 +520,118 @@ void lfsr_test(void) {
       }
      }
   }
-  #endif
+}
+#endif
+
+//----------------------------------------------------------------------------
+// fread and fwrite with redrive
+//----------------------------------------------------------------------------
+ssize_t fwrite_rd (FILE *file, const void *ptr, size_t count) {
+  ssize_t actual, total = 0;
+
+  do {
+    actual = fwrite (ptr, 1, count, file);
+
+    if (actual > 0) {
+      total += actual;
+      count -= actual;
+      ptr = (void *) ((intptr_t) ptr + actual);
+    }
+  } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
+
+  return (actual < 0) ? actual: total;
+}
+
+ssize_t fread_rd (FILE *file, void *ptr, size_t count) {
+  ssize_t actual, total = 0;
+
+  do {
+    actual = fread (ptr, 1, count, file);
+
+    if (actual > 0) {
+      total += actual;
+      count -= actual;
+      ptr = (void *) ((intptr_t) ptr + actual);
+    }
+  } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
+
+  return (actual < 0) ? actual: total;
 }
 
 //----------------------------------------------------------------------------
 // If MPI & Rank 0, VERB1 message with collective min/mean/max/stddev/total
 // Always VERB2 local value message
 //----------------------------------------------------------------------------
+#ifdef MPI
+struct mm_val_s {
+  double val;
+  char id[24];
+};
+
+struct min_max_s {
+  struct mm_val_s min;
+  struct mm_val_s max;
+};
+
+void min_max_who(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype) {
+  for (int j=0; j<*len; ++j) {
+    struct min_max_s *vi = ((struct min_max_s *)invec) + j;
+    struct min_max_s *vo = ((struct min_max_s *)inoutvec) + j;
+
+    if ( (*vi).min.val < (*vo).min.val ) {
+      (*vo).min = (*vi).min;
+    }
+    if ( (*vi).max.val > (*vo).max.val ) {
+      (*vo).max = (*vi).max;
+    }
+  }
+}
+#endif // MPI
+
 void prt_mmmst(double val, char * desc, char * unit) {
   #ifdef MPI
     if (mpi_size > 0) {
-      double sum, mean, min, max, diff, sumdiff, sd;
+      double sum, mean, diff, sumdiff, sd;
+      struct min_max_s mm, mmr;
+      MPI_Datatype mmtype;
+      MPI_Op mmw_op;
+
+      // Set up MPI data type and op
+      MPI_CK( MPI_Type_contiguous(sizeof(struct min_max_s), MPI_BYTE, &mmtype) );
+      MPI_CK( MPI_Type_commit(&mmtype) );
+      MPI_CK( MPI_Op_create(min_max_who, true, & mmw_op) );
+
       // Use two pass method to calculate variance
-      MPI_CK(MPI_Allreduce(&val, &sum, 1, MPI_DOUBLE, MPI_SUM, mpi_comm));
+      MPI_CK( MPI_Allreduce(&val, &sum, 1, MPI_DOUBLE, MPI_SUM, mpi_comm) );
       mean = sum/(double)mpi_size;
       diff = (val - mean) * (val - mean);
-      MPI_CK(MPI_Reduce(&diff, &sumdiff, 1, MPI_DOUBLE, MPI_SUM, 0, mpi_comm));
+      MPI_CK( MPI_Reduce(&diff, &sumdiff, 1, MPI_DOUBLE, MPI_SUM, 0, mpi_comm) );
       sd = sqrt(sumdiff / mpi_size);
-      // Get min, max
-      MPI_CK(MPI_Reduce(&val, &min, 1, MPI_DOUBLE, MPI_MIN, 0, mpi_comm));
-      MPI_CK(MPI_Reduce(&val, &max, 1, MPI_DOUBLE, MPI_MAX, 0, mpi_comm));
-      char b1[32], b2[32], b3[32], b4[32], b5[32];
-      if (0 == myrank) VERB1("%s mean/min/max/s/tot: %s %s %s %s %s %s", desc,
-                             eng_not(b1, sizeof(b1), mean, "D6.4", ""),
-                             eng_not(b2, sizeof(b2), min,  "D6.4", ""),
-                             eng_not(b3, sizeof(b3), max,  "D6.4", ""),
-                             eng_not(b4, sizeof(b4), sd,   "D6.4", ""),
-                             eng_not(b5, sizeof(b5), sum,  "D6.4", ""), unit);
-    }
-  #endif
 
-  char b1[32];  
-  VERB2("%s: %s %s", desc, eng_not(b1, sizeof(b1), val, "D6.4", unit)); 
+      // Get min, max
+      mm.min.val = mm.max.val = val;
+      strncpy(mm.min.id, id_string, sizeof(mm.min.id)); 
+      mm.min.id[sizeof(mm.min.id)-1] = '\0';
+      char * p = strchr(mm.min.id, ' ');
+      if (p) *p = '\0';
+      strncpy(mm.max.id, mm.min.id, sizeof(mm.max.id)); 
+      MPI_CK( MPI_Reduce(&mm, &mmr, 1, mmtype, mmw_op, 0, mpi_comm) );
+      MPI_CK( MPI_Type_free(&mmtype) );
+      MPI_CK( MPI_Op_free(&mmw_op) );
+
+      char b1[32], b2[32], b3[32], b4[32], b5[32];
+      if (0 == myrank) VERB1("%s mean/min/max/s/tot: %s %s %s %s %s %s   min/max: %s %s", desc,
+                             eng_not(b1, sizeof(b1), mean, "D6.4", ""),
+                             eng_not(b2, sizeof(b2), mmr.min.val,  "D6.4", ""), 
+                             eng_not(b3, sizeof(b3), mmr.max.val,  "D6.4", ""), 
+                             eng_not(b4, sizeof(b4), sd,   "D6.4", ""),
+                             eng_not(b5, sizeof(b5), sum,  "D6.4", ""), unit,
+                             mmr.min.id, mmr.max.id);
+    } else {
+  #endif
+    char b1[32];  
+    VERB1("%s: %s", desc, eng_not(b1, sizeof(b1), val, "D6.4", unit));
+  } 
 }
 
 //----------------------------------------------------------------------------
@@ -487,11 +646,15 @@ ACTION_RUN(ztest_run) {
   char * s2 = V2.s; 
   char * s3 = V3.s; 
 
-  VERB0("nothing to see here, move along");
+  VERB0("Nothing to see here, move along", i0, d1, s2, s3); // Vars passed to avoid warning
 
   //char buf[32];
   //printf("eng_not(%lg, %s, %s) --> \"%s\"\n", d1, s2, s3, eng_not(buf, sizeof(buf), d1, s2, s3));
 
+  //lfsr_test();
+
+  //prt_mmmst((double) myrank, "rank", "");
+ 
 }
 
 //----------------------------------------------------------------------------
@@ -528,13 +691,37 @@ ACTION_RUN(debug_run) {
 }
 
 //----------------------------------------------------------------------------
-// qof (quit on fail) action handlers
+// opt (set option flag) action handler
 //----------------------------------------------------------------------------
-ACTION_RUN(qof_run) {
-  quit_on_fail = V0.u;
-  VERB1("Quit on fail count set to %d", quit_on_fail);
+
+void parse_opt(char *ctx, char *flags, int *set, int *clear) {
+  int rc = flag2enum(MY_MSG_CTX, &etab_opt, flags, set, clear);
+  if (rc) ERRX("%s; invalid option. Valid values are +/- %s", ctx, enum_list(MY_MSG_CTX, &etab_opt));
+  DBG4("%s: flags: %s set: 0x%X  clear: 0x%X", ctx, flags, *set, *clear);
 }
 
+void show_opt(char *ctx, int val) {
+  char * opt_desc;
+  enum2str(MY_MSG_CTX, &etab_opt, val, &opt_desc);
+  VERB1("%s options: %s", ctx, opt_desc);
+  FREEX(opt_desc);
+}
+
+ACTION_CHECK(opt_check) {
+  char * flags = V0.s;
+  if (0 == strcmp("?", flags)) V0.c = ~(V0.i = 0);
+  else parse_opt(A.desc, flags, &V0.i, &V0.c);
+  DBG4("opt: flags: %s set: 0x%X  clear: 0x%X \n", flags, V0.i, V0.c);
+}
+
+ACTION_RUN(opt_run) {
+  if (0 == V0.i && ~0 == V0.c) show_opt(A.desc, options);
+  else options = V0.c & (V0.i | options); 
+}
+
+//----------------------------------------------------------------------------
+// name action handler
+//----------------------------------------------------------------------------
 ACTION_RUN(name_run) {
   test_name = V0.s;
 }
@@ -727,6 +914,168 @@ ACTION_RUN(le_run) {
   }
 }
 
+//----------------------------------------------------------------------------
+// ifr, eif action handler
+//----------------------------------------------------------------------------
+int ifr_depth = 0;
+int ife_num;
+
+ACTION_CHECK(ifr_check) {
+  if (ifr_depth > 0) 
+    ERRX("%s: nested ifr", A.desc);
+  ifr_depth++; 
+}
+
+ACTION_CHECK(eif_check) {
+  if (ifr_depth != 1) 
+    ERRX("%s: ife without preceeding ifr", A.desc);
+  ifr_depth--;
+  ife_num = A.actn - 1;
+}
+
+ACTION_RUN(ifr_run) {
+  int req_rank = V0.u;
+  int cond = false;  // false --> don't run body of ifr
+  
+  if (mpi_active()) {
+    if (req_rank >= 0) {
+      if (myrank == req_rank) cond = true;
+    } else {
+      if ( myrank == mpi_size + req_rank) cond = true;
+    } 
+  } else {
+    cond = true;
+  }
+  
+  if (!cond) *pactn = ife_num;
+
+  DBG4("ifr done req_rank: %d cond: %d actn: %d", req_rank, cond, *pactn);
+}
+
+ACTION_RUN(eif_run) {
+  DBG4("ife done actn: %d", *pactn);
+}
+
+//----------------------------------------------------------------------------
+// dbuf action handler and related data validation routines
+//----------------------------------------------------------------------------
+enum dbuf_type {RAND22P, RAND22, OFS20};
+ENUM_START(etab_dbuf)  // Write buffer type
+ENUM_NAME("RAND22P", RAND22P)
+ENUM_NAME("RAND22", RAND22)
+ENUM_NAME("OFS20",  OFS20)
+ENUM_END(etab_dbuf, 0, NULL)
+
+#define PRIME_LT_64KI    65521 // A prime a little less than 2**16
+#define PRIME_75PCT_2MI 786431 // A prime about 75% of 2**20
+#define PRIME_LT_2MI   1048573 // A prime a little less that 2**20
+
+void dbuf_init(enum dbuf_type type, U64 size) {
+  rwbuf_len = size;
+  int rc;
+
+  FREEX(wbuf_ptr);
+  FREEX(rbuf_ptr);
+
+  switch (type) {
+    case RAND22P:
+      wbuf_bdy = 1;
+      wbuf_repeat_len = LFSR_22_CYCLE;
+      wbuf_data_object_hash_mod = PRIME_LT_64KI;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + wbuf_repeat_len);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + wbuf_repeat_len, strerror(rc));
+      lfsr_22_byte_init_p();
+      lfsr_22_byte(wbuf_ptr, rwbuf_len + wbuf_repeat_len);
+      break;
+    case RAND22:
+      wbuf_bdy = 1;
+      wbuf_repeat_len = LFSR_22_CYCLE;
+      wbuf_data_object_hash_mod = PRIME_LT_2MI;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + wbuf_repeat_len);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + wbuf_repeat_len, strerror(rc));
+      lfsr_22_byte_init();
+      lfsr_22_byte(wbuf_ptr, rwbuf_len + wbuf_repeat_len);
+      break;
+    case OFS20:
+      wbuf_bdy = sizeof(uint32_t); 
+      wbuf_repeat_len = 1024 * 1024;
+      wbuf_data_object_hash_mod = 1024 * 1024;
+      rc = posix_memalign((void * *)&wbuf_ptr, 4096, rwbuf_len + wbuf_repeat_len);
+      if (rc) ERRX("wbuf posix_memalign %d bytes failed: %s", rwbuf_len + wbuf_repeat_len, strerror(rc));
+      for (long i = 0; i<(rwbuf_len+wbuf_repeat_len)/sizeof(uint32_t); ++i) {
+        ((uint32_t *)wbuf_ptr)[i] = i * sizeof(uint32_t);
+      }
+      break;
+  }
+
+  rbuf_ptr = MALLOCX(rwbuf_len);
+
+  DBG3("dbuf_init type: %s size: %lld wbuf_ptr: 0x%lX",              \
+        enum_name(MY_MSG_CTX, &etab_dbuf, type), size, wbuf_ptr);  
+  IFDBG3( hex_dump(wbuf_ptr, 32) );                                             
+
+}
+
+ACTION_CHECK(dbuf_check) {
+  rwbuf_len = V1.u;
+}
+
+ACTION_RUN(dbuf_run) {
+  dbuf_init(V0.i, V1.u);
+}
+
+// Returns a pointer into wbuf based on offset and data object hash
+void * get_wbuf_ptr(char * ctx, U64 offset, U64 data_object_hash) {
+  void * expected = wbuf_ptr + ( (offset + data_object_hash) % wbuf_repeat_len);
+  DBG2("%s: object_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", ctx, data_object_hash, wbuf_ptr, expected - wbuf_ptr);  
+  return expected;
+}
+
+// Convert string that uniquely identifies a data object into a hash
+U64 get_data_object_hash(char * id_string) {
+  U64 obj_hash = BDYDN(crc32(0, id_string, strlen(id_string)) % wbuf_data_object_hash_mod, wbuf_bdy);
+  DBG4("data_object_hash: \"%s\" 0x%lX", id_string, obj_hash);
+  return obj_hash;
+}
+
+int check_read_data(char * ctx, void * buf, size_t len, U64 offset, U64 data_object_hash) {
+  int rc;
+  void * expected = get_wbuf_ptr("hew", offset, data_object_hash);
+  void * mis_comp;
+  if ( ! (mis_comp = memdiff(buf, expected, len)) ) {
+    rc = 0;
+    VERB3("hio_element_read data check successful");
+  } else {
+    // Read data miscompare - dump lots of data about it
+    rc = 1;
+    I64 misc_ofs = (char *)mis_comp - (char *)buf;
+    I64 dump_start = MAX(0, misc_ofs - 16) & (~15);
+    VERB0("Error: %s data check miscompare", ctx);
+    VERB0("       Data offset: 0x%llX  %lld", offset, offset); 
+    VERB0("       Data length: 0x%llX  %lld", len, len); 
+    VERB0("      Data address: 0x%llX", buf); 
+    VERB0("Miscompare address: 0x%llX", mis_comp); 
+    VERB0(" Miscompare offset: 0x%llX  %lld", mis_comp-buf, mis_comp-buf); 
+
+    VERB0("Debug: wbuf_ptr addr: 0x%lX:", wbuf_ptr); hex_dump(wbuf_ptr, 32);
+
+    VERB0("Miscompare expected data at offset 0x%llX %lld follows:", dump_start, dump_start);
+    hex_dump( expected + dump_start, 96);
+
+    VERB0("Miscompare actual data at offset 0x%llX %lld follows:", dump_start, dump_start);
+    hex_dump( buf + dump_start, 96);
+
+    VERB0("XOR of Expected addr: 0x%lX  Miscomp addr: 0x%lX", expected, mis_comp);
+    char * xorbuf_ptr = MALLOCX(len);
+    for (int i=0; i<len; i++) {
+      ((char *)xorbuf_ptr)[i] = ((char *)buf)[i] ^ ((char *)expected)[i];
+    }
+    hex_dump( xorbuf_ptr, len);
+    FREEX(xorbuf_ptr);
+
+  }
+  return rc;
+}
 //----------------------------------------------------------------------------
 // o, e (stdout, stderr) action handlers
 //----------------------------------------------------------------------------
@@ -1028,32 +1377,244 @@ ACTION_RUN(fget_run) {
 }
 
 //----------------------------------------------------------------------------
-// fi, fr, ff (floating point addition init, run, free) action handlers
+// fo, fw, fr, gc file access action handler
+//----------------------------------------------------------------------------
+
+// Substitite rank & PID for %r and %p in string.  Must be free'd by caller
+char * str_sub(char * string) {
+  size_t needed = strlen(string) + 1;
+  size_t dlen = needed + 16; // A little extra so hopefully realloc not needed
+  char * dest = MALLOCX(dlen);
+  char *s = string;
+  char *d = dest;
+  
+  while (*s) {
+    if ('%' == *s) {
+      s++;
+      switch (*s) {
+        case 'p':
+        case 'r':
+          needed += 8;
+          if (dlen < needed) {
+            size_t pos = d - dest;
+            dlen = needed;
+            dest = REALLOCX(dest, dlen);
+            d = dest + pos; 
+          }
+          d += sprintf(d, "%0.8d", (*s == 'p') ? getpid(): (mpi_active() ? myrank: 0) );
+          s++;
+          break;
+        case '%': 
+          *d++ = '%';
+          break;
+        default: 
+          *d++ = *s++;
+      }
+    } else {
+      *d++ = *s++;
+    }      
+  }
+  *d = '\0';
+  return dest;
+}
+
+static int fio_o_count = 0;
+static char * fio_path = NULL;
+static FILE * fio_file;
+static U64 fio_ofs;
+static U64 fio_id_hash;
+static U64 fio_rw_count[2]; // read, write byte counts
+ETIMER fio_foc_tmr;
+double fio_o_time, fio_w_time, fio_r_time, fio_exc_time, fio_c_time;
+
+#define IF_ERRNO(COND, FMT, ...)                                                 \
+  if ( (COND) ) {                                                                \
+    VERB0(FMT " failed.  errno: %d (%s)", __VA_ARGS__, errno, strerror(errno));  \
+    local_fails++;                                                               \
+  }
+
+
+ACTION_CHECK(fo_check) {
+  if (fio_o_count++ != 0) ERRX("nested fo");
+  if (rwbuf_len == 0) rwbuf_len = 20 * 1024 * 1024;
+} 
+
+ACTION_RUN(fo_run) {
+  fio_path = str_sub(V0.s);
+  char * mode = V1.s;
+
+  fio_o_time = fio_w_time = fio_r_time = fio_exc_time = fio_c_time = 0;
+  fio_ofs = 0;
+
+  if (! wbuf_ptr ) dbuf_init(RAND22, 20 * 1024 * 1024); 
+  fio_id_hash = get_data_object_hash(fio_path);
+  if (mpi_active()) MPI_CK(MPI_Barrier(mpi_comm));
+
+  ETIMER_START(&fio_foc_tmr);
+  ETIMER_START(&local_tmr);
+  fio_file = fopen(fio_path, mode);
+  IF_ERRNO( !fio_file, "fo: fopen(%s, %s)", fio_path, mode );
+  fio_rw_count[0] = fio_rw_count[1] = 0;
+} 
+
+ACTION_CHECK(fw_check) {
+  U64 size = V1.u;
+  if (fio_o_count != 1) ERRX("fw without preceeding fo");
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
+} 
+  
+
+ACTION_RUN(fw_run) {
+  ssize_t len_act;
+  I64 ofs_param = V0.u;
+  U64 len_req = V1.u;
+  U64 ofs_abs;
+
+  ofs_abs = fio_ofs + ofs_param;
+  DBG2("fw ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", fio_ofs, ofs_param, ofs_abs, len_req);
+  void * expected = get_wbuf_ptr("fw", ofs_abs, fio_id_hash);
+  ETIMER_START(&local_tmr);
+
+  if (fio_ofs != ofs_abs) {
+    int rc = fseeko(fio_file, ofs_abs, SEEK_SET); 
+    IF_ERRNO( rc, "fw: fseek(%s, %lld, SEEK_SET)", fio_path, ofs_abs);
+    fio_ofs = ofs_abs;
+  }
+
+  len_act = fwrite_rd(fio_file, expected, len_req);
+  fio_w_time += ETIMER_ELAPSED(&local_tmr);
+  fio_ofs += len_act;
+  IF_ERRNO( len_act != len_req, "fw: fwrite(%s, , %lld) len_act: %lld", fio_path, len_req, len_act);
+  fio_rw_count[1] += len_act;
+}
+
+ACTION_CHECK(fr_check) {
+  U64 size = V1.u;
+  if (fio_o_count != 1) ERRX("fr without preceeding fo");
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
+}
+ 
+ACTION_RUN(fr_run) {
+  ssize_t len_act;
+  I64 ofs_param = V0.u;
+  U64 len_req = V1.u;
+  U64 ofs_abs;
+
+  ofs_abs = fio_ofs + ofs_param;
+  DBG2("fr ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", fio_ofs, ofs_param, ofs_abs, len_req);
+
+  ETIMER_START(&local_tmr);
+
+  if (fio_ofs != ofs_abs) {
+    int rc = fseeko(fio_file, ofs_abs, SEEK_SET); 
+    IF_ERRNO( rc, "fr: fseek(%s, %lld, SEEK_SET)", fio_path, ofs_abs);
+    fio_ofs = ofs_abs;
+  }
+
+  len_act = fread_rd(fio_file, rbuf_ptr, len_req);
+  fio_r_time += ETIMER_ELAPSED(&local_tmr);
+  fio_ofs += len_act;
+  IF_ERRNO( len_act != len_req, "fr: fread(%s, , %lld) len_act: %lld", fio_path, len_req, len_act);
+  
+  if (options & OPT_RCHK) {
+    ETIMER_START(&local_tmr);
+    // Force error for unit test
+    // *(char *)(rbuf_ptr+16) = '\0';
+    int rc = check_read_data("fread", rbuf_ptr, len_req, ofs_abs, fio_id_hash);
+    if (rc) { 
+      local_fails++;
+    }
+    fio_exc_time += ETIMER_ELAPSED(&local_tmr);
+  }
+  fio_rw_count[0] += len_act;
+}
+
+ACTION_CHECK(fc_check) {
+  if (fio_o_count != 1) ERRX("fc without preceeding fo");
+  fio_o_count--;
+}
+
+ACTION_RUN(fc_run) {
+  int rc;
+
+  ETIMER_START(&local_tmr);
+  rc = fclose(fio_file);
+  fio_c_time += ETIMER_ELAPSED(&local_tmr);
+
+  ETIMER_START(&local_tmr);
+  if (mpi_active()) MPI_CK(MPI_Barrier(mpi_comm));
+  double bar_time = ETIMER_ELAPSED(&local_tmr);
+  double foc_time = ETIMER_ELAPSED(&fio_foc_tmr);
+
+  IF_ERRNO( rc, "fc: fclose(%s)", fio_path);
+
+  double una_time = foc_time - (fio_o_time + fio_w_time + fio_r_time +
+                                fio_c_time + bar_time + fio_exc_time);
+
+  char * desc = "         data check time"; 
+  if (options & OPT_PERFXCHK) desc = "excluded data check time"; 
+
+  if (options & OPT_XPERF) {  
+    prt_mmmst(fio_o_time,   "              fopen time", "S");
+    prt_mmmst(fio_w_time,   "             fwrite time", "S");
+    prt_mmmst(fio_r_time,   "              fread time", "S");
+    prt_mmmst(fio_c_time,   "             fclose time", "S");
+    prt_mmmst(bar_time,     "post fclose barrier time", "S");
+    prt_mmmst(fio_exc_time, desc,                       "S");
+    prt_mmmst(foc_time,     " fopen-fclose total time", "S");
+    prt_mmmst(una_time,     "    unaccounted for time", "S");
+  }
+
+  U64 rw_count_sum[2];
+  if (mpi_active()) {
+    #ifdef MPI
+      MPI_CK(MPI_Reduce(fio_rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
+    #endif  
+  } else {
+    rw_count_sum[0] = fio_rw_count[0];
+    rw_count_sum[1] = fio_rw_count[1];
+  }
+  
+  if (0 == myrank) {
+    if (options & OPT_PERFXCHK) foc_time -= fio_exc_time;
+    char b1[32], b2[32], b3[32], b4[32], b5[32];
+    VERB1("fo-fc R/W Size: %s %s  Time: %s  R/W Speed: %s %s",
+          eng_not(b1, sizeof(b1), (double)rw_count_sum[0],    "B6.4", "B"),
+          eng_not(b2, sizeof(b2), (double)rw_count_sum[1],    "B6.4", "B"),
+          eng_not(b3, sizeof(b3), (double)foc_time,           "D6.4", "S"),
+          eng_not(b4, sizeof(b4), rw_count_sum[0] / foc_time, "B6.4", "B/S"),
+          eng_not(b5, sizeof(b5), rw_count_sum[1] / foc_time, "B6.4", "B/S"));
+  }        
+  fio_path = FREEX(fio_path);
+}
+
+//----------------------------------------------------------------------------
+// ni, nr, nf (floating point addition init, run, free) action handlers
 //----------------------------------------------------------------------------
 static double * nums;
 static U64 flap_size = 0, count;
 
-ACTION_CHECK(fi_check) {
+ACTION_CHECK(ni_check) {
   flap_size = V0.u;
   count = V1.u;
   if (flap_size < 2) ERRX("%s; size must be at least 2", A.desc);
 }
 
-ACTION_CHECK(fr_check) {
+ACTION_CHECK(nr_check) {
   U64 rep = V0.u;
   U64 stride = V1.u;
 
-  if (!flap_size) ERRX("%s; fr without prior fi", A.desc);
+  if (!flap_size) ERRX("%s; nr without prior ni", A.desc);
   if ((count-1)%stride != 0) ERRX("%s; count-1 must equal a multiple of stride", A.desc);
   if (rep<1) ERRX("%s; rep must be at least 1", A.desc);
 }
 
-ACTION_CHECK(ff_check) {
-  if (!flap_size) ERRX("%s; ff without prior fi", A.desc);
+ACTION_CHECK(nf_check) {
+  if (!flap_size) ERRX("%s; nf without prior ni", A.desc);
   flap_size = 0;
 }
 
-ACTION_RUN(fi_run) {
+ACTION_RUN(ni_run) {
   flap_size = V0.u;
   count = V1.u;
   U64 N = flap_size * count;
@@ -1070,7 +1631,7 @@ ACTION_RUN(fi_run) {
   }
 }
 
-ACTION_RUN(fr_run) {
+ACTION_RUN(nr_run) {
   double sum, delta_t, predicted;
   U64 b, ba, r, d, fp_add_ct, max_val;
   U64 N = flap_size * count;
@@ -1114,11 +1675,13 @@ ACTION_RUN(fr_run) {
 
   delta_t = ETIMER_ELAPSED(&tmr);
 
-  VERB2("flapper done; predicted: %e sum: %e delta: %e", predicted, sum, sum - predicted);
+  VERB2("flapper done; FP Adds %llu, predicted: %e sum: %e delta: %e", fp_add_ct, predicted, sum, sum - predicted);
   VERB2("FP Adds: %llu, time: %f Seconds, MFLAPS: %e", fp_add_ct, delta_t, (double)fp_add_ct / delta_t / 1000000.0);
+  prt_mmmst(delta_t, " Add time", "S");
+  prt_mmmst((double)fp_add_ct / delta_t, "FLAP rate", "F/S" );
 }
 
-ACTION_RUN(ff_run) {
+ACTION_RUN(nf_run) {
   flap_size = 0;
   FREEX(nums);
 }
@@ -1399,22 +1962,18 @@ static hio_flags_t hio_dataset_flags;
 static hio_dataset_mode_t hio_dataset_mode;
 static char * hio_element_name;
 static U64 hio_element_hash;
-#define EL_HASH_MODULUS 65521 // A prime a little less than 2**16
+#define EL_HASH_MODULUS 65521     // A prime a little less than 2**16
 static hio_return_t hio_rc_exp = HIO_SUCCESS;
 static I64 hio_cnt_exp = HIO_CNT_REQ;
 static I64 hio_dsid_exp = -999;
 static int hio_dsid_exp_set = 0;
 static int hio_fail = 0;
-static void * wbuf = NULL, *rbuf = NULL;
-static U64 bufsz = 0;
-static int hio_check = 0;
 static U64 hio_e_ofs;
 static I64 hseg_start = 0;
-static U64 rw_count[2];
-static ETIMER hio_hdaf_tmr, hio_api_tmr;
+static U64 hio_rw_count[2];
+static ETIMER hio_hdaf_tmr;
 double hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_her_time,
        hio_hec_time, hio_hdc_time, hio_hdf_time, hio_exc_time;
-
 
 #define HRC_TEST(API_NAME)  {                                                                \
   local_fails += (hio_fail = (hrc != hio_rc_exp && hio_rc_exp != HIO_ANY) ? 1: 0);           \
@@ -1470,7 +2029,7 @@ ACTION_RUN(hda_run) {
   hio_ds_id_req = V1.u;
   hio_dataset_flags = V2.i;
   hio_dataset_mode = V3.i;
-  rw_count[0] = rw_count[1] = 0;
+  hio_rw_count[0] = hio_rw_count[1] = 0;
   MPI_CK(MPI_Barrier(mpi_comm));
   hio_hda_time = hio_hdo_time = hio_heo_time = hio_hew_time = hio_her_time =
                  hio_hec_time = hio_hdc_time = hio_hdf_time = hio_exc_time = 0.0;
@@ -1478,9 +2037,9 @@ ACTION_RUN(hda_run) {
   DBG2("Calling hio_datset_alloc(context, &dataset, %s, %lld, %d(%s), %d(%s))", hio_dataset_name, hio_ds_id_req,
         hio_dataset_flags, V2.s, hio_dataset_mode, V3.s);
   ETIMER_START(&hio_hdaf_tmr);
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_alloc (context, &dataset, hio_dataset_name, hio_ds_id_req, hio_dataset_flags, hio_dataset_mode);
-  hio_hda_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hda_time += ETIMER_ELAPSED(&local_tmr);
   DBG2("hda_run: dataset: %p", dataset);
   HRC_TEST(hio_dataset_alloc);
 }
@@ -1490,9 +2049,9 @@ ACTION_RUN(hda_run) {
 ACTION_RUN(hdo_run) {
   hio_return_t hrc;
   DBG2("calling hio_dataset_open(%p)", dataset);
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_open (dataset);
-  hio_hdo_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hdo_time += ETIMER_ELAPSED(&local_tmr);
   HRC_TEST(hio_dataset_open);
   if (HIO_SUCCESS == hrc) {
     hrc = hio_dataset_get_id(dataset, &hio_ds_id_act);
@@ -1512,52 +2071,39 @@ ACTION_RUN(hdo_run) {
 }
 
 ACTION_CHECK(heo_check) {
-  bufsz = V2.u;
+  if (rwbuf_len == 0) rwbuf_len = 20 * 1024 * 1024;
 }
 
 ACTION_RUN(heo_run) {
   hio_return_t hrc;
   hio_element_name = V0.s;
   int flag_i = V1.i;
-  bufsz = V2.u;
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_element_open (dataset, &element, hio_element_name, flag_i);
-  hio_heo_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_heo_time += ETIMER_ELAPSED(&local_tmr);
   HRC_TEST(hio_element_open)
 
-  ETIMER_START(&hio_api_tmr);
-  wbuf = MALLOCX(bufsz + LFSR_22_CYCLE);
-  lfsr_22_byte_init();
-  lfsr_22_byte(wbuf, bufsz+LFSR_22_CYCLE);
+  ETIMER_START(&local_tmr);
+  if (! wbuf_ptr ) dbuf_init(RAND22P, 20 * 1024 * 1024); 
 
-  rbuf = MALLOCX(bufsz);
+  char * element_id = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
+                                   hio_ds_id_act, hio_element_name,
+                                   (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) ? myrank: 0);
+  hio_element_hash = get_data_object_hash(element_id);
+  //hio_element_hash = BDYDN(crc32(0, element_id, strlen(element_id)) % wbuf_data_object_hash_mod, wbuf_bdy);
+  FREEX(element_id);
+
   hio_e_ofs = 0;
-
-  // Calculate element hash which is added to the offset for read verification
-  char * hash_str = ALLOC_PRINTF("%s %s %d %s %d", hio_context_name, hio_dataset_name,
-                                 hio_ds_id_act, hio_element_name,
-                                 (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) ? myrank: 0);
-  hio_element_hash = crc32(0, hash_str, strlen(hash_str)) % EL_HASH_MODULUS;
-  DBG4("heo hash: \"%s\" 0x%04X", hash_str, hio_element_hash);
-  FREEX(hash_str);
-  hio_exc_time += ETIMER_ELAPSED(&hio_api_tmr);
-
+  hio_exc_time += ETIMER_ELAPSED(&local_tmr);
 }
 
 ACTION_RUN(hso_run) {
   hio_e_ofs = V0.u;
 }
 
-ACTION_RUN(hck_run) {
-  hio_check = V0.i;
-  R0_OR_VERB_START
-    VERB1("HIO read data checking is now %s", V0.s);
-  R0_OR_VERB_END
-}
-
 ACTION_CHECK(hew_check) {
   U64 size = V1.u;
-  if (size > bufsz) ERRX("%s; size > bufsz", A.desc);
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
 }
 
 ACTION_RUN(hsega_run) {
@@ -1587,11 +2133,12 @@ ACTION_RUN(hew_run) {
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("hew el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
-  ETIMER_START(&hio_api_tmr);
-  hcnt = hio_element_write (element, ofs_abs, 0, wbuf + ( (ofs_abs+hio_element_hash) % LFSR_22_CYCLE), 1, hreq);
-  hio_hew_time += ETIMER_ELAPSED(&hio_api_tmr);
+  void * expected = get_wbuf_ptr("hew", ofs_abs, hio_element_hash);
+  ETIMER_START(&local_tmr);
+  hcnt = hio_element_write (element, ofs_abs, 0, expected, 1, hreq);
+  hio_hew_time += ETIMER_ELAPSED(&local_tmr);
   HCNT_TEST(hio_element_write)
-  rw_count[1] += hcnt;
+  hio_rw_count[1] += hcnt;
 }
 
 // Randomize length, then call hew action handler
@@ -1603,7 +2150,7 @@ ACTION_RUN(hewr_run) {
 
 ACTION_CHECK(her_check) {
   U64 size = V1.u;
-  if (size > bufsz) ERRX("%s; size > bufsz", A.desc);
+  if (size > rwbuf_len) ERRX("%s; size > rwbuf_len", A.desc);
 }
 
 ACTION_RUN(her_run) {
@@ -1615,31 +2162,58 @@ ACTION_RUN(her_run) {
   ofs_abs = hio_e_ofs + ofs_param;
   DBG2("her el_ofs: %lld ofs_param: %lld ofs_abs: %lld len: %lld", hio_e_ofs, ofs_param, ofs_abs, hreq);
   hio_e_ofs = ofs_abs + hreq;
-  ETIMER_START(&hio_api_tmr);
-  hcnt = hio_element_read (element, ofs_abs, 0, rbuf, 1, hreq);
-  hio_her_time += ETIMER_ELAPSED(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
+  hcnt = hio_element_read (element, ofs_abs, 0, rbuf_ptr, 1, hreq);
+  hio_her_time += ETIMER_ELAPSED(&local_tmr);
   HCNT_TEST(hio_element_read)
-  rw_count[0] += hcnt;
+  hio_rw_count[0] += hcnt;
 
-  if (hio_check) {
-    void * mis_comp;
+  if (options & OPT_RCHK) {
+    ETIMER_START(&local_tmr);
     // Force error for unit test
-    // *(char *)(rbuf+27) = '\0';
-    if ((mis_comp = memdiff(rbuf, wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE), hreq))) {
+    // *(char *)(rbuf_ptr+16) = '\0';
+    int rc = check_read_data("hio_element_read", rbuf_ptr, hreq, ofs_abs, hio_element_hash);
+    if (rc) { 
       local_fails++;
-      I64 offset = (char *)mis_comp - (char *)rbuf;
-      I64 dump_start = MAX(0, offset - 16);
-      VERB0("Error: hio_element_read data check miscompare; read ofs:%lld read size:%lld miscompare ofs: %lld",
-             ofs_abs, hreq, offset);
+      char * dw_path = getenv("DW_JOB_STRIPED");
+      if (dw_path) {
+        // Attempt to dump the datawarp physical file data directly (without HIO) 
+        // This works for the current version of HIO in basic mode, no guarantees
+        // going forward.
+        char path[512];
+        //                            root
+        //                               ctx    dsn
+        //                                         id              el_name
+        int len = snprintf(path, sizeof(path), "%s/%s.hio/%s/%"PRIi64"/element_data.%s",
+                           dw_path, hio_context_name, hio_dataset_name,
+                           hio_ds_id_act, hio_element_name);
+        if (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) {
+          snprintf(path+len, sizeof(path)-len, ".%08d", myrank);
+        }
 
-      VERB0("Miscompare expected data at offset %lld follows:", dump_start);
-      hex_dump( wbuf + ( (ofs_abs + hio_element_hash) % LFSR_22_CYCLE) + dump_start, 32);
-      VERB0("Miscompare actual data at offset %lld follows:", dump_start);
-      hex_dump( rbuf + dump_start, 32);
-    } else {
-      VERB3("hio_element_read data check successful");
+        FILE * elf = fopen(path, "r");
+        if (!elf) {
+          VERB0("fopen(\"%s\", \"r\") failed, errno: %d", path, errno);
+        } else {
+          int rc = fseeko(elf, ofs_abs, SEEK_SET);
+          if (rc != 0 ) {
+            VERB0("fseek( , %llu, SEEK_SET) failed, errno: %d", ofs_abs, errno);
+          } else {
+            char * fbuf = MALLOCX(hreq);
+            ssize_t count = fread_rd(elf, fbuf, hreq);
+            if (count != hreq) VERB0("Warning: fread_rd count: %ld, len_req: %ld", count, hreq);
+            VERB0("File %s at offset 0x%lX:", path, ofs_abs);
+            hex_dump(fbuf, hreq);  
+            FREEX(fbuf);
+            rc = fclose(elf); 
+            if (rc != 0) VERB0("fclose failed rc: %d errno: %d", rc, errno);
+          }
+        } 
+      }
     }
+    hio_exc_time += ETIMER_ELAPSED(&local_tmr);
   }
+
 }
 
 // Randomize length, then call her action handler
@@ -1651,56 +2225,72 @@ ACTION_RUN(herr_run) {
 
 ACTION_RUN(hec_run) {
   hio_return_t hrc;
+  ETIMER_START(&local_tmr);
   hrc = hio_element_close(&element);
-  ETIMER_START(&hio_api_tmr);
-  HRC_TEST(hio_elemnt_close)
-  hio_hec_time += ETIMER_ELAPSED(&hio_api_tmr);
-  ETIMER_START(&hio_api_tmr);
-  wbuf = FREEX(wbuf);
-  rbuf = FREEX(rbuf);
-  hio_exc_time += ETIMER_ELAPSED(&hio_api_tmr);
-  bufsz = 0;
+  hio_hec_time += ETIMER_ELAPSED(&local_tmr);
+  HRC_TEST(hio_element_close)
 }
 
 #define GIGBIN (1024.0 * 1024.0 * 1024.0)
 
 ACTION_RUN(hdc_run) {
   hio_return_t hrc;
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_close(dataset);
-  hio_hdc_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hdc_time += ETIMER_ELAPSED(&local_tmr);
   HRC_TEST(hio_dataset_close)
 }
 
 ACTION_RUN(hdf_run) {
   hio_return_t hrc;
   DBG3("Calling hio_dataset_free(%p); dataset: %p", &dataset, dataset);
-  ETIMER_START(&hio_api_tmr);
+  ETIMER_START(&local_tmr);
   hrc = hio_dataset_free(&dataset);
-  hio_hdf_time += ETIMER_ELAPSED(&hio_api_tmr);
+  hio_hdf_time += ETIMER_ELAPSED(&local_tmr);
+  ETIMER_START(&local_tmr);
   MPI_CK(MPI_Barrier(mpi_comm));
+  double bar_time = ETIMER_ELAPSED(&local_tmr);
   double hdaf_time = ETIMER_ELAPSED(&hio_hdaf_tmr);
-  U64 rw_count_sum[2];
-  MPI_CK(MPI_Reduce(rw_count, rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
+  HRC_TEST(hio_dataset_close)
+  U64 hio_rw_count_sum[2];
+  MPI_CK(MPI_Reduce(hio_rw_count, hio_rw_count_sum, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, mpi_comm));
   DBG3("After hio_dataset_free(); dataset: %p", dataset);
   IFDBG3( hex_dump(&dataset, sizeof(dataset)) );
-  HRC_TEST(hio_dataset_close)
-  double una_time = hdaf_time - (hio_hda_time + hio_hdo_time + hio_heo_time + hio_hew_time +
-                                 hio_her_time + hio_hec_time + hio_hdc_time + hio_hdf_time + hio_exc_time);
-  VERB2("API time: hda: %f S  hdo: %f S  heo: %f S  hew: %f S  exc: %f S", hio_hda_time, hio_hdo_time, hio_heo_time, hio_hew_time, hio_exc_time);
-  VERB2("API time: hdf: %f S  hdc: %f S  hec: %f S  her: %f S  una: %f S", hio_hdf_time, hio_hdc_time, hio_hec_time, hio_her_time, una_time);
+  double una_time = hdaf_time - (hio_hda_time + hio_hdo_time + hio_heo_time + hio_hew_time + hio_her_time
+                                 + hio_hec_time + hio_hdc_time + hio_hdf_time + bar_time + hio_exc_time);
+ 
+  char * desc = "           data check time"; 
+  if (options & OPT_PERFXCHK) desc = "  excluded data check time";
+ 
+  if (options & OPT_XPERF) {  
+    prt_mmmst(hio_hda_time, " hio_dataset_allocate time", "S");
+    prt_mmmst(hio_hdo_time, "     hio_dataset_open time", "S");
+    prt_mmmst(hio_heo_time, "     hio_element_open time", "S");
+    prt_mmmst(hio_hew_time, "    hio_element_write time", "S");
+    prt_mmmst(hio_her_time, "     hio_element_read time", "S");
+    prt_mmmst(hio_hec_time, "    hio_element_close time", "S");
+    prt_mmmst(hio_hdc_time, "    hio_dataset_close time", "S");
+    prt_mmmst(hio_hdf_time, "     hio_dataset_free time", "S");
+    prt_mmmst(bar_time,     "    post free barrier time", "S");
+    prt_mmmst(hio_exc_time, desc ,                        "S");
+    prt_mmmst(hdaf_time,    "        hda-hdf total time", "S");
+    prt_mmmst(una_time,     "      unaccounted for time", "S");
+  }
+
   if (myrank == 0) {
-    hdaf_time -= hio_exc_time;
+    if (options & OPT_PERFXCHK) hdaf_time -= hio_exc_time;
     char b1[32], b2[32], b3[32], b4[32], b5[32];
     VERB1("hda-hdf R/W Size: %s %s  Time: %s  R/W Speed: %s %s",
-          eng_not(b1, sizeof(b1), (double)rw_count_sum[0],     "B6.4", "B"),
-          eng_not(b2, sizeof(b2), (double)rw_count_sum[1],     "B6.4", "B"),
+          eng_not(b1, sizeof(b1), (double)hio_rw_count_sum[0],     "B6.4", "B"),
+          eng_not(b2, sizeof(b2), (double)hio_rw_count_sum[1],     "B6.4", "B"),
           eng_not(b3, sizeof(b3), (double)hdaf_time,           "D6.4", "S"),
-          eng_not(b4, sizeof(b4), rw_count_sum[0] / hdaf_time, "B6.4", "B/S"),
-          eng_not(b5, sizeof(b5), rw_count_sum[1] / hdaf_time, "B6.4", "B/S"));
-
-    printf("<td> Read_speed %f GiB/S\n", rw_count_sum[0] / hdaf_time / GIGBIN );
-    printf("<td> Write_speed %f GiB/S\n", rw_count_sum[1] / hdaf_time / GIGBIN );
+          eng_not(b4, sizeof(b4), hio_rw_count_sum[0] / hdaf_time, "B6.4", "B/S"),
+          eng_not(b5, sizeof(b5), hio_rw_count_sum[1] / hdaf_time, "B6.4", "B/S"));
+    
+    if (options & OPT_PAVM) {
+      printf("<td> Read_speed %f GiB/S\n", hio_rw_count_sum[0] / hdaf_time / GIGBIN );
+      printf("<td> Write_speed %f GiB/S\n", hio_rw_count_sum[1] / hdaf_time / GIGBIN );
+    }
   }
 }
 
@@ -1935,6 +2525,11 @@ ACTION_RUN(exit_run) {
   exit(V0.u);
 }
 
+ACTION_RUN(segv_run) {
+  VERB0("Forcing SIGSEGV");
+  * (volatile char *) 0 = '\0';
+}
+
 //----------------------------------------------------------------------------
 // grep action handler
 //----------------------------------------------------------------------------
@@ -1977,7 +2572,7 @@ enum ptype {
   UINT = CVT_NNINT,
   PINT = CVT_PINT,
   DOUB = CVT_DOUB,
-  STR, HFLG, HDSM, HERR, HULM, HDSI, DWST, ONFF, NONE };
+  STR, DBUF, HFLG, HDSM, HERR, HULM, HDSI, DWST, ONFF, NONE };
 
 struct parse {
   char * cmd;
@@ -1989,17 +2584,20 @@ struct parse {
   {"ztest", {SINT, DOUB, STR,  STR,  NONE}, NULL,          ztest_run   },   // For testing code fragments  
   {"v",     {UINT, NONE, NONE, NONE, NONE}, verbose_check, verbose_run },
   {"d",     {UINT, NONE, NONE, NONE, NONE}, debug_check,   debug_run   },
-  {"qof",   {UINT, NONE, NONE, NONE, NONE}, NULL,          qof_run     },
+  {"opt",   {STR,  NONE, NONE, NONE, NONE}, opt_check,     opt_run     },
   {"name",  {STR,  NONE, NONE, NONE, NONE}, NULL,          name_run    },
   {"im",    {STR,  NONE, NONE, NONE, NONE}, imbed_check,   NULL        },
   {"srr",   {SINT, NONE, NONE, NONE, NONE}, NULL,          srr_run     },
   {"lc",    {UINT, NONE, NONE, NONE, NONE}, loop_check,    lc_run      },
   {"lcr",   {UINT, UINT, NONE, NONE, NONE}, loop_check,    lcr_run     },
   {"lt",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    lt_run      },
+  {"ifr",   {SINT, NONE, NONE, NONE, NONE}, ifr_check,     ifr_run     },
+  {"eif",   {NONE, NONE, NONE, NONE, NONE}, eif_check,     eif_run     },
   #ifdef MPI
   {"ls",    {DOUB, NONE, NONE, NONE, NONE}, loop_check,    ls_run      },
   #endif
   {"le",    {NONE, NONE, NONE, NONE, NONE}, loop_check,    le_run      },
+  {"dbuf",  {DBUF, UINT, NONE, NONE, NONE}, dbuf_check,    dbuf_run    },
   {"o",     {UINT, NONE, NONE, NONE, NONE}, NULL,          stdout_run  },
   {"e",     {UINT, NONE, NONE, NONE, NONE}, NULL,          stderr_run  },
   {"s",     {DOUB, NONE, NONE, NONE, NONE}, sleep_check,   sleep_run   },
@@ -2021,10 +2619,14 @@ struct parse {
   {"fctw",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctw_run    },
   {"fctr",  {STR,  UINT, UINT, UINT, NONE}, fct_check,     fctr_run    },
   {"fget",  {STR,  NONE, NONE, NONE, NONE}, NULL,          fget_run    },
+  {"fo",    {STR,  STR,  NONE, NONE, NONE}, fo_check,      fo_run      },
+  {"fw",    {SINT, UINT, NONE, NONE, NONE}, fw_check,      fw_run      },
+  {"fr",    {SINT, UINT, NONE, NONE, NONE}, fr_check,      fr_run      },
+  {"fc",    {NONE, NONE, NONE, NONE, NONE}, fc_check,      fc_run      },
   #endif
-  {"fi",    {UINT, PINT, NONE, NONE, NONE}, fi_check,      fi_run      },
-  {"fr",    {PINT, PINT, NONE, NONE, NONE}, fr_check,      fr_run      },
-  {"ff",    {NONE, NONE, NONE, NONE, NONE}, ff_check,      fr_run      },
+  {"ni",    {UINT, PINT, NONE, NONE, NONE}, ni_check,      ni_run      },
+  {"nr",    {PINT, PINT, NONE, NONE, NONE}, nr_check,      nr_run      },
+  {"nf",    {NONE, NONE, NONE, NONE, NONE}, nf_check,      nf_run      },
   {"hx",    {UINT, UINT, UINT, UINT, UINT}, hx_check,      hx_run      },
   #ifdef DLFCN
   {"dlo",   {STR,  NONE, NONE, NONE, NONE}, dlo_check,     dlo_run     },
@@ -2035,8 +2637,7 @@ struct parse {
   {"hi",    {STR,  STR,  NONE, NONE, NONE}, NULL,          hi_run      },
   {"hda",   {STR,  HDSI, HFLG, HDSM, NONE}, NULL,          hda_run     },
   {"hdo",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdo_run     },
-  {"hck",   {ONFF, NONE, NONE, NONE, NONE}, NULL,          hck_run     },
-  {"heo",   {STR,  HFLG, UINT, NONE, NONE}, heo_check,     heo_run     },
+  {"heo",   {STR,  HFLG, NONE, NONE, NONE}, heo_check,     heo_run     },
   {"hso",   {UINT, NONE, NONE, NONE, NONE}, NULL,          hso_run     },
   {"hsega", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsega_run   },
   {"hsegr", {SINT, SINT, SINT, NONE, NONE}, NULL,          hsegr_run   },
@@ -2066,7 +2667,8 @@ struct parse {
   #endif  // HIO
   {"k",     {UINT, NONE, NONE, NONE, NONE}, NULL,          raise_run   },
   {"x",     {UINT, NONE, NONE, NONE, NONE}, NULL,          exit_run    },
-  {"grep",  {STR, STR,   NONE, NONE, NONE}, grep_check,    grep_run    },
+  {"grep",  {STR,  STR,  NONE, NONE, NONE}, grep_check,    grep_run    },
+  {"segv",  {NONE, NONE, NONE, NONE, NONE}, NULL,          segv_run    },
 };
 
 //----------------------------------------------------------------------------
@@ -2166,6 +2768,9 @@ void parse_action() {
               case STR:
                 nact.v[j].s = tokv[t];
                 break;
+              case DBUF:
+                decode(&etab_dbuf, tokv[t], "Data buffer pattern type", nact.desc, &nact.v[j]);
+                break;
               #ifdef HIO
               case HFLG:
                 decode(&etab_hflg, tokv[t], "hio flag", nact.desc, &nact.v[j]);
@@ -2197,7 +2802,7 @@ void parse_action() {
           }
           nact.runner = parse[i].runner;
           add2actv(&nact);
-          DBG2("Checking %s", nact.desc);
+          DBG2("Checking %s action.actn: %d", nact.desc, nact.actn);
           if (parse[i].checker) parse[i].checker(&actv[actc-1], t);
           break; // break for i loop over parse table
         }
@@ -2206,6 +2811,7 @@ void parse_action() {
     }
   }
   if (lcur-lctl > 0) ERRX("Unterminated loop - more loop starts than loop ends");
+  if (ifr_depth != 0) ERRX("Unterminated ifr - ifr without eif");
   if (comment_depth > 0) ERRX("Unterminated comment - more comment starts than comment ends");
   IFDBG4( for (int a=0; a<actc; a++) DBG0("actv[%d].desc: %s", a, actv[a].desc) );
   DBG1("Parse complete actc: %d", actc);
@@ -2226,12 +2832,13 @@ void run_action() {
 
   while ( ++a < actc ) {
     VERB2("--- Running %s", actv[a].desc);
-    // Runner routine may modify variable a for looping
+    // Runner routine may modify variable a for looping or conditional
+    int old_a = a;
     errno = 0;
     if (actv[a].runner) actv[a].runner(&actv[a], &a);
-    DBG3("Done %s; fails: %d qof: %d", actv[a].desc, local_fails, quit_on_fail);
-    if (quit_on_fail != 0 && local_fails >= quit_on_fail) {
-      VERB0("Quiting due to fails: %d >= qof: %d", local_fails, quit_on_fail);
+    DBG3("Done %s; fails: %d ROF: %d actn: %d", actv[old_a].desc, local_fails, (options & OPT_ROF) ? 1: 0, a);
+    if (local_fails > 0 && !(options & OPT_ROF)) {
+      VERB0("Quiting due to fails: %d and ROF not set", local_fails);
       break;
     }
   }
@@ -2239,24 +2846,107 @@ void run_action() {
 
 }
 
+//----------------------------------------------------------------------------
+// Signal handler - init and run
+//----------------------------------------------------------------------------
+
+void xexec_signal_handler(int signum, siginfo_t *siginfo  , void * ptr) {
+  // Verbose name for this routine to better show up on backtrace
+  MSGE("xexec received signal: %d (%s) from pid: %d", signum, sys_siglist[signum], siginfo->si_pid);
+
+  #ifdef __linux__
+    psiginfo(siginfo, "xexec received signal:");
+  #endif
+
+  // Print backtrace on signals potentially caused by program error
+  if ( SIGILL  == signum ||
+       SIGABRT == signum ||
+       SIGFPE  == signum ||
+       SIGBUS  == signum ||
+       SIGSEGV == signum ) {
+    void * buf[128];
+    int n = backtrace(buf, DIM1(buf));
+    backtrace_symbols_fd(buf, n, STDERR_FILENO);
+    fflush(stderr);
+  }
+
+}
+
+void sig_add(int signum) {
+  struct sigaction sa;
+   
+  sa.sa_sigaction = xexec_signal_handler;
+  // Provide siginfo structure and reset signal handler to default
+  sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+  sigaction(signum, &sa, NULL);
+}
+
+void sig_init(void) {
+  // Intercept every known signal
+  sig_add(SIGHUP);
+  sig_add(SIGINT);
+  sig_add(SIGQUIT);
+  sig_add(SIGILL);
+  sig_add(SIGABRT);
+  sig_add(SIGKILL);
+  sig_add(SIGBUS);
+  sig_add(SIGFPE);
+  sig_add(SIGSEGV);
+  sig_add(SIGSYS);
+  sig_add(SIGPIPE);
+  sig_add(SIGALRM);
+  sig_add(SIGTERM);
+  sig_add(SIGSTOP);
+  sig_add(SIGTSTP);
+  sig_add(SIGCONT);
+  sig_add(SIGCHLD);
+  sig_add(SIGTTIN);
+  sig_add(SIGTTOU);
+  sig_add(SIGIO);
+  sig_add(SIGXCPU);
+  sig_add(SIGXFSZ);
+  sig_add(SIGVTALRM);
+  sig_add(SIGPROF);
+  sig_add(SIGWINCH);
+  sig_add(SIGUSR1);
+  sig_add(SIGUSR2);
+}
 
 //----------------------------------------------------------------------------
 // Main - write help, call parser / dispatcher
 //----------------------------------------------------------------------------
 int main(int argc, char * * argv) {
 
-  if (argc <= 1 || 0 == strncmp("-h", argv[1], 2)) {
-    fprintf(stdout, help, cvt_num_suffix());
-    return 1;
-  }
 
   msg_context_init(MY_MSG_CTX, 0, 0);
   get_id();
 
+  if (argc <= 1 || 0 == strncmp("-h", argv[1], 2)) {
+    fprintf(stdout, help, enum_list(MY_MSG_CTX, &etab_opt),
+            options_init, cvt_num_suffix());
+    return 1;
+  }
+
+  sig_init();
   add2tokv(argc-1, argv+1); // Make initial copy of argv so im works
 
+  // Parse init and env option values
+  int set, clear, newopt, rc;
+  char * xexec_opt = getenv("XEXEC_OPT");
+
+  parse_opt("internal options_init", options_init, &set, &clear);
+  newopt = clear & set;
+
+  if (xexec_opt) { 
+    parse_opt("XEXEC_OPT env var", xexec_opt, &set, &clear);
+    newopt = clear & (set | newopt);
+  }   
+ 
   // Make two passes through args, first to check, second to run.
+  options = newopt;
   parse_action();
+
+  options = newopt;
   run_action();
 
   // Suppress SUCCESS result message from all but rank 0
@@ -2269,11 +2959,22 @@ int main(int argc, char * * argv) {
           local_fails + global_fails, test_name);
 
     // Pavilion message
-    printf("<result> %s <<< xexec done.  Test name: %s  Fails: %d >>>\n",
-           (local_fails + global_fails) ? "fail" : "pass",
-           test_name, local_fails + global_fails);
+    if (options & OPT_PAVM) {
+      printf("<result> %s <<< xexec done.  Test name: %s  Fails: %d >>>\n",
+             (local_fails + global_fails) ? "fail" : "pass",
+             test_name, local_fails + global_fails);
+    }
   }
 
-  return (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
+  rc = (local_fails + global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
+
+  #ifdef MPI
+  if (rc != EXIT_SUCCESS && mpi_active()) {
+    VERB0("MPI_abort due to error exit from main with MPI active rc: %d", rc);
+    MPI_CK(MPI_Abort(mpi_comm, rc));
+  }
+  #endif // MPI
+
+  return rc;
 }
 // --- end of xexec.c ---

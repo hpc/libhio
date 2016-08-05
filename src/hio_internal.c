@@ -50,10 +50,10 @@ char * hioi_msg_time(char * time_buf, size_t len) {
  * to stderr with output lines like: 
  * YYYY-MM-DD hh:mm:ss [<msg_id>] [0000] 75 6E 6B 6E 6F 77 6E 20   30 FF 00 00 00 00 39 00   unknown 0.....9.
  */ 
-void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t size) {
+void hioi_dump_writer(hio_context_t context, const char * header, const void * data, size_t size) {
     char time_buf[32];
     char hdr_buf[128];
-    unsigned char *p = data;
+    const unsigned char *p = data;
     unsigned char c;
     int n;
     char bytestr[4] = {0};
@@ -64,7 +64,7 @@ void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t 
     int skipped = 0;
 
     hioi_msg_time(time_buf, sizeof(time_buf)); 
-    snprintf(hdr_buf, sizeof(hdr_buf), header, time_buf, context->c_msg_id);
+    snprintf(hdr_buf, sizeof(hdr_buf), header, time_buf, (context) ? context->c_msg_id: "No Context");
 
     for(n=1;n<=size;n++) {
         if (n%16 == 1) {
@@ -110,7 +110,6 @@ void hioi_dump_writer(hio_context_t context, char * header, void * data, size_t 
     if (strlen(hexstr) > 0) {
         if (skipped > 0) {
            fprintf(stderr, "%s        %d identical lines skipped\n", hdr_buf, skipped);
-           skipped = 0;
         }
         /* print rest of buffer if not empty */
         fprintf(stderr, "%s[%4.4s]   %-50.50s  %s\n", hdr_buf, addrstr, hexstr, charstr);
@@ -181,7 +180,7 @@ void hioi_err_push (int hrc, hio_object_t object, char *format, ...) {
    }
 }
 
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
 void hioi_err_push_mpi (int mpirc, hio_object_t object, char *format, ...) {
   hio_context_t context = object ? hioi_object_context (object) : NULL;
   hio_error_stack_item_t *new_item;
@@ -472,7 +471,7 @@ hio_context_t hioi_object_context (hio_object_t object) {
 }
 
 int hioi_string_scatter (hio_context_t context, char **string) {
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
     int string_len;
 
@@ -496,12 +495,16 @@ int hioi_string_scatter (hio_context_t context, char **string) {
 }
 
 int hioi_file_close (hio_file_t *file) {
-  int rc;
+  int rc = 0;
 
   if (file->f_hndl) {
     rc = fclose (file->f_hndl);
   } else if (-1 != file->f_fd) {
     rc = close (file->f_fd);
+  }
+
+  if (0 != rc) {
+    rc = hioi_err_errno (errno);
   }
 
   file->f_fd = -1;
@@ -511,8 +514,6 @@ int hioi_file_close (hio_file_t *file) {
 }
 
 int64_t hioi_file_seek (hio_file_t *file, int64_t offset, int whence) {
-  int64_t new_offset;
-
   if (SEEK_SET == whence && offset == file->f_offset) {
     return file->f_offset;
   }
@@ -541,7 +542,7 @@ ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
       total += actual;
       count -= actual;
       ptr = (void *) ((intptr_t) ptr + actual);
-    } 
+    }
   } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
 
   if (total > 0) {

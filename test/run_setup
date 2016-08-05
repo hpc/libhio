@@ -52,7 +52,7 @@ synexit() {
   echo "        [-u <uber command and args>]"
   echo ""
   echo "  Options:"
-  echo "    -s <size>         Per rank run size t|s|m|l|x|y|z  (default s)"
+  echo "    -s <size>         Per rank run size u|t|s|m|l|x|y|z  (default s)"
   echo "       <totsz>[,<blksz>][,<nseg>]  where:"
   echo "                      totsz - total size per rank in MiB"
   echo "                      blksz - size of each write/read in KiB"
@@ -69,7 +69,9 @@ synexit() {
   echo "    -a                Clean dirs After running"
   echo "    -q                Query data size. Output value like \"32GiB\" and exit"
   echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
-  echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
+  echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage."
+  echo "       n<dw_nodes>    Or, if it starts with \"n\" request enough to allocate"
+  echo "                      on that many DataWarp nodes based on granularity"
   echo "    -k knl|haswell    Adds :<type> to msub -l option, influences -p default"
   echo "    -m <msub_args>    Additional arguments for msub (use with -b)"
   echo "    -u <uber command and args>  Use to invoke a debugger (not to call a taxi)"
@@ -83,15 +85,15 @@ synexit() {
 # Functions for run_setup and test scripts to use
 #----------------------------------------------------------------------------
 cmd() {
-  echo "$host ---> $*"
+  echo "`date \"$datefmt\"` $host ---> $*"
   eval "$*"
   return $?
 }
 
 msglog=""
 msg() {
-  echo "$host $*"
-  if [[ -n $msglog ]]; then echo "$host $*" >> $msglog; fi
+  echo "`date \"$datefmt\"` $host run_setup: $*"
+  if [[ -n $msglog ]]; then echo "`date \"$datefmt\"` $host run_setup: $*" >> $msglog; fi
 }
 
 errx() {
@@ -120,8 +122,12 @@ check_rc(){
 
 # Function to build run script and submit batch job if batch mode
 batch_sub() {
-  # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
-  dw_cap="$(( (($1 * 21 / 20 * $dw_alloc_pct / 100) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
+  if [[ -z $dw_cap_override ]]; then
+    # Save DataWarp required capacity with 5% + 1GiB  overhead and rounded up to next GiB
+    dw_cap="$(( (($1 * 21 / 20 * $dw_alloc_pct / 100) + (1 * $cons_gi) + ($cons_gi - 1) ) / $cons_gi ))GiB"
+  else
+    dw_cap=$dw_cap_override
+  fi 
   if [[ $query_size -eq 1 ]]; then
     echo $dw_cap
     exit 0
@@ -142,7 +148,7 @@ batch_sub() {
     done
     jobout="$rundir/job.$jobname.out"
     msglog="$rundir/job.$jobname.jobid"
-    msg "run_setup: `date \"$datefmt\"` Job $jobname $args"
+    msg "`date \"$datefmt\"` Job $jobname $args"
 
     echo "#! /bin/bash" > $jobsh
     proc_parm=""
@@ -162,6 +168,7 @@ batch_sub() {
 
     afterparm=""
     if [[ $after -gt 0 ]]; then afterparm="-a"; fi
+    echo "# Submit Args: $args" >>$jobsh
     echo "$0 -s $size $afterparm -w $dw_alloc_mode -v $verbose_lev -d $debug_lev" >> $jobsh
 
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
@@ -187,7 +194,7 @@ batch_sub() {
     echo "----------------------------------------------------------------------" >> $msglog 
 
     mcmd="$mcmd $jobsh"
-    msg "run_setup: ---> $mcmd"
+    msg "---> $mcmd"
     msub_msg=`$mcmd 2>&1`
 
     shopt -s nocasematch
@@ -196,7 +203,7 @@ batch_sub() {
     else
       jobid=${msub_msg#$'\n'}
       echo "$jobid" > $lastjob
-      msg "run_setup: `date \"$datefmt\"` job $jobname ID: $jobid submitted"
+      msg "`date \"$datefmt\"` job $jobname ID: $jobid submitted"
     fi
     shopt -u nocasematch
     msglog=""
@@ -322,10 +329,65 @@ else
       cmd "cat $PBS_NODEFILE | sort | uniq | pr -t --columns 8"
     fi
     if [[ -n $DW_JOB_STRIPED ]]; then
+      # awk program to parse a few things out of dwstat output
+      c='
+        BEGIN       {st='0'; frags=""; nodelist=""}
+        /^ *sess /  {st="s"; sesshdr = $0}
+        /^ *inst /  {st="i"; insthdr = $0}
+        /^ *conf /  {st="c"; confhdr = $0}
+        /^ *reg /   {st="r"; reghdr  = $0}
+        /^ *activ / {st="a"; acthdr  = $0}
+        /^ *frag /  {st="f"; fraghdr = $0}
+        /^ *nss /   {st="n"; nsshdr  = $0}
+        {
+          nl = "\n## "
+          nl2 = "##\n## "
+          if (st == "s" && $3 == '$MOAB_JOBID') {
+            sess = $1
+            token = $3
+            sessln = $0
+          }
+          if (st == "i" && $3 == sess) {
+            inst = $1
+            bytes = $4
+            nodes = $5
+            instln = $0
+          } 
+          if (st == "c" && $3 == inst) {
+            conf = $1
+            confln = $0
+          }
+          if (st == "r" && $3 == sess) {
+            reg = $1
+            regln = $0
+          }
+          if (st == "a" && $3 == sess) {
+            act = $1
+            actln = $0
+          }
+          if (st == "f" && $3 == inst) {
+            frags = frags nl $0
+            nodelist = nodelist " " $5
+          }
+          print $0
+        }
+        END {
+          print nl "This job:"
+          print nl2 sesshdr nl sessln
+          print nl2 insthdr nl instln
+          print nl2 confhdr nl confln
+          print nl2 reghdr  nl regln
+          print nl2 acthdr  nl actln
+          print nl2 fraghdr nl substr(frags, 5) 
+          print nl2 "sess: " sess "  token: " token "  inst: " inst "  bytes: " bytes "  nodes: " nodes
+          print nl2 "dw_nodes:" nodelist
+          print   
+        } 
+      '
       . $MODULESHOME/init/bash
       module load dws
       echo ""
-      cmd "dwstat all"
+      cmd "dwstat all | awk \"\$c\""
     fi
   else
     # aprun not available - use mpirun
@@ -439,6 +501,7 @@ if [[ $size == [[:digit:]]* ]]; then
   if [[ -n ${szarr[3]} ]]; then synexit "too many elements in size: \"$size\""; fi
 else
   case $size in
+    u ) blksz=$(( 32           )); totsz=$((  32           )); nseg=1;;
     t ) blksz=$((  1 * $cons_ki)); totsz=$((  10 * $cons_ki)); nseg=2;;
     s ) blksz=$(( 20 * $cons_ki)); totsz=$(( 160 * $cons_ki)); nseg=4;;
     m ) blksz=$((  1 * $cons_mi)); totsz=$(( 200 * $cons_mi)); nseg=8;;
@@ -453,6 +516,21 @@ nblk=$(($totsz / $blksz))
 nblkpseg=$(($totsz / $nseg / $blksz))
 segsz=$(($blksz * $nblkpseg))
 
+if [[ ${dw_alloc_pct:0:1} -eq "n" ]]; then
+  . $MODULESHOME/init/bash
+  module load dws
+  out=($(dwstat -b))
+  dw_gran=${out[9]}
+  dw_nodes=${dw_alloc_pct:1}
+  # request (nodes - 1/2) * gran, rounded to GiB
+  dw_cap_override="$(( ( ($dw_nodes * $dw_gran) - ($dw_gran / 2) ) / $cons_gi ))GiB"
+  if [[ $query_size -eq 0 ]]; then
+    msg "dw_gran: $((dw_gran/$cons_gi)) GiB  dw_nodes: $dw_nodes  dw_cap_override: $dw_cap_override GiB"
+  fi
+  # treat like -x 100 from here on
+  dw_alloc_pct="100"
+fi
+
 # Check -w (dw_alloc_mode) option
 case $dw_alloc_mode in
   0 ) ;;
@@ -460,7 +538,6 @@ case $dw_alloc_mode in
   2 ) ;;
   * ) synexit "invalid -w option $dw_alloc_mode";;
 esac
-
 
 # Following commands for actually running, i.e., not batch submission
 if [[ $batch -eq 0 ]]; then
@@ -470,7 +547,7 @@ if [[ $batch -eq 0 ]]; then
 
   if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
   elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
-  else errx "run_setup: OSTYPE \"$OSTYPE\" not recognized"; fi
+  else errx "OSTYPE \"$OSTYPE\" not recognized"; fi
 
   # Load module environment recorded at build
   mod_script="hiobuild.modules.bash"
@@ -520,6 +597,7 @@ if [[ $batch -eq 0 ]]; then
     addifd "/lustre/scratch5/$LOGNAME"
     addifd "/lustre/trscratch1/$LOGNAME"
     addifd "/lustre/trscratch2/$LOGNAME"
+    addifd "/lustre/ttscratch1/$LOGNAME"
     addifd "/scratch1/$LOGNAME"
     addifd "/scratch1/users/$LOGNAME"
     addifd "/lustre/scratch1/yellow/$LOGNAME"
@@ -535,20 +613,20 @@ if [[ $batch -eq 0 ]]; then
 
   if [[ $query_size -eq 0 ]]; then
     # Display results of run_setup
-    msg "run_setup:                      Args: \"$args\""
-    msg "run_setup:                       PWD: \"$PWD\""
-    msg "run_setup:                     build: \"$build\""
-    msg "run_setup:                      libs: \"$libs\""
-    msg "run_setup:                    mpicmd: \"$mympicmd\""
-    msg "run_setup:           nodes/ranks/ppn: $nodes / $ranks / $ppn"
-    msg "run_setup:                      size: \"$size\""
-    msg "run_setup:               totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
-    msg "run_setup:        nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"
-    msg "run_setup:    verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
+    msg "                     Args: \"$args\""
+    msg "                      PWD: \"$PWD\""
+    msg "                    build: \"$build\""
+    msg "                     libs: \"$libs\""
+    msg "                   mpicmd: \"$mympicmd\""
+    msg "          nodes/ranks/ppn: $nodes / $ranks / $ppn"
+    msg "                     size: \"$size\""
+    msg "              totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
+    msg "       nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"
+    msg "   verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
 
     # Pretty print all HIO_ variables
     for var in ${!HIO_*}; do
-      msg "run_setup: $(printf '%*s: "%s"' 25 $var ${!var})"
+      msg "$(printf '%*s: "%s"' 25 $var ${!var})"
     done
 
     if [[ -z $HIO_TEST_ROOTS ]]; then msg "Warning: HIO_TEST_ROOTS not set or defaulted"; fi

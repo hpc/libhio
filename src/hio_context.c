@@ -37,7 +37,7 @@ static void hioi_context_release (hio_object_t object) {
   hioi_config_list_release (&context->c_fconfig);
 
   /* clean up any mpi resources */
-#if HIO_USE_MPI
+#if HIO_MPI_HAVE(1)
   if (context->c_use_mpi) {
     int rc;
 
@@ -52,12 +52,17 @@ static void hioi_context_release (hio_object_t object) {
   free (context->c_dw_root);
 #endif
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   if (MPI_COMM_NULL != context->c_shared_comm) {
     MPI_Comm_free (&context->c_shared_comm);
   }
 
   free (context->c_shared_ranks);
+  free (context->c_node_leaders);
+
+  if (MPI_COMM_NULL != context->c_node_leader_comm) {
+    MPI_Comm_free (&context->c_node_leader_comm);
+  }
 #endif
 
   free (context->c_droots);
@@ -129,10 +134,13 @@ static hio_context_t hio_context_alloc (const char *identifier) {
   new_context->c_size = 1;
   hio_context_msg_id(new_context, 0); 
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   new_context->c_shared_comm = MPI_COMM_NULL;
   new_context->c_shared_size = 1;
   new_context->c_shared_rank = 0;
+  new_context->c_node_leader_comm = MPI_COMM_NULL;
+  new_context->c_node_leaders = NULL;
+  new_context->c_node_count = 0;
 #endif
 
   hioi_config_list_init (&new_context->c_fconfig);
@@ -181,6 +189,58 @@ static int hioi_context_scatter (hio_context_t context) {
   return HIO_SUCCESS;
 }
 
+#if HIO_MPI_HAVE(3)
+int hioi_context_generate_leader_list (hio_context_t context) {
+  int color = (0 == context->c_shared_rank) ? 0 : MPI_UNDEFINED;
+  MPI_Comm leader_comm;
+  int my_rank = 0, rc;
+
+  if (NULL != context->c_node_leaders) {
+    return HIO_SUCCESS;
+  }
+
+  hioi_object_lock (&context->c_object);
+  if (NULL != context->c_node_leaders) {
+    hioi_object_unlock (&context->c_object);
+    return HIO_SUCCESS;
+  }
+
+  rc = MPI_Comm_split (context->c_comm, color, 0, &leader_comm);
+  if (MPI_SUCCESS != rc) {
+    hioi_object_unlock (&context->c_object);
+    return hioi_err_mpi (rc);
+  }
+
+  if (MPI_COMM_NULL != leader_comm) {
+    MPI_Comm_size (leader_comm, &context->c_node_count);
+    MPI_Comm_rank (leader_comm, &my_rank);
+  }
+
+  if (1 < context->c_shared_size) {
+    MPI_Bcast (&context->c_node_count, 1, MPI_INT, 0, context->c_shared_comm);
+  }
+
+  context->c_node_leaders = malloc (sizeof (int) * context->c_node_count);
+
+  if (MPI_COMM_NULL != leader_comm) {
+    context->c_node_leaders[my_rank] = context->c_rank;
+    MPI_Allgather (MPI_IN_PLACE, 1, MPI_INT, context->c_node_leaders, 1, MPI_INT,
+                   leader_comm);
+  }
+
+  if (1 < context->c_shared_size) {
+    MPI_Bcast (context->c_node_leaders, context->c_node_count, MPI_INT, 0,
+               context->c_shared_comm);
+  }
+
+  context->c_node_leader_comm = leader_comm;
+
+  hioi_object_unlock (&context->c_object);
+
+  return HIO_SUCCESS;
+}
+#endif
+
 int hioi_context_create_modules (hio_context_t context) {
   char *data_roots, *data_root, *next_data_root, *last;
   hio_module_t *module = NULL;
@@ -204,9 +264,9 @@ int hioi_context_create_modules (hio_context_t context) {
 
     rc = hioi_component_query (context, data_root, next_data_root, &module);
     if (HIO_SUCCESS != rc) {
-      hioi_err_push (rc, &context->c_object, "Could not find an hio io module for data root %s",
-                    data_root);
-      break;
+      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", data_root);
+      data_root = next_data_root;
+      continue;
     }
 
     /* the module may be used in this context. see if the dataset size needs to
@@ -217,8 +277,8 @@ int hioi_context_create_modules (hio_context_t context) {
 
     context->c_modules[num_modules++] = module;
     if (HIO_MAX_DATA_ROOTS <= num_modules) {
-      hioi_log (context, HIO_VERBOSE_WARN,
-                "Maximum number of IO modules (%d) reached for this context", HIO_MAX_DATA_ROOTS);
+      hioi_log (context, HIO_VERBOSE_WARN, "Maximum number of IO modules (%d) reached for this context",
+                HIO_MAX_DATA_ROOTS);
       break;
     }
     data_root = next_data_root;
@@ -264,6 +324,9 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
     return rc;
   }
 
+  hioi_config_add (context, &context->c_object, &context->c_enable_tracing,
+                   "enable_tracing", HIO_CONFIG_TYPE_BOOL, NULL, "Enable full tracing", 0);
+
   hioi_config_add (context, &context->c_object, &context->c_verbose,
                    "verbose", HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
 
@@ -290,7 +353,14 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   context->c_dw_root = strdup ("auto");
   hioi_config_add (context, &context->c_object, &context->c_dw_root,
                    "datawarp_root", HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
-                   "for datawarp (burst-buffer) (default: auto-detect)", 0);
+                   "for datawarp (burst-buffer) (default: auto-detect)", HIO_VAR_FLAG_DEFAULT);
+  #ifdef HIO_DATAWARP_DEBUG_LOG
+    context->c_dw_debug_mask = 0;
+    context->c_dw_debug_installed = false;
+    hioi_config_add (context, &context->c_object, &context->c_dw_debug_mask,
+                     "datawarp_debug_mask", HIO_CONFIG_TYPE_UINT64, NULL, "Mask for "
+                     "datawarp debug log messages (default: 0)", HIO_VAR_FLAG_DEFAULT);
+  #endif
 #endif
 
   hioi_perf_add (context, &context->c_object, &context->c_bread,
@@ -333,8 +403,8 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
   return HIO_SUCCESS;
 }
 
-#if HIO_USE_MPI
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(1)
+#if HIO_MPI_HAVE(3)
 static int hioi_context_init_shared (hio_context_t context) {
   int shared_rank, shared_size;
   MPI_Comm shared_comm;
@@ -366,7 +436,7 @@ static int hioi_context_init_shared (hio_context_t context) {
 
   return HIO_SUCCESS;
 }
-#endif /* HAVE_MPI_COMM_SPLIT_TYPE */
+#endif /* HIO_MPI_HAVE(3) */
 
 int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config_file,
                   const char *config_file_prefix, const char *context_name) {
@@ -413,7 +483,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
     return rc;
   }
 
-#if HAVE_MPI_COMM_SPLIT_TYPE
+#if HIO_MPI_HAVE(3)
   rc = hioi_context_init_shared (context);
   if (HIO_SUCCESS != rc) {
     hioi_object_release (&context->c_object);

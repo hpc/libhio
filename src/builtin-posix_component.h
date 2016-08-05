@@ -17,14 +17,15 @@
 
 #define HIO_POSIX_MAX_OPEN_FILES  32
 
-typedef struct builtin_posix_file_t {
-  /** file handle */
-  hio_file_t f_file;
-  /** hio element */
-  hio_element_t f_element;
-  /** file block id */
-  int f_bid;
-} builtin_posix_file_t;
+typedef enum builtin_posix_dataset_fmode {
+  /** use basic mode. unique address space results in a single file per element per rank.
+   * shared address space results in a single file per element */
+  HIO_FILE_MODE_BASIC,
+  /** use optimized mode. there is no guarantee about file structure in this mode */
+  HIO_FILE_MODE_OPTIMIZED,
+  /** write block across multiple files */
+  HIO_FILE_MODE_STRIDED,
+} builtin_posix_dataset_fmode_t;
 
 /* data types */
 typedef struct builtin_posix_module_t {
@@ -37,7 +38,7 @@ typedef struct builtin_posix_module_dataset_t {
   struct hio_dataset base;
 
   /** open backing files */
-  builtin_posix_file_t files[HIO_POSIX_MAX_OPEN_FILES];
+  hio_file_t files[HIO_POSIX_MAX_OPEN_FILES];
 
   /** base path of this manifest */
   char *base_path;
@@ -52,6 +53,21 @@ typedef struct builtin_posix_module_dataset_t {
 
   /** stripe this rank should write */
   int my_stripe;
+
+  /** use bzip2 to compress data manifests */
+  bool                ds_use_bzip;
+
+  /** dataset file mode */
+  builtin_posix_dataset_fmode_t ds_fmode;
+
+  /** block size to use for optimized and strided file modes */
+  uint64_t            ds_bs;
+
+  /** number of files to use with strided mode */
+  int                 ds_fcount;
+
+  /** trace file */
+  FILE               *ds_trace_fh;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;

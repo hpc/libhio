@@ -52,8 +52,8 @@ Tag master:
 Rename and publish tarball:
 
   mv libhio-1.3.tar.gz libhio-$HIOVER.tar.gz
-  scp libhio-$HIOVER.tar.gz ct-fe1:/usr/projects/hio/user/rel
-  ssh ct-fe1 /usr/projects/hio/dev/bin/fixgp
+  scp libhio-$HIOVER.tar.gz tt-fey:/usr/projects/hio/user/rel
+  ssh tt-fey /usr/projects/hio/dev/bin/fixgp
 
 Update github release
 
@@ -65,10 +65,10 @@ Update github release
 Send eMail to hiouser@lanl.gov.  Sample:
 
   To: hiouser@lanl.gov
-  Subject: HIO Version 1.3.0.0 available
+  Subject: HIO Version 1.3.0.4 available
 
-  See /usr/projects/hio/user/rel/libhio-1.3.0.1.tar.gz 
-  or https://github.com/hpc/libhio/releases/tag/hio.1.3.0.1 .
+  See /usr/projects/hio/user/rel/libhio-1.3.0.4.tar.gz 
+  or https://github.com/hpc/libhio/releases/tag/hio.1.3.0.4 .
 
   File NEWS contains a description of changes.
 

@@ -250,6 +250,17 @@
  * - @b datawarp_root - Overide the root directory for DataWarp.  If not set, the value of system provided
  *   environment variable DW_JOB_STRIPED is used.
  *
+ * - @b datawarp_debug_mask - this 64 bit unsigned value is used to enable classes of DataWarp debug log
+ *   messages. The default value is 0. Specific classes and their related mask bits wil be provided
+ *   as needed by DataWarp development. The DataWarp debug logger is activated at hio_dataset_open with
+ *   the current value of the mask (if non-zero).  The logger is deactivated at hio_fini for any context
+ *   in which the logger was activated.  If an application has multiple HIO contexts active,
+ *   this could cause premature deactivation of the logger. This will not cause a functional problem
+ *   but could supress log entries. Premature deactivation might be avoided by delaying hio_fini on
+ *   one of the contexts. 
+ *   Note: This function is currently experimental, it requires a pre-release version of DataWarp and
+ *   compile time enablement via -DHIO_DATAWARP_DEBUG_LOG.
+ *
  * - @b print_statistics - Print IO statistics when hio_dataset_free() is called. This value is only meaningful
  *   on the first IO rank.
  *
@@ -266,11 +277,17 @@
  *
  * - @b dataset_file_mode - File mode to use when writing files on POSIX-like file systems. When set to
  *   basic either a single file (@ref HIO_SET_ELEMENT_SHARED) or a file per rank (@ref HIO_SET_ELEMENT_UNIQUE)
- *   are written for each dataset element. When set to optimized hio provides no guarantees on the file
- *   structure. optimized mode is currently only supported when using an MPI-3 compliant MPI implementation.
+ *   are written for each dataset element. When set to file_per_node hio provides no guarantees on the file
+ *   structure. This mode is currently only supported when using an MPI-3 compliant MPI implementation. When
+ *   set to stided hio will stride element blocks across multiple files. The number of files and block size
+ *   used in this mode are set using the dataset_block_size and dataset_file_count variables. Strided mode is
+ *   only supported with @ref HIO_SET_ELEMENT_SHARED.
  *
- * - @b dataset_block_size - Relevant to optimized mode only. This variable sets the internal block size and
- *   the filesystem stipe size (when supported) when writing dataset elements in optimized mode.
+ * - @b dataset_block_size - Relevant only when the dataset_file_mode is either file_per_node or strided. This
+ *   variable sets the internal block size and the filesystem stipe size (when supported).
+ *
+ * - @b dataset_file_count - Relevant only when the dataset_file_mode is strided. Sets the number of files
+ *   element blocks are strided across.
  *
  * - @b dataset_filesystem_type - Read only variable describing the filesystem backing a dataset. Valid
  *   values are "default" (posix-like), "lustre", and "gpfs". Additional types will be added in the
@@ -405,6 +422,13 @@ typedef struct hio_object *hio_object_t;
  * @brief Most recently modified dataset id
  */
 #define HIO_DATASET_ID_NEWEST (int64_t) -0x10000002
+
+/**
+ * @ingroup API
+ * @brief Maximum length of an element name not including the
+ *        terminator.
+ */
+#define HIO_ELEMENT_NAME_MAX 115
 
 /**
  * @ingroup errorhandling
