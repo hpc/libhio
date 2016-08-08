@@ -352,7 +352,9 @@ void H5FD_hio_settings_init(hio_settings_t *settings) {
     settings->read_io_mode = H5FD_HIO_CONTIGUOUS;
     settings->write_io_mode = H5FD_HIO_CONTIGUOUS;
     settings->stride_size = 1;
+#if HIO_USE_MPI
     settings->comm = MPI_COMM_NULL;
+#endif
     settings->setid = 0;
     settings->flags = 0;
 }
@@ -397,12 +399,14 @@ void H5FD_hio_set_request(hio_settings_t *settings, hio_request_t *req) {
     settings->request = req;
 }
 
+#if HIO_USE_MPI
 /*
  * Set the MPI communicator to use
  */
 void H5FD_hio_set_comm(hio_settings_t *settings, MPI_Comm comm) {
     settings->comm = comm;
 }
+#endif
 
 /*
  * Set the element name
@@ -579,6 +583,7 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
 	config_prefix = NULL;
     }
 
+#if HIO_USE_MPI
     if (fa->settings->comm != MPI_COMM_NULL) {
       MPI_Barrier(fa->settings->comm);
       if (HIO_SUCCESS != (rc = hio_init_mpi(&context, &fa->settings->comm, 
@@ -589,6 +594,13 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
 						    config_file, config_prefix, name))) {
 	    HGOTO_ERROR(H5E_RESOURCE, H5E_BADVALUE, NULL, "Error intitializing hio")
     }
+#else
+    if (HIO_SUCCESS != (rc = hio_init_single(&context, 
+					    config_file, config_prefix, name))) {
+	    HGOTO_ERROR(H5E_RESOURCE, H5E_BADVALUE, NULL, "Error intitializing hio")
+    }
+#endif
+
     /* convert HDF5 flags to HIO flags */
     /* some combinations are illegal; let HIO figure it out */
     hio_flags  = (flags&H5F_ACC_RDWR) ? HIO_FLAG_WRITE : HIO_FLAG_READ;
@@ -789,6 +801,7 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
     if (HIO_SUCCESS != (hio_code = hio_element_size(file->element, &elem_size)))
         HHIO_GOTO_ERROR(file->context)
 
+#if HIO_USE_MPI
     if (file->settings->comm != MPI_COMM_NULL) {
 	MPI_Comm_size(file->settings->comm, &num_ranks);
 	if (file->settings->dataset_mode == H5FD_HIO_DATASET_SHARED) {
@@ -823,6 +836,9 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
     } else {
 	file->eof = elem_size;
     }
+#else
+    file->eof = elem_size;
+#endif
 
  done:
 

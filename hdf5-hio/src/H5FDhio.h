@@ -45,7 +45,11 @@
  */
 
 #include <hio.h>
+#include "hio_config.h"
+
+#ifdef HIO_USE_MPI
 #include <mpi.h>
+#endif
 /*
  * Programmer:  Robb Matzke <matzke@llnl.gov>
  *              Monday, August  2, 1999
@@ -100,7 +104,9 @@ typedef struct hio_settings_t {
   char element_name[HIO_ELEM_NAME_SIZE];
   char config_file[HIO_CONFIG_FILE_SIZE];
   char config_prefix[HIO_CONFIG_PREFIX_SIZE];
+#ifdef HIO_USE_MPI
   MPI_Comm comm;
+#endif
   int64_t setid;
   int flags;
 } hio_settings_t;  
@@ -149,12 +155,15 @@ H5_DLL void H5FD_hio_set_write_io(hio_settings_t *settings, H5FD_hio_io_t write_
    * \param settings a pointer to the settings structure
    * \param elem_name The element name to use
    */
+
 H5_DLL void H5FD_hio_set_elem_name(hio_settings_t *settings, char *elem_name);
+#ifdef HIO_USE_MPI
   /** Set the HIO MPI communicator
    * \param settings a pointer to the settings structure
    * \param comm The MPI communicator to use if using MPI
    */
 H5_DLL void H5FD_hio_set_comm(hio_settings_t *settings, MPI_Comm comm);
+#endif
   /** Set the HIO stride size
    * \param settings a pointer to the settings structure
    * \param stride the stride size

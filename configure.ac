@@ -49,7 +49,6 @@ LT_INIT
 HIO_CHECK_JSON
 HIO_CHECK_DATAWARP
 HIO_CHECK_XPMEM
-HIO_CHECK_LUSTRE
 HIO_CHECK_CVERSION
 HIO_CHECK_BZ2
 
@@ -69,6 +68,9 @@ fi
 if test $hio_use_mpi ; then
    HIO_CHECK_MPI_FEATURES
 fi
+
+#Check for HDF5
+HIO_CHECK_HDF5
 
 # Checks for programs.
 AC_PROG_CC_C99
@@ -92,6 +94,9 @@ AX_PTHREAD([])
 LIBS="$PTHREAD_LIBS $LIBS"
 CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
 
+#Check for LUSTRE 
+HIO_CHECK_LUSTRE
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
 
@@ -113,6 +118,5 @@ AC_SUBST(HIO_BUILD_TIMESTAMP,[$(date "+%A %B %d, %Y at %l:%M %p %Z")])
 
 # Checks for library functions.
 
-AC_CONFIG_FILES([Makefile design/Makefile src/Makefile test/Makefile libhio.pc design/doxygen.conf design/template/header.tex])
-
+AC_CONFIG_FILES([Makefile design/Makefile src/Makefile test/Makefile libhio.pc design/doxygen.conf design/template/header.tex hdf5-hio/Makefile hdf5-hio/src/Makefile hdf5-hio/test/Makefile hdf5-hio/doc/Makefile hdf5-hio/doc/doxygen.conf hdf5-hio/doc/template/header.tex])
 AC_OUTPUT

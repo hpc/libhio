@@ -238,7 +238,6 @@ phdf5write1(char *filename, hio_context_t context)
 
     /* set HIO context */
     H5FD_hio_set_write_io(&settings, H5FD_HIO_CONTIGUOUS);
-    H5FD_hio_set_write_blocking(&settings, H5FD_HIO_BLOCKING);
     ret = H5Pset_fapl_hio(acc_tpl1, &settings);
     assert(ret != FAIL);
     MESG("H5Pset_fapl_hio succeed");
@@ -468,7 +467,6 @@ phdf5write2(char *filename, hio_context_t context)
 
     herr_t ret;         	/* Generic return value */
     ssize_t bytes_written;
-    hio_request_t req;
 
     if (verbose)
 	printf("Collective write test on file %s\n", filename);
@@ -481,8 +479,6 @@ phdf5write2(char *filename, hio_context_t context)
     assert(acc_tpl1 != FAIL);
     MESG("H5Pcreate access succeed");
     H5FD_hio_set_write_io(&settings, H5FD_HIO_STRIDED);
-    H5FD_hio_set_write_blocking(&settings, H5FD_HIO_NONBLOCKING);
-    H5FD_hio_set_request(&settings, &req);
     ret = H5Pset_fapl_hio(acc_tpl1, &settings);
     assert(ret != FAIL);
     MESG("H5Pset_fapl_hio succeed");
@@ -554,9 +550,6 @@ if (verbose)
 	    H5P_DEFAULT, data_array1);
     assert(ret != FAIL);
     MESG("H5Dwrite succeed");
-
-    //Wait for the request to finish
-    hio_request_wait(&req, 1, &bytes_written);
 
     /* release all temporary handles. */
     /* Could have used them for dataset2 but it is cleaner */
@@ -842,16 +835,26 @@ parse_options(int argc, char **argv){
 int
 main(int argc, char **argv)
 {
+
+#ifdef MPI
     int mpi_namelen;
     char mpi_name[MPI_MAX_PROCESSOR_NAME];
     MPI_Comm comm = MPI_COMM_WORLD;
+#endif
+
     hio_context_t context = HIO_OBJECT_NULL;
     char *filename = "test_file";
 
+#ifdef MPI
     MPI_Init(&argc,&argv);
     MPI_Comm_size(comm,&mpi_size);
     MPI_Comm_rank(comm,&mpi_rank);
     MPI_Get_processor_name(mpi_name,&mpi_namelen);
+#else
+mpi_size = 1;
+mpi_rank = 0;
+#endif
+
     /* Make sure datasets can be divided into equal chunks by the processes */
     if ((SPACE1_DIM1 % mpi_size) || (SPACE1_DIM2 % mpi_size)){
 	printf("DIM1(%d) and DIM2(%d) must be multiples of processes (%d)\n",
@@ -868,9 +871,10 @@ main(int argc, char **argv)
     H5FD_hio_set_elem_name(&settings, "elem");
     H5FD_hio_set_setid(&settings, 23888221L);
     H5FD_hio_set_dataset_mode(&settings, H5FD_HIO_DATASET_SHARED);
+#ifdef MPI
     if (!single)
 	H5FD_hio_set_comm(&settings, comm);
-
+#endif
 
     MPI_BANNER("testing PHDF5 dataset write test 1 ...");
     phdf5write1(filename, context);
@@ -892,8 +896,9 @@ finish:
 	    printf("===================================\n");
 	}
     }
-    
+   
+#ifdef MPI 
     MPI_Finalize();
-
+#endif
     return(nerrors);
 }
