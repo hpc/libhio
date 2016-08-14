@@ -1521,7 +1521,7 @@ ACTION_RUN(fr_run) {
   if (options & OPT_RCHK) {
     ETIMER_START(&local_tmr);
     // Force error for unit test
-    // *(char *)(rbuf_ptr+16) = '\0';
+    //*(char *)(rbuf_ptr+16) = '\0';
     int rc = check_read_data("fread", rbuf_ptr, len_req, ofs_abs, fio_id_hash);
     if (rc) { 
       local_fails++;
@@ -2190,7 +2190,7 @@ ACTION_RUN(her_run) {
                            dw_path, hio_context_name, hio_dataset_name,
                            hio_ds_id_act, hio_element_name);
         if (HIO_SET_ELEMENT_UNIQUE == hio_dataset_mode) {
-          snprintf(path+len, sizeof(path)-len, ".%08d", myrank);
+          snprintf(path+len, sizeof(path)-len, ".%05d", myrank);
         }
 
         FILE * elf = fopen(path, "r");
