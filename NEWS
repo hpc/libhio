@@ -1,7 +1,13 @@
 HIO NEWS
 ========
 
-Last updated 2016-07-19
+Last updated 2016-08-14
+
+Release hio.1.3.0.6
+
+Cherry pick several test enhancements from 1.4 back into 1.3.  Timestamp more
+run_setup messages, gather info with lstopo, add f* file operations, better
+cpuinfo listing, add ifr/eif actions, add signal handling.
 
 Release hio.1.3.0.5
 
