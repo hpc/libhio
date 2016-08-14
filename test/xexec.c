@@ -277,7 +277,8 @@ enum options {
   OPT_RCHK     =  2,  // Read Data Check
   OPT_XPERF    =  4,  // Extended Performance Messages
   OPT_PERFXCHK =  8,  // Exclude check time from Performance messages
-  OPT_PAVM     = 16   // Pavilion Messages
+  OPT_SMSGV1   = 16,  // Print success message v 1 so it can be suppressed with v 0 
+  OPT_PAVM     = 32   // Pavilion Messages
 };
 
 static enum options options = 0;
@@ -287,10 +288,11 @@ ENUM_NAMP(OPT_, ROF)
 ENUM_NAMP(OPT_, RCHK)
 ENUM_NAMP(OPT_, XPERF)
 ENUM_NAMP(OPT_, PERFXCHK)
+ENUM_NAMP(OPT_, SMSGV1)
 ENUM_NAMP(OPT_, PAVM)
 ENUM_END(etab_opt, 1, "+")
 
-static char * options_init = "-ROF+RCHK+XPERF-PERFXCHK-PAVM"; 
+static char * options_init = "-ROF+RCHK+XPERF-PERFXCHK-SMSGV1-PAVM"; 
 
 typedef struct pval {
   U64 u;
@@ -337,7 +339,7 @@ MSG_CONTEXT my_msg_context;
 // Common read / write buffer pointers, etc.  Set by dbuf action.
 static void * wbuf_ptr = NULL;
 static void * rbuf_ptr = NULL;
-static size_t rwbuf_len = 0;          // length not counting pattern overun area
+static size_t rwbuf_len = 0;          // length not counting pattern overrun area
 static U64 wbuf_data_object_hash_mod; // data_object hash modulus
 static U64 wbuf_bdy;                  // wbuf address boundary
 static U64 wbuf_repeat_len;           // repeat length of wbuf pattern
@@ -1380,7 +1382,7 @@ ACTION_RUN(fget_run) {
 // fo, fw, fr, gc file access action handler
 //----------------------------------------------------------------------------
 
-// Substitite rank & PID for %r and %p in string.  Must be free'd by caller
+// Substitute rank & PID for %r and %p in string.  Must be free'd by caller
 char * str_sub(char * string) {
   size_t needed = strlen(string) + 1;
   size_t dlen = needed + 16; // A little extra so hopefully realloc not needed
@@ -2954,9 +2956,20 @@ int main(int argc, char * * argv) {
   if (gather_fails && myrank != 0 && local_fails == 0) {
     // do nothing
   } else {
-    VERB0("xexec done.  Result: %s  Fails: %d  Test name: %s",
-          (local_fails + global_fails) ? "FAILURE" : "SUCCESS",
-          local_fails + global_fails, test_name);
+    if (local_fails + global_fails == 0) { 
+
+      if (options & OPT_SMSGV1) { // SMSGV1 option allows really quiet output on V0
+        VERB1("xexec done.  Result: %s  Fails: %d  Test name: %s",
+              "SUCCESS", local_fails + global_fails, test_name);
+      } else {
+        VERB0("xexec done.  Result: %s  Fails: %d  Test name: %s",
+              "SUCCESS", local_fails + global_fails, test_name);
+      }
+
+    } else { // But failure always prints message
+      VERB0("xexec done.  Result: %s  Fails: %d  Test name: %s",
+            "FAILURE", local_fails + global_fails, test_name);
+    }
 
     // Pavilion message
     if (options & OPT_PAVM) {

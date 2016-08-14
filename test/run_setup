@@ -174,7 +174,9 @@ batch_sub() {
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
 
     mcmd="msub"
-    IFS=","; hiovars=${!HIO_*}; unset IFS
+    IFS=","; hiovars="${!HIO_*},${!XEXEC_*}"; unset IFS
+    hiovars=${hiovars#,}  # Remove any leading, trailing commas 
+    hiovars=${hiovars%,}
     if [[ -n $hiovars ]]; then mcmd="$mcmd -v $hiovars"; fi
     if [[ -n $msub_arg ]]; then mcmd="$mcmd $msub_arg"; fi
     if [[ $chain -ne 0 ]]; then
@@ -242,7 +244,7 @@ clean_cmd="
 clean_roots() {
   if [[ ${OSTYPE:0:6} != "darwin" ]]; then
     # Running on a cluster - record some physical node information
-    cmd "aprun -n 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo|sort|uniq -c\""
+    cmd "aprun -n $PBS_NUM_NODES -N 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c"
     (export TERM=dumb; cmd "aprun -n 1 lstopo --of ascii -p")
     cmd "aprun -n 1 lstopo --of console -p"
   fi
@@ -628,7 +630,7 @@ if [[ $batch -eq 0 ]]; then
     msg "   verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
 
     # Pretty print all HIO_ variables
-    for var in ${!HIO_*}; do
+    for var in ${!HIO_*} ${!XEXEC_*}; do
       msg "$(printf '%*s: "%s"' 25 $var ${!var})"
     done
 
