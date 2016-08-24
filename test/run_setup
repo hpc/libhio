@@ -639,4 +639,8 @@ if [[ $batch -eq 0 ]]; then
 
 fi
 
+if [[ "x$HIO_TEST_ROOTS" -eq "x" ]] ; then
+    export HIO_TEST_ROOTS=posix:/tmp/hio_test
+fi
+
 # --- end of run_setup ---
