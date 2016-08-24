@@ -46,6 +46,14 @@ fi
 AM_INIT_AUTOMAKE([serial-tests])
 LT_INIT
 
+AC_ARG_ENABLE([tests], [AC_HELP_STRING([--enable-tests],
+    				       [Enable hio tests @<:@default=yes@:>@])],
+	      [hio_enable_tests=$enable_tests],[hio_enable_tests=$enable_static])
+
+if test $hio_enable_tests = yes && test "x$enable_static" = "xno" ; then
+    AC_ERROR([Must have static libraries enabled to enable unit tests])
+fi
+
 HIO_CHECK_JSON
 HIO_CHECK_DATAWARP
 HIO_CHECK_XPMEM
@@ -111,6 +119,7 @@ AC_DEFINE([_GNU_SOURCE], [1], [Define _GNU_SOURCE feature macro])
 AC_DEFINE_UNQUOTED([HIO_PREFIX], ["$prefix"], [HIO install prefix])
 AM_CONDITIONAL([HAVE_PDFLATEX], [test $HAVE_PDFLATEX = yes])
 AM_CONDITIONAL([HAVE_MPI], [test $hio_use_mpi = 1])
+AM_CONDITIONAL([ENABLE_TESTS], [test $hio_enable_tests = yes])
 
 AC_SUBST([HIO_PKGCONFIG_REQUIRES], [$hio_pkgconfig_requires])
 

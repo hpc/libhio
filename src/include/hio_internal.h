@@ -167,7 +167,7 @@ uint64_t hioi_gettime (void);
  * errno global variable. See the man page for mkdir(2) for
  * more information.
  */
-int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode);
+int hioi_mkpath (hio_context_t context, const char *path, mode_t access_mode);
 
 /**
  * Share a string with all processes in a context
