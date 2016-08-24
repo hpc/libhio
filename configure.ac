@@ -20,7 +20,7 @@ AM_SILENT_RULES([yes])
 
 hio_use_mpi=0
 
-if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && test ! "$CC" ; then
+if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && (test -z $CC || test "$CC" = cc) ; then
     # Work around Cray idiosyncrasies
     # Don't let the Cray wrapper bring in extra crap
     PE_VERSION=`echo $XTOS_VERSION | sed 's/\..*//g'`
