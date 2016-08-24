@@ -34,8 +34,8 @@ void hioi_request_release (hio_request_t request) {
   }
 }
 
-int hio_request_test_internal (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred, bool *complete,
-                               bool noset_null) {
+static int hioi_request_test_internal (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred,
+                                       bool *complete, bool noset_null) {
   int ncomplete = 0;
 
   for (int i = 0 ; i < nrequests ; ++i) {
@@ -74,7 +74,7 @@ int hio_request_test (hio_request_t *requests, int nrequests, ssize_t *bytes_tra
     return HIO_ERR_BAD_PARAM;
   }
 
-  return hio_request_test_internal (requests, nrequests, bytes_transferred, complete, false);
+  return hioi_request_test_internal (requests, nrequests, bytes_transferred, complete, false);
 }
 
 int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_transferred) {
@@ -82,7 +82,7 @@ int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_tra
   int rc;
 
   do {
-    rc = hio_request_test_internal (requests, nrequests, bytes_transferred, NULL, !first);
+    rc = hioi_request_test_internal (requests, nrequests, bytes_transferred, NULL, !first);
     if (nrequests == rc) {
       return HIO_SUCCESS;
     }
