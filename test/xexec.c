@@ -593,7 +593,7 @@ void min_max_who(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype) 
 void prt_mmmst(double val, char * desc, char * unit) {
   #ifdef MPI
     if (mpi_size > 0) {
-      double sum, mean, diff, sumdiff, sd;
+      double sum = 0, mean, diff, sumdiff = 0, sd;
       struct min_max_s mm, mmr;
       MPI_Datatype mmtype;
       MPI_Op mmw_op;
@@ -1028,8 +1028,8 @@ ACTION_RUN(dbuf_run) {
 
 // Returns a pointer into wbuf based on offset and data object hash
 void * get_wbuf_ptr(char * ctx, U64 offset, U64 data_object_hash) {
-  void * expected = wbuf_ptr + ( (offset + data_object_hash) % wbuf_repeat_len);
-  DBG2("%s: object_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", ctx, data_object_hash, wbuf_ptr, expected - wbuf_ptr);  
+  void * expected = (char *)wbuf_ptr + ( (offset + data_object_hash) % wbuf_repeat_len);
+  DBG2("%s: object_hash: 0x%lX  wbuf_ptr: 0x%lX expected-wbuf_ptr: 0x%lX", ctx, data_object_hash, wbuf_ptr, (char *)expected - (char *)wbuf_ptr);  
   return expected;
 }
 
@@ -1050,22 +1050,22 @@ int check_read_data(char * ctx, void * buf, size_t len, U64 offset, U64 data_obj
   } else {
     // Read data miscompare - dump lots of data about it
     rc = 1;
-    I64 misc_ofs = (char *)mis_comp - (char *)buf;
+    I64 misc_ofs = (char*)mis_comp - (char*)buf;
     I64 dump_start = MAX(0, misc_ofs - 16) & (~15);
     VERB0("Error: %s data check miscompare", ctx);
     VERB0("       Data offset: 0x%llX  %lld", offset, offset); 
     VERB0("       Data length: 0x%llX  %lld", len, len); 
     VERB0("      Data address: 0x%llX", buf); 
     VERB0("Miscompare address: 0x%llX", mis_comp); 
-    VERB0(" Miscompare offset: 0x%llX  %lld", mis_comp-buf, mis_comp-buf); 
+    VERB0(" Miscompare offset: 0x%llX  %lld", (char*)mis_comp - (char*)buf, (char*)mis_comp - (char*)buf); 
 
     VERB0("Debug: wbuf_ptr addr: 0x%lX:", wbuf_ptr); hex_dump(wbuf_ptr, 32);
 
     VERB0("Miscompare expected data at offset 0x%llX %lld follows:", dump_start, dump_start);
-    hex_dump( expected + dump_start, 96);
+    hex_dump( (char*)expected + dump_start, 96);
 
     VERB0("Miscompare actual data at offset 0x%llX %lld follows:", dump_start, dump_start);
-    hex_dump( buf + dump_start, 96);
+    hex_dump( (char*)buf + dump_start, 96);
 
     VERB0("XOR of Expected addr: 0x%lX  Miscomp addr: 0x%lX", expected, mis_comp);
     char * xorbuf_ptr = MALLOCX(len);
@@ -1257,7 +1257,7 @@ ACTION_RUN(mb_run) {
 }
 
 ACTION_RUN(mgf_run) {
-  int new_global_fails;
+  int new_global_fails = 0;
   MPI_CK(MPI_Reduce(&local_fails, &new_global_fails, 1, MPI_INT, MPI_SUM, 0, mpi_comm));
   DBG4("mgf: old local fails: %d new global fails: %d", local_fails, new_global_fails);
   if (myrank == 0) global_fails += new_global_fails;
