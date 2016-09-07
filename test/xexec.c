@@ -1257,7 +1257,7 @@ ACTION_RUN(mb_run) {
 }
 
 ACTION_RUN(mgf_run) {
-  int new_global_fails;
+  int new_global_fails = 0;
   MPI_CK(MPI_Reduce(&local_fails, &new_global_fails, 1, MPI_INT, MPI_SUM, 0, mpi_comm));
   DBG4("mgf: old local fails: %d new global fails: %d", local_fails, new_global_fails);
   if (myrank == 0) global_fails += new_global_fails;
