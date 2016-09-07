@@ -102,7 +102,7 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
     return hioi_err_errno (errno);
   }
 
-  rc = hio_mkpath (context, path, access_mode);
+  rc = hioi_mkpath (context, path, access_mode);
   if (0 > rc || EEXIST == errno) {
     if (EEXIST != errno) {
       hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: error creating context directory: %s",
@@ -130,7 +130,7 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
       return hioi_err_errno (errno);
     }
 
-    rc = hio_mkpath (context, path, access_mode);
+    rc = hioi_mkpath (context, path, access_mode);
     if (0 > rc || EEXIST == errno) {
       if (EEXIST != errno) {
         hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: error creating context directory: %s",

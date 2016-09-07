@@ -89,7 +89,7 @@ static void hioi_context_release (hio_object_t object) {
  * value (to reduce logging overhead) consisting of:
  *   <hostname>:<rank> <context_name>  (:<rank> only if MPI active)
  */
-void hio_context_msg_id(hio_context_t context, int include_rank) {
+static void hioi_context_msg_id(hio_context_t context, int include_rank) {
   char tmp_id[256];
   char * p;
   int rc;
@@ -132,7 +132,7 @@ static hio_context_t hio_context_alloc (const char *identifier) {
   new_context->c_print_stats = false;
   new_context->c_rank = 0;
   new_context->c_size = 1;
-  hio_context_msg_id(new_context, 0); 
+  hioi_context_msg_id(new_context, 0); 
 
 #if HIO_MPI_HAVE(3)
   new_context->c_shared_comm = MPI_COMM_NULL;
@@ -475,7 +475,7 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
 
   MPI_Comm_rank (context->c_comm, &context->c_rank);
   MPI_Comm_size (context->c_comm, &context->c_size);
-  hio_context_msg_id(context, 1); 
+  hioi_context_msg_id(context, 1); 
 
   rc = hio_init_common (context, config_file, config_file_prefix, context_name);
   if (HIO_SUCCESS != rc) {

@@ -370,7 +370,7 @@ uint64_t hioi_gettime (void) {
   return 1000000 * tv.tv_sec + tv.tv_usec;
 }
 
-int hio_mkpath (hio_context_t context, const char *path, mode_t access_mode) {
+int hioi_mkpath (hio_context_t context, const char *path, mode_t access_mode) {
   char *tmp = strdup (path);
   int rc;
 
