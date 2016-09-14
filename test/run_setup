@@ -610,6 +610,11 @@ if [[ $batch -eq 0 ]]; then
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
   fi
 
+  if [[ -z $HIO_TEST_ROOTS ]] ; then
+    export HIO_TEST_ROOTS="posix:/tmp/hio_test"
+    msg "Warning: HIO_TEST_ROOTS defaulted to $HIO_TEST_ROOTS"
+  fi
+
   # Special hack for buffy - since no PFS, inhibit staging for sizes larger than tiny
   if [[ $hostpre == "bu-" && $size != "t" ]]; then
     msg "Buffy with size > tiny, disabling datawarp staging"
@@ -634,13 +639,8 @@ if [[ $batch -eq 0 ]]; then
       msg "$(printf '%*s: "%s"' 25 $var ${!var})"
     done
 
-    if [[ -z $HIO_TEST_ROOTS ]]; then msg "Warning: HIO_TEST_ROOTS not set or defaulted"; fi
   fi
-
 fi
 
-if [[ "x$HIO_TEST_ROOTS" -eq "x" ]] ; then
-    export HIO_TEST_ROOTS=posix:/tmp/hio_test
-fi
 
 # --- end of run_setup ---
