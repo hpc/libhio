@@ -27,37 +27,38 @@ synexit() {
   echo "        [-p <ppn> [<ppn>...] ]"
   echo "        [-n <num_nodes> [<num_nodes>...] ]"
   echo "        [-r <num_ranks> [<num_ranks>...] ]"
+  echo "        [-m \"<msub args>\" [\"<msub_args>\"] ]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
   echo "        [-b] [-c] [-a]"
   echo "        [-w <dw_alloc>]"
   echo "        [-k knl|haswell]" 
-  echo "        [-m <msub args>]"
   echo "        [-u <uber command and args>]"
   echo "        [-o <output_file>]"
   echo ""
   echo "  Iterating Options (iterate in this order):"
-  echo "    -t <test> [<test>...]  Tests to invoke"
-  echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage"
-  echo "       n<dw_nodes>    Or, if it starts with \"n\" request enough to allocate"
-  echo "                      on that many DataWarp nodes based on granularity"
-  echo "    -s <size>         Per rank run sizes u|t|s|m|l|x|y|z  (default s)"
+  echo "    -m \"<msub_args>\"   Additional arguments for msub (use with -b)"
+  echo "                       Imbedded \"^\" replaced with \"-\"" 
+  echo "    -t <test>          Tests to invoke"
+  echo "    -x <dw_alloc_pct>  Multiply any requested allocation by this percentage"
+  echo "       n<dw_nodes>     Or, if it starts with \"n\" request enough to allocate"
+  echo "                       on that many DataWarp nodes based on granularity"
+  echo "    -s <size>          Per rank run sizes u|t|s|m|l|x|y|z  (default s)"
   echo "       <totsz>[,<blksz>][,<nseg>]  where:"
-  echo "                      totsz - total size per rank in MiB"
-  echo "                      blksz - size of each write/read in KiB"
-  echo "                      nseg - number of segments (not used by all tests)"
-  echo "    -p <ppn>          PPN parameters"
-  echo "    -n <num_nodes>    Number of nodes parameters."
-  echo "    -r <num_ranks>    Number of ranks parameters"
+  echo "                       totsz - total size per rank in MiB"
+  echo "                       blksz - size of each write/read in KiB"
+  echo "                       nseg - number of segments (not used by all tests)"
+  echo "    -p <ppn>           PPN parameters"
+  echo "    -n <num_nodes>     Number of nodes parameters."
+  echo "    -r <num_ranks>     Number of ranks parameters"
   echo "  Non-iterating Options:"
-  echo "    -v <verbose_lev>  Verbosity level for xexec2, default 1"
-  echo "    -d <debug_lev>    Debug level for xexec2, default 0"
-  echo "    -b                Submit batch job with these options"
-  echo "    -c                Chain jobs - make this job dependant on previous job"
-  echo "    -a                Clean dirs After running"
-  echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
-  echo "    -k knl|haswell    Adds :<type> to msub -l option, influences -p default"
-  echo "    -m <msub_args>    Additional arguments for msub (use with -b)"
+  echo "    -v <verbose_lev>   Verbosity level for xexec2, default 1"
+  echo "    -d <debug_lev>     Debug level for xexec2, default 0"
+  echo "    -b                 Submit batch job with these options"
+  echo "    -c                 Chain jobs - make this job dependant on previous job"
+  echo "    -a                 Clean dirs After running"
+  echo "    -w <dw_alloc>      DataWarp allocation policy 0=never, 1=static, 2=Moab"
+  echo "    -k knl|haswell     Adds :<type> to msub -l option, influences -p default"
   echo "    -u <uber command and args>  Use to invoke a debugger"
   echo "    -o <output_file>  Instead of invoking, writes test commands to file"
   echo ""
@@ -102,7 +103,7 @@ proc_type=""
 uber_cmd=""
 output_file=""
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpxv:d:bcaw:k:m:u:o:" optname; do
+while getopts "htsrnpxmv:d:bcaw:k:u:o:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -148,6 +149,14 @@ while getopts "htsrnpxv:d:bcaw:k:m:u:o:" optname; do
           eval "aaa=\${$((OPTIND))}"
         done
         ;;
+    m ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          aaa=${aaa//^/-}
+          marg+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
     v ) verbose_lev=$OPTARG;;
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
@@ -155,7 +164,6 @@ while getopts "htsrnpxv:d:bcaw:k:m:u:o:" optname; do
     a ) after=1;;
     w ) dw_alloc_mode=$OPTARG;;
     k ) proc_type=$OPTARG;;
-    m ) msub_arg=$OPTARG;;
     u ) uber_cmd=$OPTARG;;
     o ) output_file=$OPTARG
         echo "# $(date) Generated on $host by run_combo $args" > $output_file
@@ -165,19 +173,21 @@ while getopts "htsrnpxv:d:bcaw:k:m:u:o:" optname; do
   esac
 done
 
-if [[ -z $test ]]; then synexit "Error: at least one test must be specified";fi
-if [[ -z $size ]]; then size+=(" ");fi
+if [[ -z $test ]];  then synexit "Error: at least one test must be specified";fi
+if [[ -z $size ]];  then size+=(" ");fi
 if [[ -z $ranks ]]; then ranks+=(" ");fi
 if [[ -z $nodes ]]; then nodes+=(" ");fi
-if [[ -z $ppn ]]; then ppn+=(" ");fi
-if [[ -z $pct ]]; then pct+=(" ");fi
+if [[ -z $ppn ]];   then ppn+=(" ");fi
+if [[ -z $pct ]];   then pct+=(" ");fi
+if [[ -z $marg ]];  then marg+=(" ");fi
 
 #msg "test:  '${test[@]}'"
 #msg "size:  '${size[@]}'"
 #msg "ranks: '${ranks[@]}'"
 #msg "nodes: '${nodes[@]}'"
-#msg "ppn:    '${ppn[@]}'"
-#msg "pct:    '${pct[@]}'"
+#msg "ppn:   '${ppn[@]}'"
+#msg "pct:   '${pct[@]}'"
+#msg "marg:  '${marg[@]}'"
 
 shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
@@ -192,31 +202,33 @@ for r in "${ranks[@]}"; do
       for s in "${size[@]}"; do
         for a in "${pct[@]}"; do
           for t in "${test[@]}"; do
-            #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
-            c=$t
-            if [[ $s != " " ]]; then c="$c -s $s"; fi
-            if [[ $r != " " ]]; then c="$c -r $r"; fi
-            if [[ $n != " " ]]; then c="$c -n $n"; fi
-            if [[ $p != " " ]]; then c="$c -p $p"; fi
-            if [[ $a != " " ]]; then c="$c -x $a"; fi
-            if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
-            if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
-            if [[ $batch -eq 1 ]];    then c="$c -b"; fi
-            if [[ $chain -eq 1 ]];    then c="$c -c"; fi
-            if [[ $after -eq 1 ]];    then c="$c -a"; fi
-            if [[ -n $dw_alloc_mode ]];   then c="$c -w $dw_alloc_mode"; fi
-            if [[ -n $proc_type ]];   then c="$c -k $proc_type"; fi
-            if [[ -n $msub_arg ]];    then c="$c -m \"$msub_arg\""; fi
-            if [[ -n $uber_cmd ]];    then c="$c -u \"$uber_cmd\""; fi
+            for m in "${marg[@]}"; do
+              #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" m: \"$m\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
+              c=$t
+              if [[ $s != " " ]]; then c="$c -s $s"; fi
+              if [[ $r != " " ]]; then c="$c -r $r"; fi
+              if [[ $n != " " ]]; then c="$c -n $n"; fi
+              if [[ $p != " " ]]; then c="$c -p $p"; fi
+              if [[ $a != " " ]]; then c="$c -x $a"; fi
+              if [[ $m != " " ]]; then c="$c -m \"$m\""; fi
+              if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
+              if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
+              if [[ $batch -eq 1 ]];    then c="$c -b"; fi
+              if [[ $chain -eq 1 ]];    then c="$c -c"; fi
+              if [[ $after -eq 1 ]];    then c="$c -a"; fi
+              if [[ -n $dw_alloc_mode ]];   then c="$c -w $dw_alloc_mode"; fi
+              if [[ -n $proc_type ]];   then c="$c -k $proc_type"; fi
+              if [[ -n $uber_cmd ]];    then c="$c -u \"$uber_cmd\""; fi
 
-            if [[ -z $output_file ]]; then  
-              cmd $c
-              rc=$?
-              if [[ rc -ne 0 ]]; then fails=("${fails[@]}" "rc:$rc cmd:$c"); fi
-            else
-              echo $c >> $output_file
-              echo $c
-            fi 
+              if [[ -z $output_file ]]; then  
+                cmd $c
+                rc=$?
+                if [[ rc -ne 0 ]]; then fails=("${fails[@]}" "rc:$rc cmd:$c"); fi
+              else
+                echo $c >> $output_file
+                echo $c
+              fi 
+            done
           done
         done
       done
