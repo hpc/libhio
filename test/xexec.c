@@ -204,6 +204,8 @@ char * help =
   "  hvsc <name> <value>  Set hio context variable\n"
   "  hvsd <name> <value>  Set hio dataset variable\n"
   "  hvse <name> <value>  Set hio element variable\n"
+  "  hdsc <name> <expected> Issue hio_dataset_should_checkpont. Valid <expected> are:\n"
+  "                  %s\n"
   #if HIO_USE_DATAWARP
   "  dwds <directory> Issue dw_wait_directory_stage\n"
   "  dsdo <dw_dir> <pfs_dir> <type> Issue dw_stage_directory_out\n"
@@ -1953,6 +1955,13 @@ ENUM_NAMP(HIO_DATASET_, ID_NEWEST)
 ENUM_NAMP(HIO_DATASET_, ID_HIGHEST)
 ENUM_END(etab_hdsi, 0, NULL)
 
+#define HIO_SCP_ANY -999  // "special" recommendation value, means any value OK
+ENUM_START(etab_hcpr)    // hio_recommendation_t
+ENUM_NAMP(HIO_SCP_, NOT_NOW)
+ENUM_NAMP(HIO_SCP_, MUST_CHECKPOINT)
+ENUM_NAMP(HIO_SCP_, ANY)
+ENUM_END(etab_hcpr, 0, NULL)
+
 static hio_context_t context = NULL;
 static hio_dataset_t dataset = NULL;
 static hio_element_t element = NULL;
@@ -2447,9 +2456,30 @@ ACTION_RUN(hvsd_run) {
 
 ACTION_RUN(hvse_run) {
   hio_return_t hrc;
-  if (!context) ERRX("%s: hio element not open", A.desc);
+  if (!element) ERRX("%s: hio element not open", A.desc);
   hrc = hio_config_set_value((hio_object_t) element, V0.s, V1.s);
   HRC_TEST("hio_config_set_value");
+}
+
+ACTION_RUN(hdsc_run) {
+  char * name = V0.s;
+  hio_recommendation_t expected = V1.i;
+  hio_recommendation_t retval;
+  if (!context) ERRX("%s: hio context not established", A.desc);
+
+  // retval = hio_datset_should_checkpoint(context, name);
+  retval = HIO_SCP_NOT_NOW;
+  local_fails += (hio_fail = (retval != expected && expected != HIO_SCP_ANY) ? 1: 0);
+
+  VERB0("hio_fail: %d retval: %d expected: %d", hio_fail, retval, expected);
+
+  if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
+    MSG("%s: hio_dataset_should_checkpoint %s; ret: %s exp: %s errno: %d(%s)", A.desc,
+         hio_fail ? "FAIL": "OK", enum_name(MY_MSG_CTX, &etab_hcpr, retval),
+         enum_name(MY_MSG_CTX, &etab_hcpr, expected), errno, strerror(errno));
+  }
+  if (hio_fail) hio_err_print_all(context, stderr, "[ hio_dataset_should_checkpoint error]");
+  
 }
 
 #if HIO_USE_DATAWARP
@@ -2574,7 +2604,7 @@ enum ptype {
   UINT = CVT_NNINT,
   PINT = CVT_PINT,
   DOUB = CVT_DOUB,
-  STR, DBUF, HFLG, HDSM, HERR, HULM, HDSI, DWST, ONFF, NONE };
+  STR, DBUF, HFLG, HDSM, HERR, HULM, HDSI, HCPR, DWST, ONFF, NONE };
 
 struct parse {
   char * cmd;
@@ -2659,6 +2689,7 @@ struct parse {
   {"hvsc",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsc_run    },
   {"hvsd",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsd_run    },
   {"hvse",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvse_run    },
+  {"hdsc",  {STR,  HCPR, NONE, NONE, NONE}, NULL,          hdsc_run    },
   #if HIO_USE_DATAWARP
   {"dsdo",  {STR,  STR,  DWST, NONE, NONE}, NULL,          dsdo_run    },
   {"dwds",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwds_run    },
@@ -2788,6 +2819,9 @@ void parse_action() {
                 break;
               case HDSI:
                 decode_int(&etab_hdsi, tokv[t], "hio dataset ID", nact.desc, &nact.v[j], &nact);
+                break;
+              case HCPR:
+                decode(&etab_hcpr, tokv[t], "hio recommendation", nact.desc, &nact.v[j]);
                 break;
               #if HIO_USE_DATAWARP
               case DWST:
@@ -2925,7 +2959,8 @@ int main(int argc, char * * argv) {
 
   if (argc <= 1 || 0 == strncmp("-h", argv[1], 2)) {
     fprintf(stdout, help, enum_list(MY_MSG_CTX, &etab_opt),
-            options_init, cvt_num_suffix());
+            options_init, enum_list(MY_MSG_CTX, &etab_hcpr),
+            cvt_num_suffix());
     return 1;
   }
 
