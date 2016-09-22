@@ -333,7 +333,6 @@ else
       echo ""
       cmd "cat $PBS_NODEFILE | sort | uniq | pr -t --columns 8"
     fi
-    HIO_TEST_MI_SHIFT=${PBS_NUM_PPN-0}
     if [[ -n $DW_JOB_STRIPED ]]; then
       # awk program to parse a few things out of dwstat output
       c='
@@ -479,7 +478,7 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
   fi
 done
 
-
+HIO_TEST_MI_SHIFT=${ppn-0}
 if [[ $ranks -ne $(($nodes * $ppn)) ]]; then errx "ranks ($ranks) != nodes ($nodes) x ppn ($ppn)"; fi
 
 # set some convenient constants
