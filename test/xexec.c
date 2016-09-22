@@ -2471,8 +2471,6 @@ ACTION_RUN(hdsc_run) {
   retval = HIO_SCP_NOT_NOW;
   local_fails += (hio_fail = (retval != expected && expected != HIO_SCP_ANY) ? 1: 0);
 
-  VERB0("hio_fail: %d retval: %d expected: %d", hio_fail, retval, expected);
-
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
     MSG("%s: hio_dataset_should_checkpoint %s; ret: %s exp: %s errno: %d(%s)", A.desc,
          hio_fail ? "FAIL": "OK", enum_name(MY_MSG_CTX, &etab_hcpr, retval),

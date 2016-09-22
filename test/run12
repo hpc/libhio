@@ -35,7 +35,7 @@ cmdw="
 "
 
 cmdr="
-  name run12r v $verbose_lev d $debug_lev mi 32
+  name run12r v $verbose_lev d $debug_lev mi $HIO_TEST_MI_SHIFT
   /@@ Read and write random N-N test case with read data value checking @/
   dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS

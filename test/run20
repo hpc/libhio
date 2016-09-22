@@ -53,7 +53,7 @@ cmdw="
 "
 
 cmdr="
-  name run20r v $verbose_lev d $debug_lev mi 32
+  name run20r v $verbose_lev d $debug_lev mi $HIO_TEST_MI_SHIFT
   /@@ Read and write N-N multi DS test case @/
   dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS

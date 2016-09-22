@@ -30,7 +30,7 @@ cmdw="
 "
 
 cmdr="
-  name run05r v $verbose_lev d $debug_lev mi 0
+  name run05r v $verbose_lev d $debug_lev mi $HIO_TEST_MI_SHIFT
   /@@ Create and reuse N-N dataset - i.e., ensure TRUNC works @/
   dbuf RAND22P 20Mi
   hi MY_CTX $HIO_TEST_ROOTS
