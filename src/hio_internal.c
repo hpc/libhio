@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <signal.h>
 
 #include <assert.h>
 
@@ -33,6 +34,31 @@ typedef struct hio_error_stack_item_t {
 
 static hio_error_stack_item_t *hio_error_stack_head = NULL;
 static pthread_mutex_t hio_error_stack_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+uint64_t hioi_signal_time = 0;
+static sig_t old_handler = SIG_DFL;
+
+void sigusr1_handler (int sig) {
+  signal (sig, SIG_IGN);
+  hioi_signal_time = time (NULL);
+  old_handler (sig);
+  signal (sig, old_handler);
+}
+
+static void __attribute__((constructor)) hioi_library_init (void) {
+  old_handler = signal (SIGUSR1, sigusr1_handler);
+}
+
+static void __attribute__((destructor)) hioi_library_fini (void) {
+  struct sigaction old, new = {.sa_handler = old_handler};
+
+  sigaction (SIGUSR1, NULL, &old);
+  if (old.sa_handler == sigusr1_handler) {
+    sigemptyset (&new.sa_mask);
+    sigaction (SIGUSR1, &new, NULL);
+  }
+}
+
 
 /**
  * @file Internal hio functions
@@ -541,13 +567,10 @@ ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
     if (actual > 0) {
       total += actual;
       count -= actual;
+      file->f_offset += total;
       ptr = (void *) ((intptr_t) ptr + actual);
     }
   } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
-
-  if (total > 0) {
-    file->f_offset += total;
-  }
 
   return (actual < 0) ? actual: total;
 }
@@ -583,4 +606,41 @@ void hioi_file_flush (hio_file_t *file) {
     fflush (file->f_hndl);
     fsync (fileno (file->f_hndl));
   }
+}
+
+static bool hioi_iov_can_merge (hio_iovec_t *ioveca, hio_iovec_t *iovecb) {
+  intptr_t final_offset = ioveca->base + (ioveca->size + ioveca->stride) * ioveca->count;
+  return (ioveca->stride == iovecb->stride) && iovecb->base == final_offset &&
+    (ioveca->size == iovecb->size || 0 == ioveca->stride);
+}
+
+int hioi_iov_compress (hio_iovec_t *iovec, int count) {
+  hio_iovec_t *iovec_tmp = alloca (count * sizeof (*iovec_tmp));
+  int new_count, i;
+
+  for (i = 0 ; i < count ; ++i) {
+    if (0 == iovec[i].stride) {
+      /* no stride. adjust size and count; */
+      iovec[i].size *= iovec[i].count;
+      iovec[i].count = 1;
+    }
+  }
+
+  for (new_count = 0, i = 0 ; new_count < count ; ++new_count) {
+    /* copy the current iovec object */
+    iovec_tmp[new_count] = iovec[i++];
+
+    /* check if any of the following iovecs can be merged into this one */
+    for (; i < count && hioi_iov_can_merge (iovec_tmp + new_count, iovec + i) ; ++i) {
+      if (0 == iovec_tmp[new_count].stride) {
+        iovec_tmp[new_count].size += iovec[i].size;
+      } else {
+        iovec_tmp[new_count].count += iovec[new_count].count;
+      }
+    }
+  }
+
+  memcpy (iovec, iovec_tmp, sizeof (iovec[0]) * new_count);
+
+  return new_count;
 }

@@ -27,7 +27,7 @@ static hio_var_enum_t hioi_dataset_fs_type_enum = {
   .values = hioi_dataset_fs_type_enum_values,
 };
 
-static int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data) {
+int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data) {
   hio_dataset_data_t *ds_data;
 
   /* look for existing persistent data */
@@ -123,6 +123,7 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   new_dataset->ds_map.map_elements.md_win = MPI_WIN_NULL;
   new_dataset->ds_map.map_segments.md_win = MPI_WIN_NULL;
 #endif
+  hioi_list_init(new_dataset->ds_buffer.b_reqlist);
 
   new_dataset->ds_fsattr.fs_type = HIO_FS_TYPE_DEFAULT;
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_fsattr.fs_type,
@@ -199,42 +200,40 @@ int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, uns
                                        bool compress_data, bool simple) {
   hio_context_t context = (hio_context_t) dataset->ds_object.parent;
   long int recv_size_left = 0, recv_size_right = 0, send_size, alloc_size;
-  int left, right, parent, c_rank, c_size, rc, nreqs = 0;
+  int left, right, parent, c_rank, c_size = 1, rc, nreqs = 0;
   unsigned char *remote_data;
   MPI_Request reqs[2];
+
+  if (hioi_context_using_mpi (context)) {
+    MPI_Comm_size (comm, &c_size);
+    MPI_Comm_rank (comm, &c_rank);
+
+    parent = (c_rank - 1) >> 1;
+    left = c_rank * 2 + 1;
+    right = left + 1;
+
+    /* the needs of this routine are a little more complicated than MPI_Reduce. the data size may
+     * grow as the results are reduced. this function implements a basic reduction algorithm on
+     * the hio dataset. prepost receives for child sizes. */
+
+    if (right < c_size) {
+      MPI_Irecv (&recv_size_right, 1, MPI_LONG, right, 1001, comm, reqs + 1);
+      ++nreqs;
+    }
+
+    if (left < c_size) {
+      MPI_Irecv (&recv_size_left, 1, MPI_LONG, left, 1001, comm, reqs);
+      ++nreqs;
+    }
+  }
 
   hioi_timed_call(rc = hioi_manifest_serialize (dataset, data_out, data_size_out, compress_data, simple));
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
-  if (!hioi_context_using_mpi (context)) {
-    return HIO_SUCCESS;
-  }
-
-  MPI_Comm_size (comm, &c_size);
-  MPI_Comm_rank (comm, &c_rank);
-
-  parent = (c_rank - 1) >> 1;
-  left = c_rank * 2 + 1;
-  right = left + 1;
-
   if (1 == c_size) {
     return HIO_SUCCESS;
-  }
-
-  /* the needs of this routine are a little more complicated than MPI_Reduce. the data size may
-   * grow as the results are reduced. this function implements a basic reduction algorithm on
-   * the hio dataset */
-
-  if (right < c_size) {
-    MPI_Irecv (&recv_size_right, 1, MPI_LONG, right, 1001, comm, reqs + 1);
-    ++nreqs;
-  }
-
-  if (left < c_size) {
-    MPI_Irecv (&recv_size_left, 1, MPI_LONG, left, 1001, comm, reqs);
-    ++nreqs;
   }
 
   if (nreqs) {
@@ -274,7 +273,7 @@ int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, uns
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "sending %lu bytes of manifest data from %d to %d", send_size,
               c_rank, parent);
 
-    MPI_Send (&send_size, 1, MPI_LONG, parent, 1001, comm);
+    MPI_Ssend (&send_size, 1, MPI_LONG, parent, 1001, comm);
     MPI_Send (*data_out, send_size, MPI_CHAR, parent, 1002, comm);
 
     free (*data_out);
@@ -398,15 +397,16 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *man
 
   free (ranks);
 
-  rc = MPI_Allreduce (MPI_IN_PLACE, all_ranks, context->c_size, MPI_INT, MPI_MAX, context->c_comm);
+  /* NTH: reduce scatter block should be faster than doing an allreduce on the entire array. this
+   * still use a O(n) memory and will likely be changed in a future release to further cut down on
+   * the communication time and memory usage. */
+  rc = MPI_Reduce_scatter_block (all_ranks, &io_leader, 1, MPI_INT, MPI_MAX, context->c_comm);
+  free (all_ranks);
   if (MPI_SUCCESS != rc) {
-    free (all_ranks);
     return hioi_err_mpi (rc);
   }
 
-  io_leader = all_ranks[context->c_rank];
-  free (all_ranks);
-
+  /* make a temporary communicator to share manifest data */
   rc = MPI_Comm_split (context->c_comm, io_leader, 0, &io_comm);
   if (MPI_SUCCESS != rc) {
     return hioi_err_mpi (rc);
@@ -417,7 +417,8 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *man
     return HIO_SUCCESS;
   }
 
-  rc = hioi_dataset_scatter_comm (dataset, context->c_comm, manifest, manifest_size, rc);
+  rc = hioi_dataset_scatter_comm (dataset, io_comm, manifest, manifest_size, rc);
+  /* release the temporary communicator for now */
   MPI_Comm_free (&io_comm);
 
   return rc;

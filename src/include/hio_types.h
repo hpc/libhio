@@ -37,7 +37,7 @@
 #elif HIO_ATOMICS_BUILTIN
 
 
-typedef unsigned long atomic_ulong;
+typedef volatile unsigned long atomic_ulong;
 
 #define atomic_init(p, v) (*(p) = v)
 #define atomic_fetch_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_SEQ_CST)
@@ -45,7 +45,7 @@ typedef unsigned long atomic_ulong;
 
 #elif HIO_ATOMICS_SYNC
 
-typedef unsigned long atomic_ulong;
+typedef volatile unsigned long atomic_ulong;
 
 #define atomic_init(p, v) (*(p) = v)
 #define atomic_fetch_add(p, v) __sync_fetch_and_add(p, v)
@@ -419,6 +419,23 @@ struct hio_context {
 
   bool               c_enable_tracing;
   char              *c_trace_format;
+
+  /** timestamp from context creation */
+  uint64_t           c_start_time;
+
+  /** timestap for the end of the current job */
+  uint64_t           c_end_time;
+
+  /* failure configuration */
+
+  /** system interrupt rate */
+  uint64_t           c_job_sys_int_rate;
+  /** node interrupt rate */
+  uint64_t           c_job_node_int_rate;
+  /** software interrupt rate */
+  uint64_t           c_job_node_sw_rate;
+  /** warning time for SIGUSR1 in seconds */
+  uint64_t           c_job_sigusr1_warning_time;
 };
 
 struct hio_dataset_data_t {
@@ -431,8 +448,9 @@ struct hio_dataset_data_t {
   /** last complete dataset id */
   int64_t     dd_last_id;
 
-  /** last time a write completed */
-  time_t      dd_last_write_completion;
+  /** last time a read or write was completed with a member of this
+   * dataset */
+  time_t      dd_last_completion;
 
   /** weighted average write time for a member of this dataset */
   uint64_t    dd_average_write_time;
@@ -505,10 +523,13 @@ typedef struct hio_fs_attr_t hio_fs_attr_t;
  * hio buffer descriptor
  */
 typedef struct hio_buffer_t {
+  /** list of internal requests associated with this buffer */
   hio_list_t b_reqlist;
-  int        b_reqcount;
+  /** base of buffer region */
   void      *b_base;
+  /** size of buffer */
   size_t     b_size;
+  /** number of bytes remaining in the buffer */
   size_t     b_remaining;
 } hio_buffer_t;
 
@@ -647,6 +668,17 @@ struct hio_request {
   int               req_status;
 };
 
+typedef struct hio_iovec_t {
+  /** base address of memory region */
+  intptr_t base;
+  /** number of items */
+  size_t count;
+  /** size of each item */
+  size_t size;
+  /** stride between items */
+  size_t stride;
+} hio_iovec_t;
+
 typedef enum hio_request_type_t {
   HIO_REQUEST_TYPE_READ,
   HIO_REQUEST_TYPE_WRITE,
@@ -656,13 +688,7 @@ typedef struct hio_internal_request_t {
   hio_list_t    ir_list;
   hio_element_t ir_element;
   uint64_t      ir_offset;
-  union {
-    void *r;
-    const void *w;
-  } ir_data;
-  size_t        ir_count;
-  size_t        ir_size;
-  size_t        ir_stride;
+  hio_iovec_t   ir_vec;
   size_t        ir_transferred;
   int           ir_status;
   hio_request_type_t ir_type;
@@ -712,7 +738,7 @@ struct hio_element {
   /** function to complete pending element reads */
   hio_element_complete_fn_t e_complete;
 
-  /** function to close the element */
+  /** function to close the element (optional. may be NULL) */
   hio_element_close_fn_t e_close;
 };
 

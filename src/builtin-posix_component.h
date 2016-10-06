@@ -51,7 +51,7 @@ typedef struct builtin_posix_module_dataset_t {
   /** space left in reserved file region */
   uint64_t reserved_remaining;
 
-  /** stripe this rank should write */
+  /** stripe this rank should write to */
   int my_stripe;
 
   /** use bzip2 to compress data manifests */
@@ -68,6 +68,9 @@ typedef struct builtin_posix_module_dataset_t {
 
   /** trace file */
   FILE               *ds_trace_fh;
+
+  /** exclusively write to a single stripe in optimized mode */
+  bool                ds_stripe_exclusivity;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;

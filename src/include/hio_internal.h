@@ -205,6 +205,19 @@ uint32_t hioi_crc32 (uint8_t *buf, size_t length);
 uint64_t hioi_crc64 (uint8_t *buf, size_t length);
 
 /**
+ * Compress an hio iovec if possible
+ *
+ * @param[inout] iovec
+ * @param[in] count
+ *
+ * @return new count
+ *
+ * This function looks at each entry of the iovec and determines
+ * if any entry can be squashed into the previous entry.
+ */
+int hioi_iov_compress (hio_iovec_t *iovec, int count);
+
+/**
  * Get the associated context for an hio object
  *
  * @param[in] object       hio object
@@ -303,6 +316,15 @@ int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, uns
  * @param[in] element   element structure to add
  */
 void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element);
+
+/**
+ * Lookup data associated with a particular dataset
+ *
+ * @param[in]  context     hio context
+ * @param[in]  name        dataset name
+ * @param[out] data        dataset data
+ */
+int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data);
 
 /* context dataset persistent data functions */
 
@@ -581,5 +603,18 @@ int hioi_dataset_map_translate_offset (hio_element_t element, uint64_t app_offse
 /* internal version of hio_config_get_info that doesn't strdup the name */
 int hioi_config_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type,
                           bool *read_only);
+
+/**
+ * Initialize an internal request structure
+ */
+void hioi_internal_request_init (hio_internal_request_t *request, hio_element_t element, uint64_t offset,
+                                 void *base, uint64_t count, uint64_t size, uint64_t stride, int type,
+                                 hio_request_t *urequest);
+hio_internal_request_t *hioi_internal_request_alloc (hio_element_t element, uint64_t offset, void *base,
+                                                     uint64_t count, uint64_t size, uint64_t stride, int type,
+                                                     hio_request_t *urequest);
+
+/** time SIGUSR1 was detected */
+extern uint64_t hioi_signal_time;
 
 #endif /* !defined(HIO_INTERNAL_H) */

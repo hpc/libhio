@@ -12,6 +12,7 @@
 #include "hio_internal.h"
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 static int request_compare (const void *a, const void *b) {
   const hio_internal_request_t **reqa = (const hio_internal_request_t **) a;
@@ -32,15 +33,16 @@ static int request_compare (const void *a, const void *b) {
 }
 
 int hioi_dataset_buffer_flush (hio_dataset_t dataset) {
+  size_t req_count = hioi_list_length (&dataset->ds_buffer.b_reqlist);
   hio_internal_request_t **reqs, *req, *next;
   int rc;
 
-  if (0 == dataset->ds_buffer.b_reqcount) {
+  if (0 == req_count) {
     /* nothing to do */
     return HIO_SUCCESS;
   }
 
-  reqs = malloc (sizeof (*reqs) * dataset->ds_buffer.b_reqcount);
+  reqs = malloc (sizeof (*reqs) * req_count);
   if (NULL == reqs) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
@@ -52,19 +54,18 @@ int hioi_dataset_buffer_flush (hio_dataset_t dataset) {
     hioi_list_remove (req, ir_list);
   }
 
-  qsort ((void *) reqs, dataset->ds_buffer.b_reqcount, sizeof (*reqs), request_compare);
+  qsort ((void *) reqs, req_count, sizeof (*reqs), request_compare);
 
-  rc = dataset->ds_process_reqs (dataset, reqs, dataset->ds_buffer.b_reqcount);
+  rc = dataset->ds_process_reqs (dataset, reqs, req_count);
 
   /* NTH: this is temporary code to plug a leak until better code is ready */
-  for (i = 0 ; i < dataset->ds_buffer.b_reqcount ; ++i) {
+  for (i = 0 ; i < req_count ; ++i) {
     free (reqs[i]);
   }
 
   free (reqs);
   /* end temporary code */
 
-  dataset->ds_buffer.b_reqcount = 0;
   dataset->ds_buffer.b_remaining = dataset->ds_buffer.b_size;
 
   return rc;
@@ -122,7 +123,6 @@ int hioi_dataset_shared_init (hio_dataset_t dataset, int stripes) {
 
   dataset->ds_buffer.b_size = ds_buffer_size;
   dataset->ds_buffer.b_remaining = ds_buffer_size;
-  dataset->ds_buffer.b_reqcount = 0;
   hioi_list_init (dataset->ds_buffer.b_reqlist);
 
   rc = MPI_Win_shared_query (shared_win, 0, &data_size, &disp_unit, &base);

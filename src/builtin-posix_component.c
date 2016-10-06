@@ -49,7 +49,6 @@ static hio_var_enum_t hioi_dataset_file_modes = {
 static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id);
 static int builtin_posix_module_dataset_close (hio_dataset_t dataset);
 static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element_t element);
-static int builtin_posix_module_element_close (hio_element_t element);
 static int builtin_posix_module_element_flush (hio_element_t element, hio_flush_mode_t mode);
 static int builtin_posix_module_element_complete (hio_element_t element);
 static int builtin_posix_module_process_reqs (hio_dataset_t dataset, hio_internal_request_t **reqs, int req_count);
@@ -125,7 +124,7 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
 
   /* create trace directory if requested */
   if (context->c_enable_tracing) {
-    rc = asprintf (&path, "%s/trace", posix_dataset->base_path);
+    rc = asprintf (&path, "%s/trace/posix", posix_dataset->base_path);
     if (0 > rc) {
       return hioi_err_errno (errno);
     }
@@ -274,11 +273,6 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
   *manifest_ids = NULL;
   *count = 0;
 
-  rc = hioi_context_generate_leader_list (context);
-  if (HIO_SUCCESS != rc) {
-    return rc;
-  }
-
   if (0 != context->c_shared_rank) {
     return HIO_SUCCESS;
   }
@@ -411,11 +405,20 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
 
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_STRIPING) {
     if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
+      posix_dataset->ds_stripe_exclusivity = false;
+      hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_stripe_exclusivity,
+                       "posix_stripe_exclusivity", HIO_CONFIG_TYPE_BOOL, NULL, "Each rank will write to "
+                       "its own stripe. This will potentially increase the metadata size associated "
+                       "with the dataset", 0);
+
       /* pick a reasonable default stripe size */
       fs_attr->fs_ssize = 1 << 24;
 
       /* use group locking if available as we guarantee stripe exclusivity in optimized mode */
       fs_attr->fs_use_group_locking = true;
+      hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_use_group_locking,
+                       "use_group_locking", HIO_CONFIG_TYPE_BOOL, NULL, "Use lustre group locking if "
+                       "available (default: true)", 0);
 
 #if HIO_MPI_HAVE(3)
       /* if group locking is not available then each rank should attempt to write to
@@ -426,11 +429,15 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
       /* pick a reasonable default stripe size */
       fs_attr->fs_ssize = posix_dataset->ds_bs;
 
-      posix_dataset->ds_fcount = fs_attr->fs_smax_count * 32;
-      fs_attr->fs_scount = 16;
-      if (context->c_size < posix_dataset->ds_fcount) {
-        posix_dataset->ds_fcount = context->c_size;
-      }
+#if HIO_MPI_HAVE(3)
+      fs_attr->fs_scount = min(context->c_shared_size, fs_attr->fs_smax_count);
+#else
+      fs_attr->fs_scount = min(16, fs_attr->fs_smax_count);
+#endif
+      posix_dataset->ds_fcount = context->c_size / fs_attr->fs_scount;
+      hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_fcount,
+                       "dataset_file_count", HIO_CONFIG_TYPE_UINT64, NULL, "Number of files to use "
+                       "in strided file mode", 0);
     } else if (HIO_SET_ELEMENT_UNIQUE != dataset->ds_mode) {
       /* set defaults striping count */
       fs_attr->fs_ssize = 1 << 20;
@@ -471,6 +478,9 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
 
     if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode && posix_dataset->ds_bs < fs_attr->fs_ssize) {
       posix_dataset->ds_bs = fs_attr->fs_ssize;
+      if (posix_dataset->ds_stripe_exclusivity) {
+        posix_dataset->my_stripe = context->c_shared_rank % fs_attr->fs_scount;
+      }
     }
   }
 
@@ -507,7 +517,7 @@ static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_data
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: reading manifest data from id %x\n",
               manifest_ids[i]);
 
-    /* when writing the manifest in optimized mode each IO manager writes its own manifest. try
+    /* when writing the dataset in file_per_node mode each IO manager writes its own manifest. try
      * to open the manifest. if a manifest does not exist then it is likely this rank did not
      * write a manifest. IO managers will distribute the manifest data to the appropriate ranks
      * in hioi_dataset_scatter(). */
@@ -520,8 +530,8 @@ static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_data
       rc = asprintf (&path, "%s/manifest.%x.json", posix_dataset->base_path, manifest_ids[i]);
       assert (0 < rc);
       if (access (path, F_OK)) {
-        /* no manifest found. this might be a non-optimized file format or this rank may not be an
-         * IO master rank. */
+        /* this might be a real error. we were told to read from a manifest but we couldn't
+         * find it! */
         free (path);
         path = NULL;
       }
@@ -580,16 +590,21 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     return rc;
   }
 
+#if HIO_MPI_HAVE(3)
+  if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode) {
+    rc = hioi_context_generate_leader_list (context);
+    if (HIO_SUCCESS != rc) {
+      return rc;
+    }
+  }
+#endif
+
   rc = builtin_posix_module_setup_striping (context, module, dataset);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
-  if (HIO_FILE_MODE_STRIDED == posix_dataset->ds_fmode) {
-    hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_fcount,
-                     "dataset_file_count", HIO_CONFIG_TYPE_UINT64, NULL, "Number of files to use "
-                     "in strided file mode", 0);
-  } else if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
+  if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     posix_dataset->ds_use_bzip = true;
     hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_use_bzip,
                      "dataset_use_bzip", HIO_CONFIG_TYPE_BOOL, NULL,
@@ -644,10 +659,19 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     return rc;
   }
 
+  /* NTH: return an error if file_per_node was specified and could not be enabled. this limitation will
+   * be lifted in a future release. */
+  if (((HIO_FLAG_READ | HIO_FLAG_WRITE) & dataset->ds_flags) == (HIO_FLAG_READ | HIO_FLAG_WRITE) &&
+      HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
+    hioi_err_push (rc, &dataset->ds_object, "posix: it is not currently possible to use file_per_node mode with a read-write dataset");
+    free (posix_dataset->base_path);
+    return HIO_ERR_BAD_PARAM;
+  }
+
   if (context->c_enable_tracing) {
     char *path;
 
-    rc = asprintf (&path, "%s/trace/trace.%d", posix_dataset->base_path, context->c_rank);
+    rc = asprintf (&path, "%s/trace/posix/trace.%d", posix_dataset->base_path, context->c_rank);
     if (rc > 0) {
       posix_dataset->ds_trace_fh = fopen (path, "a");
       free (path);
@@ -666,10 +690,12 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   }
 
   /* if possible set up a shared memory window for this dataset */
-  POSIX_TRACE_CALL(posix_dataset, hioi_dataset_shared_init (dataset, 1), "shared_init", 0, 0);
+  if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode || HIO_SET_ELEMENT_SHARED == dataset->ds_mode) {
+    POSIX_TRACE_CALL(posix_dataset, hioi_dataset_shared_init (dataset, dataset->ds_fsattr.fs_scount * posix_dataset->ds_fcount), "shared_init", 0, 0);
+  }
 
   if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
-    if (2 > context->c_size || NULL == dataset->ds_shared_control) {
+    if (NULL == dataset->ds_shared_control) {
       /* no point in using optimized mode in this case */
       posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
       hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: optimized file mode requested but not supported in this "
@@ -731,7 +757,6 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
   /* release the dataset map if one was allocated */
   (void) hioi_dataset_map_release (dataset);
 #endif
-
 
   if (dataset->ds_flags & HIO_FLAG_WRITE) {
     char *path;
@@ -852,16 +877,17 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
                                     char *path, hio_file_t *file) {
   hio_object_t hio_object = &posix_dataset->base.ds_object;
-  int open_flags, fd;
+  int open_flags = 0, fd;
 #if BUILTIN_POSIX_USE_STDIO
   char *file_mode;
 #endif
 
   /* determine the fopen file mode to use */
   if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
-    open_flags = O_CREAT | O_WRONLY;
-  } else {
-    open_flags = O_RDONLY;
+    open_flags |= O_CREAT | O_WRONLY;
+  }
+  if (HIO_FLAG_READ & posix_dataset->base.ds_flags) {
+    open_flags |= O_RDONLY;
   }
 
   /* it is not possible to get open with create without truncation using fopen so use a
@@ -914,8 +940,10 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  if (access (path, R_OK)) {
+  if (access (path, R_OK) && !(HIO_FLAG_WRITE & posix_dataset->base.ds_flags)) {
     /* fall back on old naming scheme */
+    free (path);
+
     if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
       rc = asprintf (&path, "%s/element_data.%s.%08d", posix_dataset->base_path, element_name,
                      element->e_rank);
@@ -967,19 +995,13 @@ static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element
 
   element->e_flush = builtin_posix_module_element_flush;
   element->e_complete = builtin_posix_module_element_complete;
-  element->e_close = builtin_posix_module_element_close;
 
-  return HIO_SUCCESS;
-}
-
-static int builtin_posix_module_element_close (hio_element_t element) {
   return HIO_SUCCESS;
 }
 
 /* reserve space in the local shared file for this rank's data */
 static unsigned long builtin_posix_reserve (builtin_posix_module_dataset_t *posix_dataset, size_t *requested) {
-  /* NTH: this value should be changed to be non-0 if stripe exclusivity is re-enabled */
-  uint32_t stripe_count = 1;
+  uint32_t stripe_count = posix_dataset->ds_stripe_exclusivity ? posix_dataset->base.ds_fsattr.fs_scount : 1;
   uint64_t block_size = posix_dataset->ds_bs;
   const int stripe = posix_dataset->my_stripe;
   unsigned long new_offset, to_use, space;
@@ -1191,71 +1213,160 @@ static int builtin_posix_element_translate (builtin_posix_module_t *posix_module
   return rc;
 }
 
-static ssize_t builtin_posix_module_element_write_strided_internal (builtin_posix_module_t *posix_module, hio_element_t element,
-                                                                    uint64_t offset, const void *ptr, size_t count, size_t size,
-                                                                    size_t stride) {
-  builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
+static bool builtin_posix_stripe_lock (hio_element_t element, int stripe_id) {
   hio_dataset_t dataset = hioi_element_dataset (element);
-  size_t bytes_written = 0, ret;
-  hio_file_t *file;
-  uint64_t stop, start;
-  int rc;
 
-  assert (dataset->ds_flags & HIO_FLAG_WRITE);
-
-  if (!(count * size)) {
-    return 0;
+  if (dataset->ds_shared_control) {
+    /* locally lock the stripe */
+    pthread_mutex_lock (&dataset->ds_shared_control->s_stripes[stripe_id].s_mutex);
+    return true;
   }
 
-  if (0 == stride) {
-    size *= count;
-    count = 1;
+  return false;
+}
+
+static void builtin_posix_stripe_unlock (hio_element_t element, int stripe_id) {
+  hio_dataset_t dataset = hioi_element_dataset (element);
+
+  if (dataset->ds_shared_control) {
+    pthread_mutex_unlock (&dataset->ds_shared_control->s_stripes[stripe_id].s_mutex);
+  }
+}
+
+
+static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t *posix_module, hio_element_t element,
+                                                         uint64_t offset, hio_iovec_t *iovec, int count, bool reading) {
+  builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
+  size_t bytes_transferred = 0, ret, total = 0, iov_index, iov_count, partial, current;
+  hio_dataset_t dataset = &posix_dataset->base;
+  uint64_t stop, start, data;
+  int rc, locked_stripe_id = -1;
+  hio_file_t *file;
+
+  assert ((!reading && dataset->ds_flags & HIO_FLAG_WRITE) || (reading && dataset->ds_flags & HIO_FLAG_READ));
+
+  /* clean up the iovec if possible */
+  count = hioi_iov_compress (iovec, count);
+
+  for (int i = 0 ; i < count ; ++i) {
+    total += iovec[i].size * iovec[i].count;
+  }
+
+  if (0 == total) {
+    /* nothing to do */
+    return 0;
   }
 
   start = hioi_gettime ();
 
   errno = 0;
+  iov_index = 0;
+  iov_count = iovec[0].count;
+  data = iovec[0].base;
+  partial = 0;
 
-  for (size_t i = 0 ; i < count ; ++i) {
-    size_t req = size, actual;
+  do {
+    size_t req = total, actual = total;
 
-    do {
-      actual = req;
-
-      POSIX_TRACE_CALL(posix_dataset, rc = builtin_posix_element_translate (posix_module, element, offset, &actual,
-                                                                            &file, false),
-                       "element_translate", offset, req);
-      if (HIO_SUCCESS != rc) {
-        break;
-      }
-
-      hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
-                "posix: writing %lu bytes to file offset %" PRIu64, actual, file->f_offset);
-
-      POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_write (file, ptr, actual), "file_write", offset, actual);
-      if (ret > 0) {
-        bytes_written += ret;
-      }
-
-      if (ret < actual) {
-        /* short write */
-        break;
-      }
-
-      req -= actual;
-      offset += actual;
-      ptr = (void *) ((intptr_t) ptr + actual);
-    } while (req);
-
-    if (HIO_SUCCESS != rc || req) {
+    /* translate as much as possible to minimize the number of manifest entries for this element */
+    POSIX_TRACE_CALL(posix_dataset, rc = builtin_posix_element_translate (posix_module, element, offset, &actual,
+                                                                          &file, reading),
+                     "element_translate", offset, req);
+    if (HIO_SUCCESS != rc) {
       break;
     }
 
-    ptr = (void *) ((intptr_t) ptr + stride);
+    req = actual;
+
+    do {
+      current = partial ? partial : (actual < iovec[iov_index].size ? actual : iovec[iov_index].size);
+      hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
+                "posix: writing %lu bytes to file offset %" PRIu64, current, file->f_offset);
+
+      /* If we are writing to the file we get better performance by reducing the contention on the
+       * filesystem by locking before the write. Since this operation may be a network operation
+       * in the future (currently it is local only) it is best to hold the lock until we are
+       * done writing a particular stripe.  */
+      if (!reading && (HIO_SET_ELEMENT_UNIQUE != posix_dataset->base.ds_mode || HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode)) {
+        uint64_t stripe = file->f_offset / dataset->ds_fsattr.fs_ssize;
+        uint64_t stripe_bound = (stripe + 1) * dataset->ds_fsattr.fs_ssize;
+        int next_stripe_id = (stripe % dataset->ds_fsattr.fs_scount);
+
+        if (HIO_FILE_MODE_STRIDED == posix_dataset->ds_fmode) {
+          next_stripe_id += file->f_bid * dataset->ds_fsattr.fs_scount;
+        }
+
+        if (current + file->f_offset > stripe_bound) {
+          current = stripe_bound - file->f_offset;
+        }
+
+        /* lock this stripe if it is not already locked */
+        if (next_stripe_id != locked_stripe_id) {
+          if (locked_stripe_id >= 0) {
+            /* unlock the last stripe */
+            builtin_posix_stripe_unlock (element, locked_stripe_id);
+          }
+
+          if (builtin_posix_stripe_lock (element, next_stripe_id)) {
+            locked_stripe_id = next_stripe_id;
+          }
+        }
+      }
+
+      /* perform actual io */
+      if (reading) {
+        POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_read (file, (void *) data, current), "file_read", offset, actual);
+      } else {
+        POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_write (file, (void *) data, current), "file_write", offset, actual);
+      }
+
+      if (ret > 0) {
+        bytes_transferred += ret;
+        actual -= current;
+      }
+
+      if (ret < current) {
+        /* short io */
+        break;
+      }
+
+      data += current;
+      offset += current;
+
+      if (current < (iovec[iov_index].size - partial)) {
+        /* wrote only a part of the block */
+        partial = iovec[iov_index].size - partial;
+      } else if (1 == iov_count) {
+        /* finished with this entry */
+        ++iov_index;
+        if (iov_index < count) {
+          iov_count = iovec[iov_index].count;
+          data = iovec[iov_index].base;
+        } else {
+          /* should be nothing left. assert if there is */
+          assert (0 == actual);
+        }
+      } else {
+        /* move on to the next piece */
+        data += iovec[iov_index].stride;
+        --iov_count;
+      }
+    } while (actual);
+
+    if (HIO_SUCCESS != rc || actual) {
+      break;
+    }
+
+    total -= req;
+  } while (total);
+
+  /* if we still have a stripe locked unlock it now */
+  if (locked_stripe_id >= 0) {
+    builtin_posix_stripe_unlock (element, locked_stripe_id);
   }
 
-  if (0 == bytes_written || HIO_SUCCESS != rc) {
-    if (0 == bytes_written) {
+  if (0 == bytes_transferred || HIO_SUCCESS != rc) {
+    if (0 == bytes_transferred) {
       rc = hioi_err_errno (errno);
     }
 
@@ -1263,91 +1374,30 @@ static ssize_t builtin_posix_module_element_write_strided_internal (builtin_posi
     return rc;
   }
 
-  if (offset + bytes_written > element->e_size) {
-    element->e_size = offset + bytes_written;
-  }
-
   stop = hioi_gettime ();
 
-  dataset->ds_stat.s_wtime += stop - start;
+  if (reading) {
+    /* update read statistics */
+    dataset->ds_stat.s_rtime += stop - start;
 
-  if (0 < bytes_written) {
-    dataset->ds_stat.s_bwritten += bytes_written;
+    if (0 < bytes_transferred) {
+      dataset->ds_stat.s_bread += bytes_transferred;
+    }
+  } else {
+    /* update size and write statistics */
+    element->e_size = offset + bytes_transferred;
+    dataset->ds_stat.s_wtime += stop - start;
+
+    if (0 < bytes_transferred) {
+      dataset->ds_stat.s_bwritten += bytes_transferred;
+    }
   }
 
   hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_LOW,
-            "posix: finished write. bytes written: %lu, time: %" PRIu64 " usec",
-            bytes_written, stop - start);
+            "posix: finished %s. bytes transferred: %lu, time: %" PRIu64 " usec",
+            reading ? "read" : "write", bytes_transferred, stop - start);
 
-  return bytes_written;
-}
-
-static ssize_t builtin_posix_module_element_read_strided_internal (builtin_posix_module_t *posix_module, hio_element_t element,
-                                                                   uint64_t offset, void *ptr, size_t count, size_t size,
-                                                                   size_t stride) {
-  builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
-  size_t bytes_read = 0, ret;
-  hio_file_t *file;
-  uint64_t start, stop;
-  int rc;
-
-  if (0 == count || 0 == size) {
-    return 0;
-  }
-
-  errno = 0;
-
-  start = hioi_gettime ();
-
-  for (size_t i = 0 ; i < count ; ++i) {
-    size_t req = size, actual;
-
-    do {
-      actual = req;
-
-      /* find out where the data lives */
-      POSIX_TRACE_CALL(posix_dataset, rc = builtin_posix_element_translate (posix_module, element, offset, &actual,
-                                                                            &file, true),
-                       "element_translate", offset, req);
-      if (HIO_SUCCESS != rc) {
-        break;
-      }
-
-      POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_read (file, ptr, actual), "file_read", offset, actual);
-      if (ret > 0) {
-        bytes_read += ret;
-      }
-
-      if (ret < actual) {
-        /* short read */
-        break;
-      }
-
-      req -= actual;
-      offset += actual;
-      ptr = (void *) ((intptr_t) ptr + actual);
-    } while (req);
-
-    if (req || HIO_SUCCESS != rc) {
-      break;
-    }
-
-    ptr = (void *) ((intptr_t) ptr + stride);
-  }
-
-  if (0 == bytes_read || HIO_SUCCESS != rc) {
-    if (0 == bytes_read && HIO_SUCCESS == rc) {
-      rc = hioi_err_errno (errno);
-    }
-
-    return rc;
-  }
-
-  stop = hioi_gettime ();
-  posix_dataset->base.ds_stat.s_rtime += stop - start;
-  posix_dataset->base.ds_stat.s_bread += bytes_read;
-
-  return bytes_read;
+  return bytes_transferred;
 }
 
 static int builtin_posix_module_process_reqs (hio_dataset_t dataset, hio_internal_request_t **reqs, int req_count) {
@@ -1365,17 +1415,14 @@ static int builtin_posix_module_process_reqs (hio_dataset_t dataset, hio_interna
 
     if (HIO_REQUEST_TYPE_READ == req->ir_type) {
       POSIX_TRACE_CALL(posix_dataset,
-                       req->ir_status = builtin_posix_module_element_read_strided_internal (posix_module, req->ir_element, req->ir_offset,
-                                                                                            req->ir_data.r, req->ir_count, req->ir_size,
-                                                                                            req->ir_stride),
-                       "element_read", req->ir_offset, req->ir_count * req->ir_size);
-
+                       req->ir_status = builtin_posix_module_element_io_internal (posix_module, req->ir_element, req->ir_offset,
+                                                                                  &req->ir_vec, 1, true),
+                       "element_read", req->ir_offset, req->ir_vec.count * req->ir_vec.size);
     } else {
       POSIX_TRACE_CALL(posix_dataset,
-                       req->ir_status = builtin_posix_module_element_write_strided_internal (posix_module, req->ir_element, req->ir_offset,
-                                                                                             req->ir_data.w, req->ir_count, req->ir_size,
-                                                                                             req->ir_stride),
-                       "element_write", req->ir_offset, req->ir_count * req->ir_size);
+                       req->ir_status = builtin_posix_module_element_io_internal (posix_module, req->ir_element, req->ir_offset,
+                                                                                  &req->ir_vec, 1, false),
+                       "element_write", req->ir_offset, req->ir_vec.count * req->ir_vec.size);
     }
 
     if (req->ir_urequest && req->ir_status > 0) {

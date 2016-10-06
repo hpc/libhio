@@ -22,10 +22,10 @@ int hioi_dataset_buffer_append (hio_dataset_t dataset, hio_element_t element, of
 
   hioi_object_lock (&dataset->ds_object);
 
-  if (buffer->b_reqcount) {
+  if (!hioi_list_empty (&buffer->b_reqlist)) {
     /* check if this request can be appended to the previous one */
     req = (hio_internal_request_t *) buffer->b_reqlist.prev;
-    if (req->ir_element != element || (req->ir_offset + req->ir_size) != offset) {
+    if (req->ir_element != element || (req->ir_offset + req->ir_vec.size) != offset) {
       /* create a new request */
       req = NULL;
     }
@@ -41,26 +41,19 @@ int hioi_dataset_buffer_append (hio_dataset_t dataset, hio_element_t element, of
 
       if (NULL == req) {
         /* allocate and fill in new request */
-        req = calloc (1, sizeof (*req));
+        req = hioi_internal_request_alloc (element, offset, (void *) (uintptr_t) buffer->b_base +
+                                           buffer->b_size - buffer->b_remaining, 1, 0, 0,
+                                           HIO_REQUEST_TYPE_WRITE, NULL);
         if (NULL == req) {
           rc = HIO_ERR_OUT_OF_RESOURCE;
           break;
         }
-        req->ir_element = element;
-        req->ir_offset = offset;
-        req->ir_data.w = (const void *)((intptr_t) buffer->b_base + buffer->b_size - buffer->b_remaining);
-        req->ir_count = 1;
-        req->ir_size = 0;
-        req->ir_stride = 0;
-        req->ir_type = HIO_REQUEST_TYPE_WRITE;
-        req->ir_urequest = NULL;
         hioi_list_append (req, buffer->b_reqlist, ir_list);
-        ++buffer->b_reqcount;
       }
 
-      memcpy ((void *)((intptr_t) req->ir_data.r + req->ir_size), ptr, to_write);
+      memcpy ((void *)(req->ir_vec.base + req->ir_vec.size), ptr, to_write);
 
-      req->ir_size += to_write;
+      req->ir_vec.size += to_write;
       buffer->b_remaining -= to_write;
       ptr = (const void *) ((intptr_t) ptr + to_write);
       offset += to_write;
@@ -152,14 +145,8 @@ int hio_element_write_strided_nb (hio_element_t element, hio_request_t *request,
     return HIO_SUCCESS;
   }
 
-  req.ir_element = element;
-  req.ir_offset = offset;
-  req.ir_data.w = ptr;
-  req.ir_count = count;
-  req.ir_size = size;
-  req.ir_stride = stride;
-  req.ir_type = HIO_REQUEST_TYPE_WRITE;
-  req.ir_urequest = request;
+  hioi_internal_request_init (&req, element, offset, (void *) ptr, count, size, stride,
+                              HIO_REQUEST_TYPE_WRITE, request);
 
   return dataset->ds_process_reqs (dataset, (hio_internal_request_t **) &reqs, 1);
 }

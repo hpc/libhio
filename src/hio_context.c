@@ -195,7 +195,7 @@ int hioi_context_generate_leader_list (hio_context_t context) {
   MPI_Comm leader_comm;
   int my_rank = 0, rc;
 
-  if (NULL != context->c_node_leaders) {
+  if (NULL != context->c_node_leaders || !hioi_context_using_mpi (context)) {
     return HIO_SUCCESS;
   }
 
@@ -362,6 +362,35 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
                      "datawarp debug log messages (default: 0)", HIO_VAR_FLAG_DEFAULT);
   #endif
 #endif
+
+  /* mtti configuration */
+  context->c_job_sys_int_rate = 138889;
+  hioi_config_add (context, &context->c_object, &context->c_job_sys_int_rate,
+                   "job_sys_int_rate", HIO_CONFIG_TYPE_UINT64, NULL, "Total "
+                   "system interrupt rate in failures per 10^9 hours (default: "
+                   "138889)", 0);
+
+  context->c_job_node_int_rate = 5758;
+  hioi_config_add (context, &context->c_object, &context->c_job_node_int_rate,
+                   "job_node_int_rate", HIO_CONFIG_TYPE_UINT64, NULL, "Node "
+                   "interrupt rate in failures per 10^9 hours (default: 5758)", 0);
+
+  context->c_job_node_sw_rate = 0;
+  hioi_config_add (context, &context->c_object, &context->c_job_node_sw_rate,
+                   "job_node_sw_rate", HIO_CONFIG_TYPE_UINT64, NULL, "Software "
+                   "failure rate in failures per 10^9 hours (default: 0)", 0);
+
+  context->c_end_time = 0;
+  hioi_config_add (context, &context->c_object, &context->c_end_time,
+                   "end_time", HIO_CONFIG_TYPE_UINT64, NULL, "Job end time "
+                   "in UNIX time format (default: 0)", 0);
+
+  context->c_job_sigusr1_warning_time = 1800;
+  hioi_config_add (context, &context->c_object, &context->c_job_sigusr1_warning_time,
+                   "sigusr1_warning_time", HIO_CONFIG_TYPE_UINT64, NULL,
+                   "Time remaining in job when SIGUSR1 is caught", 0);
+
+  context->c_start_time = time (NULL);
 
   hioi_perf_add (context, &context->c_object, &context->c_bread,
                  "bytes_read", HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes "

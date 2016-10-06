@@ -109,7 +109,12 @@ int hioi_element_close_internal (hio_element_t element) {
       hioi_object_lock (&dataset->ds_object);
     }
 
-    rc = element->e_close (element);
+    /* if the backend provided an element close function call it now */
+    if (element->e_close) {
+      rc = element->e_close (element);
+    }
+
+    /* close the hio file handle if it was used. */
     hioi_file_close (&element->e_file);
   }
   hioi_object_unlock (&dataset->ds_object);

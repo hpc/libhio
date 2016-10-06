@@ -99,3 +99,31 @@ int hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *bytes_tra
 
   return HIO_SUCCESS;
 }
+
+void hioi_internal_request_init (hio_internal_request_t *request, hio_element_t element, uint64_t offset,
+                                 void *base, uint64_t count, uint64_t size, uint64_t stride, int type,
+                                 hio_request_t *urequest) {
+  request->ir_element = element;
+  request->ir_offset = offset;
+  request->ir_vec.base = (uintptr_t) base;
+  request->ir_vec.count = count;
+  request->ir_vec.size = size;
+  request->ir_vec.stride = stride;
+  request->ir_type = type;
+  request->ir_urequest = urequest;
+}
+
+hio_internal_request_t *hioi_internal_request_alloc (hio_element_t element, uint64_t offset, void *base,
+                                                     uint64_t count, uint64_t size, uint64_t stride, int type,
+                                                     hio_request_t *urequest) {
+  hio_internal_request_t *request;
+
+  request = calloc (1, sizeof (*request));
+  if (NULL == request) {
+    return NULL;
+  }
+
+  hioi_internal_request_init (request, element, offset, base, count, size, stride, type, urequest);
+
+  return request;
+}
