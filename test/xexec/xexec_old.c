@@ -2469,7 +2469,7 @@ ACTION_RUN(hdsc_run) {
 
   // retval = hio_datset_should_checkpoint(context, name);
   retval = HIO_SCP_NOT_NOW;
-  local_fails += (hio_fail = (retval != expected && expected != HIO_SCP_ANY) ? 1: 0);
+  local_fails += (hio_fail = (retval != expected && expected != (enum hio_recommendation_t)HIO_SCP_ANY) ? 1: 0);
 
   if (hio_fail || MY_MSG_CTX->verbose_level >= 3) {
     MSG("%s: hio_dataset_should_checkpoint %s; ret: %s exp: %s errno: %d(%s)", A.desc,

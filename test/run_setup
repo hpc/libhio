@@ -284,6 +284,9 @@ myrun() {
   #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
   #cmd "$mympicmd -n $ranks echo \"LD_LIBRARY_PATH=\$LD_LIBRARY_PATH\""
   #cmd "$mympicmd -n $ranks ls -l \${LD_LIBRARY_PATH%%:*}"
+  #msg "PWD=$PWD"
+  #cmd "ls -l $1"
+  #cmd "$mympicmd -n $ranks ls -l $1"
   #export LD_DEBUG=all
   #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
   cmd "$uber_cmd $mympicmd -n $ranks $*"
@@ -326,7 +329,7 @@ else
     mympicmd="aprun"
     size="m"
     if [[ -n $PBS_JOBID ]]; then
-      set | egrep "^PBS|^MOAB|^DW|^HOST|^HIO"
+      set | egrep "^PBS|^MOAB|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
       job_dir="/${PBS_JOBID%%.*}"
     fi
     if [[ -n $PBS_NODEFILE ]]; then
@@ -478,8 +481,8 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
   fi
 done
 
-HIO_TEST_MI_SHIFT=${ppn-0}
 if [[ $ranks -ne $(($nodes * $ppn)) ]]; then errx "ranks ($ranks) != nodes ($nodes) x ppn ($ppn)"; fi
+
 
 # set some convenient constants
 cons_ki=1024
@@ -550,13 +553,16 @@ if [[ $batch -eq 0 ]]; then
   build=${BUILD_TREE:=$PWD/..}
   libs=$build/src/.libs
 
+  # Load module environment recorded at build
+  mod_script="hiobuild.modules.bash"
+  if [[ -e $BUILD_TREE/$mod_script ]]; then . $BUILD_TREE/$mod_script; fi
+
   if   [[ ${OSTYPE:0:6} == "darwin" ]]; then export DYLD_LIBRARY_PATH=$libs:$DYLD_LIBRARY_PATH
   elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
   else errx "OSTYPE \"$OSTYPE\" not recognized"; fi
 
-  # Load module environment recorded at build
-  mod_script="hiobuild.modules.bash"
-  if [[ -e $BUILD_TREE/$mod_script ]]; then . $BUILD_TREE/$mod_script; fi
+  export HIO_TEST_MI_SHIFT=${ppn-0}
+  export HIO_TEST_XEXEC=${HIO_TEST_XEXEC="./xexec/.libs/xexec.x"}
 
   addifd() {
     if [[ $root_count -lt 2 && -d $1 ]]; then

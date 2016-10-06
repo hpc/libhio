@@ -34,6 +34,6 @@ cmd="
   mgf mf
 "
 
-myrun .libs/xexec.x $cmd
+myrun $HIO_TEST_XEXEC $cmd
 check_rc
 exit $max_rc

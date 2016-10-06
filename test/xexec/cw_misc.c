@@ -202,8 +202,8 @@ int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name) {
 }
 
 // Returns a pointer to a string containing the enum name. Not valid for multiple.
-char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
-  char * retval = "<Invalid_Enum>";
+const char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
+  const char * retval = "<Invalid_Enum>";
   if (etptr->multiple) ERRX("enum_name called for enum type multiple");
 
   // nv_count < 0 is a flag that the table is unsorted.  Count and sort the table.
@@ -225,7 +225,7 @@ char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val) {
   return retval;
 }
 
-int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
+int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, const char * name, int * val) {
   int rc = 0;
   // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
@@ -260,7 +260,7 @@ int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * val) {
   return rc;
 }
 
-int flag2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, char * name, int * set, int * clear) {
+int flag2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, const char * name, int * set, int * clear) {
   int rc = 0;
   // nv_count < 0 is a a flag that the table is unsorted.  Count and sort the table.
   if (etptr->nv_count < 0) enum_table_sort(msgctx, etptr);
@@ -743,7 +743,7 @@ I64 rand_range(I64 min, I64 max, size_t align) {
   long r = (lrand48() * PR231 % rlen) * align64 + (minda * align64);
 
   return r;
-};
+}
 
 
 // --- end of cw_misc.c ---

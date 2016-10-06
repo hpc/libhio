@@ -67,6 +67,7 @@ if [[ ${OSTYPE:0:6} != "darwin" ]]; then
   mod_script="hiobuild.modules.bash"
   echo "# Created by hiobuild at `date`" > $mod_script
   echo ". \$MODULESHOME/init/bash" >> $mod_script
+  echo "module list" >> $mod_script
 else
   mod_script=""
 fi  
@@ -142,7 +143,7 @@ if [[ ${OSTYPE:0:6} == "darwin" ]]; then
 else
   files="src/.libs/libhio.so.1.0.0"
 fi
-files="$files test/error_test.x test/.libs/test01.x test/.libs/xexec.x"
+files="$files test/error_test.x test/.libs/test01.x test/xexec/.libs/xexec.x test/xexec/.libs/xexec_old.x"
 
 if [[ $extra -gt 0 ]]; then
   cmd make docs

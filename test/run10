@@ -102,11 +102,11 @@ sleep $nfs_sleep
 aprun -n 1 -b bash -xc "find $pfs -ls"
 
 # Write PFS, read PFS, read cache 2X
-myrun .libs/xexec.x $cmdwp
-myrun .libs/xexec.x $cmdrp
+myrun $HIO_TEST_XEXEC $cmdwp
+myrun $HIO_TEST_XEXEC $cmdrp
 sleep $nfs_sleep
-myrun .libs/xexec.x $cmdrc
-myrun .libs/xexec.x $cmdrc
+myrun $HIO_TEST_XEXEC $cmdrc
+myrun $HIO_TEST_XEXEC $cmdrc
 check_rc
 
 # Clean up - erase cache, flush cache, list cache, pfs
@@ -119,13 +119,13 @@ aprun -n 1 -b bash -xc "find $pfs -ls"
 
 
 # Write cache, flush cache, read PFS, read cache 2X
-myrun .libs/xexec.x $cmdwc
+myrun $HIO_TEST_XEXEC $cmdwc
 aprun -n 1 -b bash -xc "find $cache -type f | xargs -n 1 -I {} /users/henseler/testioctl {} wsync"
 #aprun -n 1 -b bash -xc "find $cache -type f | xargs -n1 -t ./xexec.x dwws"
 sleep $nfs_sleep
-myrun .libs/xexec.x $cmdrp
+myrun $HIO_TEST_XEXEC $cmdrp
 sleep $nfs_sleep
-myrun .libs/xexec.x $cmdrc
-myrun .libs/xexec.x $cmdrc
+myrun $HIO_TEST_XEXEC $cmdrc
+myrun $HIO_TEST_XEXEC $cmdrc
 check_rc
 exit $max_rc

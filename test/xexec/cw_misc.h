@@ -165,13 +165,13 @@ char *alloc_printf(MSG_CONTEXT *msgctx, const char *context, const char *format,
 // Enum name/value conversion table and function definitions
 //----------------------------------------------------------------------------
 typedef struct enum_name_val_pair {
-  char * name;
+  const char * name;
   int val;
 } ENUM_NAME_VAL_PAIR;
 
 typedef struct enum_table {
   int multiple;
-  char * delim;
+  const char * delim;
   int nv_count;
   ENUM_NAME_VAL_PAIR * nv_by_name;
   ENUM_NAME_VAL_PAIR * nv_by_val;
@@ -180,20 +180,20 @@ typedef struct enum_table {
 #define ENUM_START(etname) ENUM_NAME_VAL_PAIR etname##__name_val[] = {
 #define ENUM_NAME(name, value) { name, value },
 #define ENUM_NAMP(prefix, name) { #name, prefix##name },
-#define ENUM_END(etname, multiple, delim) {NULL} }; ENUM_TABLE etname = {multiple, delim, -1, etname##__name_val};
+#define ENUM_END(etname, multiple, delim) {NULL, 0} }; ENUM_TABLE etname = {multiple, delim, -1, etname##__name_val, NULL};
 
 // Sets *name to point to a string containing the enum name.  Caller must free.
 int enum2str(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val, char ** name);
 
 // Returns a pointer to a string containing the enum name. Not valid for multiple.
-char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val);
+const char * enum_name(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr, int val);
 
 // Sets *val to an enum value or OR of values for multiple types
-int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * val);
+int str2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, const char * name, int * val);
 
 // Modifies *val according to +/- flagged enum names (must be multiple type)
 // On return, set = bits to set, clear = ~(bits top clear)
-int flag2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, char * name, int * set, int * clear);
+int flag2enum(MSG_CONTEXT *msgctx, ENUM_TABLE * eptr, const char * name, int * set, int * clear);
 
 // Returns a list of enum names prefixed by "one of" or "one or more of".  List
 // must be freed by caller.

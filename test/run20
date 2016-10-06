@@ -89,13 +89,13 @@ cmdr="
 "
 
 clean_roots $HIO_TEST_ROOTS
-myrun .libs/xexec.x $cmdw
+myrun $HIO_TEST_XEXEC $cmdw
 # Don't read if write failed
 if [[ max_rc -eq 0 ]]; then
-  myrun .libs/xexec.x $cmdr
+  myrun $HIO_TEST_XEXEC $cmdr
   # If first read fails, try again to see if problem persists
   if [[ max_rc -ne 0 ]]; then
-    myrun .libs/xexec.x $cmdr
+    myrun $HIO_TEST_XEXEC $cmdr
   fi
 fi
 check_rc
