@@ -155,6 +155,7 @@ void set_msg_id(GLOBAL * gptr) {
 
   IF_MPI(
     MPI_CK(MPI_Comm_rank(G.mpi_comm, &G.myrank));
+    G.my_prior_rank = G.myrank;
     sprintf(tmp_id+strlen(tmp_id), ".%d", G.myrank);
     MPI_CK(MPI_Comm_size(G.mpi_comm, &G.mpi_size));
     sprintf(tmp_id+strlen(tmp_id), "/%d", G.mpi_size);
@@ -1168,7 +1169,7 @@ int main(int argc, char * * argv) {
 
   // Suppress SUCCESS result message from all but rank 0
   // Suppress  if G.gather_fails, not rank 0 and local fails = 0
-  if (G.gather_fails && G.myrank != 0 && G.local_fails == 0) {
+  if (G.gather_fails && G.my_prior_rank != 0 && G.local_fails == 0) {
     // do nothing
   } else {
     if (G.local_fails + G.global_fails == 0) { 

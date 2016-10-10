@@ -55,10 +55,12 @@ typedef struct xexec_global {
   // If MPI not init or finalized, myrank and size = 0
     int myrank;
     int mpi_size;
+    int my_prior_rank; // MPI rank, even after MPI finalized
     MPI_Comm mpi_comm;
   #else
     const int myrank;  
     const int mpi_size;
+    const int my_prior_rank; // MPI rank, even after MPI finalized
   #endif
   enum options options;
   // Common read / write buffer pointers, etc.  Set by dbuf action.
