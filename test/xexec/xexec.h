@@ -107,7 +107,7 @@ typedef struct xexec_global {
 #endif
 
 // Serialize execution of all MPI ranks
-#define RANK_SERIALIZE_START                           \
+#define RANK_SERIALIZE_START {                         \
   DBG4("RANK_SERIALIZE_START");                        \
   IF_MPI(                                              \
     MPI_CK(MPI_Barrier(G.mpi_comm))                    \
@@ -117,9 +117,10 @@ typedef struct xexec_global {
       MPI_CK(MPI_Recv(&buf, 1, MPI_CHAR, G.myrank - 1, \
              MPI_ANY_TAG, G.mpi_comm, &status));       \
     }                                                  \
-  )
+  )                                                    \
+}
 
-#define RANK_SERIALIZE_END                               \
+#define RANK_SERIALIZE_END {                             \
   DBG4("RANK_SERIALIZE_END");                            \
   IF_MPI(                                                \
     if (G.mpi_size > 0 && G.myrank != G.mpi_size - 1) {  \
@@ -128,7 +129,8 @@ typedef struct xexec_global {
              0, G.mpi_comm));                            \
     }                                                    \
     MPI_CK(MPI_Barrier(G.mpi_comm));                     \
-  )  
+  )                                                      \
+}
 
 #define R0_OR_VERB_START                                                                  \
   if ( (MY_MSG_CTX)->verbose_level >= VERB_LEV_MULTI ) RANK_SERIALIZE_START;              \
