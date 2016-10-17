@@ -35,6 +35,7 @@ synexit() {
   echo "        [-k knl|haswell]" 
   echo "        [-u <uber command and args>]"
   echo "        [-o <output_file>]"
+  echo "        [-e <seconds>]"
   echo ""
   echo "  Iterating Options (iterate in this order):"
   echo "    -m \"<msub_args>\"   Additional arguments for msub (use with -b)"
@@ -60,7 +61,8 @@ synexit() {
   echo "    -w <dw_alloc>      DataWarp allocation policy 0=never, 1=static, 2=Moab"
   echo "    -k knl|haswell     Adds :<type> to msub -l option, influences -p default"
   echo "    -u <uber command and args>  Use to invoke a debugger"
-  echo "    -o <output_file>  Instead of invoking, writes test commands to file"
+  echo "    -o <output_file>   Instead of invoking, writes test commands to file"
+  echo "    -e <seconds>       Delay between test invocations"
   echo ""
   echo "Example: run_combo -t ./run02 ./run03 -r 2 4 -s x"
   echo "  Will run:"
@@ -102,8 +104,9 @@ chain=0
 proc_type=""
 uber_cmd=""
 output_file=""
+delay=0
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpxmv:d:bcaw:k:u:o:" optname; do
+while getopts "htsrnpxmv:d:bcaw:k:u:o:e:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -169,6 +172,7 @@ while getopts "htsrnpxmv:d:bcaw:k:u:o:" optname; do
         echo "# $(date) Generated on $host by run_combo $args" > $output_file
         echo "# $(date) Generated on $host by run_combo $args" 
         ;;
+    e ) delay=$OPTARG;; 
    \? ) synexit "Error: invalid option";;
   esac
 done
@@ -191,11 +195,13 @@ if [[ -z $marg ]];  then marg+=(" ");fi
 
 shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
+if [[ ! $delay =~ ^[0-9]+$ ]]; then synexit "Error: invalid -e integer \"$delay\""; fi
 
 #----------------------------------------------------------------------------
 # Iterate through al combinations of specified parameters
 #----------------------------------------------------------------------------
 declare -a fails
+first=1
 for r in "${ranks[@]}"; do
   for n in "${nodes[@]}"; do
     for p in "${ppn[@]}"; do
@@ -220,6 +226,12 @@ for r in "${ranks[@]}"; do
               if [[ -n $proc_type ]];   then c="$c -k $proc_type"; fi
               if [[ -n $uber_cmd ]];    then c="$c -u \"$uber_cmd\""; fi
 
+              if [[ first -eq 0 && delay -ne 0 ]]
+                then cmd "sleep $delay"
+              else
+                first=0
+              fi              
+ 
               if [[ -z $output_file ]]; then  
                 cmd $c
                 rc=$?

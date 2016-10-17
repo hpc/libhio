@@ -148,7 +148,7 @@ batch_sub() {
     done
     jobout="$rundir/job.$jobname.out"
     msglog="$rundir/job.$jobname.jobid"
-    msg "`date \"$datefmt\"` Job $jobname $args"
+    msg "Job $jobname Args: $args"
 
     echo "#! /bin/bash" > $jobsh
     proc_parm=""
@@ -205,7 +205,7 @@ batch_sub() {
     else
       jobid=${msub_msg#$'\n'}
       echo "$jobid" > $lastjob
-      msg "`date \"$datefmt\"` job $jobname ID: $jobid submitted"
+      msg "Job $jobname ID: $jobid submitted"
     fi
     shopt -u nocasematch
     msglog=""
