@@ -33,3 +33,13 @@ libconfig_parser.a
 libconfig_parser_a-config_parser.c
 config_parser.c
 ylwrap
+tools/hio_ds_info
+*.orig
+*.rej
+libhio*.gz
+00*.patch
+INSTALL
+src/json
+libhio.pc
+cscope.out
+.dirstamp
