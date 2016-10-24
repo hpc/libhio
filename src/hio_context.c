@@ -136,12 +136,13 @@ static hio_context_t hio_context_alloc (const char *identifier) {
 
 #if HIO_MPI_HAVE(3)
   new_context->c_shared_comm = MPI_COMM_NULL;
-  new_context->c_shared_size = 1;
-  new_context->c_shared_rank = 0;
   new_context->c_node_leader_comm = MPI_COMM_NULL;
   new_context->c_node_leaders = NULL;
   new_context->c_node_count = 0;
 #endif
+
+  new_context->c_shared_size = 1;
+  new_context->c_shared_rank = 0;
 
   hioi_config_list_init (&new_context->c_fconfig);
 

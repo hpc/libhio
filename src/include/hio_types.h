@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -41,6 +41,7 @@ typedef volatile unsigned long atomic_ulong;
 
 #define atomic_init(p, v) (*(p) = v)
 #define atomic_fetch_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_SEQ_CST)
+#define atomic_fetch_or(p, v) __atomic_fetch_or(p, v, __ATOMIC_SEQ_CST)
 #define atomic_load(v) (*(v))
 
 #elif HIO_ATOMICS_SYNC
@@ -49,6 +50,7 @@ typedef volatile unsigned long atomic_ulong;
 
 #define atomic_init(p, v) (*(p) = v)
 #define atomic_fetch_add(p, v) __sync_fetch_and_add(p, v)
+#define atomic_fetch_or(p, v) __sync_fetch_and_or(p, v)
 #define atomic_load(v) (*(v))
 
 #endif
@@ -109,17 +111,11 @@ static inline bool hioi_list_empty (hio_list_t *list) {
 
 
 static inline size_t hioi_list_length (hio_list_t *list) {
-  hio_list_t *item = list;
   size_t count = 0;
 
-  if (hioi_list_empty (list)) {
-    return 0;
-  }
-
-  do {
+  for (hio_list_t *item = list->next ; item != list ; item = item->next) {
     ++count;
-    item = item->next;
-  } while (item != list);
+  }
 
   return count;
 }
@@ -128,6 +124,9 @@ static inline size_t hioi_list_length (hio_list_t *list) {
 
 /* forward declaration for internal request structure */
 struct hio_internal_request_t;
+
+struct hio_manifest;
+typedef struct hio_manifest *hio_manifest_t;
 
 /**
  * Close a dataset and release any internal state
@@ -241,6 +240,14 @@ typedef int (*hio_element_close_fn_t) (hio_element_t element);
 typedef void (*hio_object_release_fn_t) (hio_object_t object);
 
 struct hio_config_t;
+
+enum {
+  HIO_DUMP_FLAG_DEFAULT  = 0x0,
+  HIO_DUMP_FLAG_CONFIG   = 0x1,
+  HIO_DUMP_FLAG_ELEMENTS = 0x2,
+  HIO_DUMP_FLAG_PERF     = 0x4,
+  HIO_DUMP_FLAG_MASK     = 0xf,
+};
 
 typedef enum {
   HIO_OBJECT_TYPE_CONTEXT,
@@ -403,14 +410,15 @@ struct hio_context {
 
 #if HIO_MPI_HAVE(3)
   MPI_Comm           c_shared_comm;
-  int                c_shared_size;
-  int                c_shared_rank;
   int               *c_shared_ranks;
 
   MPI_Comm           c_node_leader_comm;
   int                c_node_count;
   int               *c_node_leaders;
 #endif
+
+  int                c_shared_size;
+  int                c_shared_rank;
 
   hio_list_t         c_ds_data;
 
@@ -743,14 +751,14 @@ struct hio_element {
 };
 
 struct hio_dataset_header_t {
+  /** dataset name */
+  char     ds_name[HIO_DATASET_NAME_MAX];
   /** dataset identifier */
   int64_t  ds_id;
   /** dataset modification time */
   time_t   ds_mtime;
   /** dataset mode (unique, shared) */
   int      ds_mode;
-  /** dataset file mode (optimized, basic) */
-  int      ds_fmode;
   /** dataset status (set at close time) */
   int      ds_status;
 };

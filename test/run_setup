@@ -319,6 +319,7 @@ dw_alloc_pct=100
 proc_type=""
 uber_cmd=""
 query_size=0
+TMPDIR=/tmp
 
 size="s"
 job_dir=""

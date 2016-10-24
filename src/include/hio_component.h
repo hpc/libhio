@@ -77,6 +77,10 @@ typedef int
 (*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name,
                                  struct hio_dataset_header_t **headers, int *count);
 
+typedef int
+(*hio_module_dataset_dump_fn_t) (struct hio_module_t *module, const char *name, int64_t id,
+                                 uint32_t dump_flags, int rank, FILE *fh);
+
 /**
  * Finalize a module and release all resources.
  *
@@ -96,6 +100,9 @@ typedef struct hio_module_t {
 
   /** list all available datasets in this module's data root */
   hio_module_dataset_list_fn_t    dataset_list;
+
+  /** dumps dataset metadata in YAML */
+  hio_module_dataset_dump_fn_t    dataset_dump;
 
   /** function to finalize this module */
   hio_module_fini_fn_t            fini;

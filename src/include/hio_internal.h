@@ -283,7 +283,7 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
  * @param[in] manifest_size size of manifest data
  * @param[in] rc            current return code for consensus
  */
-int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsigned char *manifest, size_t manifest_size, int rc);
+int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifest_t manifest, int rc);
 
 /**
  * @brief scatter dataset configuration to all relevant processes
@@ -293,7 +293,7 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, const unsig
  * @param[in] manifest_size size of manifest data
  * @param[in] rc            current return code for consensus
  */
-int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *manifest, size_t manifest_size, int rc);
+int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest, int rc);
 #endif
 
 /**
@@ -301,13 +301,11 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, const unsigned char *man
  *
  * @param[in] dataset     dataset to gather
  */
-int hioi_dataset_gather_manifest (hio_dataset_t dataset, unsigned char **data_out, size_t *data_size_out, bool compress_data,
-                                  bool simple);
-
 #if HIO_MPI_HAVE(1)
-int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, unsigned char **data_out, size_t *data_size_out,
-                                       bool compress_data, bool simple);
+int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifest_t *manifest_out, bool simple);
 #endif
+
+int hioi_dataset_gather_manifest (hio_dataset_t dataset, hio_manifest_t *manifest_out, bool simple);
 
 /**
  * Add an element to a dataset
@@ -364,65 +362,6 @@ int hioi_element_add_segment (hio_element_t element, int file_index, uint64_t fi
 
 int hioi_element_find_offset (hio_element_t element, uint64_t app_offset, int rank,
                               off_t *offset, size_t *length);
-
-/* manifest functions */
-
-/**
- * @brief Serialize the manifest in the dataset
- *
- * @param[in]  dataset       dataset to serialize
- * @param[out] data          serialized data
- * @param[out] data_size     size of serialized data
- * @param[in]  compress_data if true will use bzip2 compression
- * @param[in]  simple        return only the manifest header data
- *
- * This function serializes the local data associated with the dataset and returns a buffer
- * containing the serialized data.
- */
-int hioi_manifest_serialize (hio_dataset_t dataset, unsigned char **data, size_t *data_size, bool compress_data,
-                             bool simple);
-
-int hioi_manifest_read (const char *path, unsigned char **manifest_out, size_t *manifest_size_out);
-
-/**
- * @brief Serialize the manifest in the dataset and save it to the specified file
- *
- * @param[in]  dataset   dataset to serialize
- * @param[in]  path      file to save the manifest into
- *
- * This function serializes the local data associated with the dataset and saves it
- * to the specified file.
- */
-int hioi_manifest_save (hio_dataset_t dataset, const unsigned char *manifest_data, size_t data_size, const char *path);
-
-int hioi_manifest_deserialize (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
-int hioi_manifest_load (hio_dataset_t dataset, const char *path);
-int hioi_manifest_merge_data (hio_dataset_t dataset, const unsigned char *data, size_t data_size);
-int hioi_manifest_merge_data2 (unsigned char **data1, size_t *data1_size, const unsigned char *data2, size_t data2_size);
-/**
- * Determine what which ranks have data in the manifest
- *
- * @param[in]  manifest      serialized manifest
- * @param[in]  manifest_size size of serialized manifest
- * @param[out] ranks         ranks that have data in this manifest
- * @param[out] rank_count    number of elements in the ranks array
- */
-int hioi_manifest_ranks (const unsigned char *manifest, size_t manifest_size, int **ranks, int *rank_count);
-
-/**
- * Read header data from a manifest
- *
- * @param[in]  context   hio context
- * @param[out] header    hio dataset header to fill in
- * @param[in]  path      hio manifest to read
- *
- * @returns HIO_SUCCESS on success
- * @returns hio error code on error
- *
- * This function reads the header data out of an hio manifest. This data includes
- * the dataset id, file status, and modification time.
- */
-int hioi_manifest_read_header (hio_context_t context, hio_dataset_header_t *header, const char *path);
 
 /* context functions */
 
@@ -616,5 +555,12 @@ hio_internal_request_t *hioi_internal_request_alloc (hio_element_t element, uint
 
 /** time SIGUSR1 was detected */
 extern uint64_t hioi_signal_time;
+
+/** interface for internal tools */
+int hio_dataset_dump (const char *data_roots, const char *context, const char *dataset_name, int64_t dataset_id,
+                      uint32_t flags, int rank, FILE *fh);
+
+int hioi_config_set_value (hio_object_t object, const char *variable, const char *value);
+int hioi_perf_set_value (hio_object_t object, const char *variable, const char *value);
 
 #endif /* !defined(HIO_INTERNAL_H) */

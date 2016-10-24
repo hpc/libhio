@@ -127,9 +127,9 @@ static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio
 
 static int hio_dataset_open_last (hio_dataset_t dataset, hioi_dataset_header_compare_t compare) {
   hio_context_t context = hioi_object_context ((hio_object_t) dataset);
-  int item_count = 0, rc, count;
+  int item_count = 0, rc, count = 0;
   hio_dataset_item_t *items = NULL;
-  hio_dataset_header_t *headers, header;
+  hio_dataset_header_t *headers = NULL, header;
   hio_module_t *module;
   void *tmp;
 
@@ -140,31 +140,25 @@ static int hio_dataset_open_last (hio_dataset_t dataset, hioi_dataset_header_com
     if (!(HIO_SUCCESS == rc && count)) {
       continue;
     }
-
-    tmp = realloc ((void *) items, (item_count + count) * sizeof (*items));
-    if (NULL == tmp) {
-      free (items);
-      free (headers);
-      return HIO_ERR_OUT_OF_RESOURCE;
-    }
-
-    items = (hio_dataset_item_t *) tmp;
-
-    for (int j = 0 ; j < count ; ++j) {
-      /* insert this set_id/module combination into the priority queue */
-      hio_dataset_item_insert (items, &item_count, headers + j, module, i, compare);
-    }
-
-    free (headers);
   }
 
-  if (0 == item_count) {
-    if (items) {
-      free (items);
-    }
-
+  if (0 == count) {
+    free (headers);
     return HIO_ERR_NOT_FOUND;
   }
+
+  items = (hio_dataset_item_t *) calloc (count, sizeof (*items));
+  if (NULL == items) {
+    free (headers);
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  for (int j = 0 ; j < count ; ++j) {
+    /* insert this set_id/module combination into the priority queue */
+    hio_dataset_item_insert (items, &item_count, headers + j, module, j, compare);
+  }
+
+  free (headers);
 
   while (HIO_SUCCESS == (rc = hio_dataset_item_pop (items, &item_count, &header, &module, compare))) {
     /* set the current dataset id to the one we are attempting to open */

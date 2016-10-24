@@ -10,6 +10,7 @@
  */
 
 #include "builtin-posix_component.h"
+#include "hio_manifest.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -52,6 +53,7 @@ static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element
 static int builtin_posix_module_element_flush (hio_element_t element, hio_flush_mode_t mode);
 static int builtin_posix_module_element_complete (hio_element_t element);
 static int builtin_posix_module_process_reqs (hio_dataset_t dataset, hio_internal_request_t **reqs, int req_count);
+static int builtin_posix_module_dataset_manifest_list_all (const char *path, int **manifest_ids, size_t *count, size_t nnodes);
 
 
 static void builtin_posix_trace (builtin_posix_module_dataset_t *posix_dataset, const char *event,
@@ -146,29 +148,26 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
   return HIO_SUCCESS;
 }
 
-static int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *name,
-                                              hio_dataset_header_t **headers, int *count) {
+static int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name,
+                                                       hio_dataset_header_t **headers, int *count) {
   hio_context_t context = module->context;
-  int num_set_ids = 0, set_id_index = 0;
+  int num_set_ids = 0, set_id_index = *count;
+  hio_manifest_t manifest;
   int rc = HIO_SUCCESS;
+  void *tmp;
   struct dirent *dp;
   char *path = NULL;
-  DIR *dir;
+  DIR *dir = NULL;
 
-  *headers = NULL;
-  *count = 0;
+  rc = asprintf (&path, "%s/%s.hio/%s", module->data_root, hioi_object_identifier(context), name);
+  if (0 > rc) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
 
   do {
-    if (0 != context->c_rank) {
-      break;
-    }
-
-    rc = asprintf (&path, "%s/%s.hio/%s", module->data_root, hioi_object_identifier(context), name);
-    assert (0 <= rc);
-
     dir = opendir (path);
     if (NULL == dir) {
-      num_set_ids = 0;
+      rc = HIO_ERR_NOT_FOUND;
       break;
     }
 
@@ -182,8 +181,14 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
       break;
     }
 
-    *headers = (hio_dataset_header_t *) calloc (num_set_ids, sizeof (**headers));
-    assert (NULL != *headers);
+    num_set_ids += *count;
+
+    tmp = realloc (*headers, num_set_ids * sizeof (**headers));
+    if (NULL == tmp) {
+      num_set_ids = *count;
+      break;
+    }
+    *headers = (hio_dataset_header_t *) tmp;
 
     rewinddir (dir);
 
@@ -197,22 +202,30 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
       rc = asprintf (&manifest_path, "%s/%s/manifest.json.bz2", path, dp->d_name);
       assert (0 <= rc);
 
-      rc = hioi_manifest_read_header (context, headers[0] + set_id_index, manifest_path);
-      if (HIO_SUCCESS == rc) {
-        ++set_id_index;
-      } else {
+      if (F_OK != access (manifest_path, R_OK)) {
         free (manifest_path);
         rc = asprintf (&manifest_path, "%s/%s/manifest.json", path, dp->d_name);
         assert (0 <= rc);
+      }
 
-        rc = hioi_manifest_read_header (context, headers[0] + set_id_index, manifest_path);
-        if (HIO_SUCCESS == rc) {
-          ++set_id_index;
-        } else {
-          /* skip dataset */
-          hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not read manifest at path: %s. rc: %d",
-                    manifest_path, rc);
-        }
+      rc = hioi_manifest_read (context, manifest_path, &manifest);
+      if (HIO_SUCCESS != rc) {
+        hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not read manifest at path: %s. rc: %d",
+                  manifest_path, rc);
+        free (manifest_path);
+        continue;
+      }
+
+      rc = hioi_manifest_read_header (manifest, headers[0] + set_id_index);
+      hioi_manifest_release (manifest);
+      if (HIO_SUCCESS != rc) {
+        /* skip dataset */
+        hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: error parsing manifest at path: %s. rc: %d",
+                  manifest_path, rc);
+      }
+
+      if (HIO_SUCCESS == rc) {
+        ++set_id_index;
       }
 
       free (manifest_path);
@@ -221,36 +234,234 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
     num_set_ids = set_id_index;
   } while (0);
 
+  if (dir) {
+    closedir (dir);
+  }
+
+  free (path);
+
+  *count = num_set_ids;
+
+  return rc;
+}
+
+static int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *name,
+                                              hio_dataset_header_t **headers, int *count) {
+  hio_context_t context = module->context;
+  int num_set_ids = *count, set_id_index = *count;
+  int rc = HIO_SUCCESS;
+  void *tmp;
+  struct dirent *dp;
+  char *path = NULL;
+  DIR *dir;
+
+  if (0 == context->c_rank) {
+    if (NULL == name) {
+      /* find all datasets in the context */
+      rc = asprintf (&path, "%s/%s.hio", module->data_root, hioi_object_identifier(context));
+      assert (0 <= rc);
+
+      dir = opendir (path);
+      free (path);
+      if (NULL == dir) {
+        return HIO_ERR_NOT_FOUND;
+      }
+
+      while (NULL != (dp = readdir (dir))) {
+        if ('.' == dp->d_name[0]) {
+          continue;
+        }
+
+        (void) builtin_posix_module_dataset_list_internal (module, dp->d_name, headers, count);
+      }
+
+      closedir (dir);
+    } else {
+      rc = builtin_posix_module_dataset_list_internal (module, name, headers, count);
+    }
+  }
+
+
 #if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
-    MPI_Bcast (&num_set_ids, 1, MPI_INT, 0, context->c_comm);
+    MPI_Bcast (count, 1, MPI_INT, 0, context->c_comm);
   }
 #endif
 
-  if (0 == context->c_rank) {
-    closedir (dir);
-    free (path);
-  }
-
-  if (0 == num_set_ids) {
-    free (*headers);
-    *headers = NULL;
-
+  if (0 == *count) {
     return HIO_SUCCESS;
   }
 
   if (0 != context->c_rank) {
-    *headers = (hio_dataset_header_t *) calloc (num_set_ids, sizeof (**headers));
+    *headers = (hio_dataset_header_t *) calloc (*count, sizeof (**headers));
     assert (NULL != *headers);
   }
 
 #if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
-    MPI_Bcast (*headers, sizeof (**headers) * num_set_ids, MPI_BYTE, 0, context->c_comm);
+    MPI_Bcast (*headers, sizeof (**headers) * *count, MPI_BYTE, 0, context->c_comm);
   }
 #endif
 
-  *count = num_set_ids;
+  return HIO_SUCCESS;
+}
+
+static int builtin_posix_module_dataset_dump_specific (struct hio_module_t *module, const char *name, int64_t id,
+                                                       uint32_t flags, int rank, FILE *fh) {
+  hio_context_t context = module->context;
+  hio_manifest_t manifest, manifest2;
+  char *path = NULL, *manifest_path;
+  int rc = HIO_SUCCESS;
+
+  rc = asprintf (&path, "%s/%s.hio/%s/%" PRId64, module->data_root, hioi_object_identifier(context), name, id);
+  if (0 > rc) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  rc = asprintf (&manifest_path, "%s/manifest.json.bz2", path);
+  if (0 > rc) {
+    free (path);
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  if (F_OK != access (manifest_path, R_OK)) {
+    free (manifest_path);
+    rc = asprintf (&manifest_path, "%s/manifest.json", path);
+  }
+
+  rc = hioi_manifest_read (context, manifest_path, &manifest);
+  if (HIO_SUCCESS != rc) {
+    hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not load manifest from path: %s. rc: %d",
+              manifest_path, rc);
+    free (path);
+    free (manifest_path);
+    return rc;
+  }
+  fprintf (fh, "Manifest: %s\n", path);
+  free (manifest_path);
+
+  if (flags & HIO_DUMP_FLAG_ELEMENTS) {
+    int *manifest_ids;
+    size_t manifest_count;
+    rc = builtin_posix_module_dataset_manifest_list_all (path, &manifest_ids, &manifest_count, 1);
+    if (HIO_SUCCESS == rc) {
+      for (size_t i = 0 ; i < manifest_count ; ++i) {
+        unsigned char *tmp_data;
+        size_t tmp_size;
+
+        rc = asprintf (&manifest_path, "%s/manifest.%x.json", path, manifest_ids[i]);
+        assert (0 < rc);
+        if (F_OK != access(manifest_path, R_OK)) {
+          free (manifest_path);
+          rc = asprintf (&manifest_path, "%s/manifest.%x.json.bz2", path, manifest_ids[i]);
+        }
+
+        rc = hioi_manifest_read (context, manifest_path, &manifest2);
+        free (manifest_path);
+        if (HIO_SUCCESS != rc) {
+          fprintf (stderr, "Error reading manifest\n");
+          continue;
+        }
+
+        rc = hioi_manifest_merge_data (manifest, manifest2);
+        if (HIO_SUCCESS != rc) {
+          fprintf (stderr, "Error merging manifests\n");
+          continue;
+        }
+
+        hioi_manifest_release (manifest2);
+      }
+    }
+  }
+
+  rc = hioi_manifest_dump (manifest, flags, rank, fh);
+  if (HIO_SUCCESS != rc) {
+    hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not dump manifest at path: %s. rc: %d",
+              manifest_path, rc);
+  }
+
+  free (path);
+
+  hioi_manifest_release (manifest);
+
+  return rc;
+}
+
+static int builtin_posix_module_dataset_dump_internal (struct hio_module_t *module, const char *name, int64_t id,
+                                                       uint32_t flags, int rank, FILE *fh) {
+  hio_context_t context = module->context;
+  char *path = NULL, *tmp;
+  int rc = HIO_SUCCESS;
+  struct dirent *dp;
+  int64_t dir_id;
+  DIR *dir;
+
+  if (id > 0) {
+    return builtin_posix_module_dataset_dump_specific (module, name, id, flags, rank, fh);
+  }
+
+  rc = asprintf (&path, "%s/%s.hio/%s", module->data_root, hioi_object_identifier(context), name);
+  if (0 > rc) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  dir = opendir (path);
+  free (path);
+  if (NULL == dir) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  while (NULL != (dp = readdir (dir))) {
+    if ('.' == dp->d_name[0]) {
+      continue;
+    }
+
+    errno = 0;
+    dir_id = strtol (dp->d_name, &tmp, 0);
+    if (errno || tmp[0]) {
+      /* non-numeric directory names are not currently supported */
+      continue;
+    }
+
+    (void) builtin_posix_module_dataset_dump_specific (module, name, dir_id, flags, rank, fh);
+  }
+
+  closedir (dir);
+
+  return HIO_SUCCESS;
+}
+
+static int builtin_posix_module_dataset_dump (struct hio_module_t *module, const char *name, int64_t id,
+                                              uint32_t flags, int rank, FILE *fh) {
+  hio_context_t context = module->context;
+  int rc = HIO_SUCCESS;
+  struct dirent *dp;
+  char *path = NULL;
+  DIR *dir;
+
+  if (NULL == name) {
+    /* find all datasets in the context */
+    rc = asprintf (&path, "%s/%s.hio", module->data_root, hioi_object_identifier(context));
+    assert (0 <= rc);
+
+    dir = opendir (path);
+    free (path);
+    if (NULL == dir) {
+      return HIO_ERR_NOT_FOUND;
+    }
+
+    while (NULL != (dp = readdir (dir))) {
+      if ('.' == dp->d_name[0]) {
+        continue;
+      }
+
+      (void) builtin_posix_module_dataset_dump_internal (module, dp->d_name, -1, flags, rank, fh);
+    }
+
+    closedir (dir);
+  } else {
+    rc = builtin_posix_module_dataset_dump_internal (module, name, id, flags, rank, fh);
+  }
 
   return HIO_SUCCESS;
 }
@@ -258,6 +469,61 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
 static int manifest_index_compare (const void *a, const void *b) {
   int ia = ((int *) a)[0], ib = ((int *) b)[0];
   return ia - ib;
+}
+
+static int builtin_posix_module_dataset_manifest_list_all (const char *path, int **manifest_ids, size_t *count, size_t nnodes) {
+  int num_manifest_ids = 0, manifest_id_index = 0;
+  unsigned int manifest_id;
+  int rc = HIO_SUCCESS;
+  int *tmp = NULL;
+  struct dirent *dp;
+  DIR *dir;
+
+  *manifest_ids = NULL;
+  *count = 0;
+
+  dir = opendir (path);
+  if (NULL == dir) {
+    return hioi_err_errno (errno);
+  }
+
+  while (NULL != (dp = readdir (dir))) {
+    if (dp->d_name[0] != '.' && 0 != sscanf (dp->d_name, "manifest.%x.json", &manifest_id)) {
+      ++num_manifest_ids;
+    }
+  }
+
+  if (0 == num_manifest_ids) {
+    closedir (dir);
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  /* round up to a multiple of the number nodes */
+  num_manifest_ids = nnodes * (num_manifest_ids + nnodes - 1) / nnodes;
+
+  tmp = (int *) malloc (num_manifest_ids * sizeof (int));
+  assert (NULL != tmp);
+  memset (tmp, 0xff, sizeof (int) * num_manifest_ids);
+
+  rewinddir (dir);
+
+  while (NULL != (dp = readdir (dir))) {
+    if ('.' == dp->d_name[0] || 0 == sscanf (dp->d_name, "manifest.%x.json", &manifest_id)) {
+      continue;
+    }
+
+    tmp[manifest_id_index++] = (int) manifest_id;
+  }
+
+  /* put manifest files in numerical order */
+  qsort (tmp, manifest_id_index, sizeof (int), manifest_index_compare);
+
+  closedir (dir);
+
+  *count = num_manifest_ids;
+  *manifest_ids = tmp;
+
+  return HIO_SUCCESS;
 }
 
 #if HIO_MPI_HAVE(3)
@@ -273,58 +539,14 @@ static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_data
   *manifest_ids = NULL;
   *count = 0;
 
-  if (0 != context->c_shared_rank) {
+  if (0 != context->c_shared_rank || !hioi_context_using_mpi (context)) {
     return HIO_SUCCESS;
   }
 
-  do {
-    if (0 != context->c_rank) {
-      break;
-    }
-
-    dir = opendir (posix_dataset->base_path);
-    if (NULL == dir) {
-      num_manifest_ids = hioi_err_errno (errno);
-      break;
-    }
-
-    while (NULL != (dp = readdir (dir))) {
-      if (dp->d_name[0] != '.' && 0 != sscanf (dp->d_name, "manifest.%x.json", &manifest_id)) {
-        ++num_manifest_ids;
-      }
-    }
-
-    if (0 == num_manifest_ids) {
-      break;
-    }
-
-    /* round up to a multiple of the number nodes */
-    num_manifest_ids = context->c_node_count * (num_manifest_ids + context->c_node_count - 1) / context->c_node_count;
-
-    tmp = (int *) malloc (num_manifest_ids * sizeof (int));
-    assert (NULL != tmp);
-    memset (tmp, 0xff, sizeof (int) * num_manifest_ids);
-
-    rewinddir (dir);
-
-    while (NULL != (dp = readdir (dir))) {
-      if ('.' == dp->d_name[0] || 0 == sscanf (dp->d_name, "manifest.%x.json", &manifest_id)) {
-        continue;
-      }
-
-      tmp[manifest_id_index++] = (int) manifest_id;
-    }
-
-    /* put manifest files in numerical order */
-    qsort (tmp, manifest_id_index, sizeof (int), manifest_index_compare);
-  } while (0);
-
   if (0 == context->c_rank) {
-    closedir (dir);
-  }
+    rc = builtin_posix_module_dataset_manifest_list_all (posix_dataset->base_path, &tmp, count, context->c_node_count);
 
-  if (num_manifest_ids > 0) {
-    num_manifest_ids /= context->c_node_count;
+    num_manifest_ids = *count / context->c_node_count;
   }
 
   MPI_Bcast (&num_manifest_ids, 1, MPI_INT, 0, context->c_node_leader_comm);
@@ -490,8 +712,8 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
 #if HIO_MPI_HAVE(3)
 static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_dataset) {
   hio_context_t context = hioi_object_context ((hio_object_t) posix_dataset);
-  size_t manifest_size = 0, manifest_id_count = 0;
-  unsigned char *manifest = NULL;
+  hio_manifest_t manifest = NULL, manifest2;
+  size_t manifest_id_count = 0;
   int rc = HIO_SUCCESS;
   int *manifest_ids;
   char *path;
@@ -538,13 +760,15 @@ static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_data
     }
 
     if (path) {
-      unsigned char *tmp = NULL;
-      size_t tmp_size = 0;
       /* read the manifest if it exists */
-      rc = hioi_manifest_read (path, &tmp, &tmp_size);
+      rc = hioi_manifest_read (context, path, &manifest2);
       if (HIO_SUCCESS == rc) {
-        rc = hioi_manifest_merge_data2 (&manifest, &manifest_size, tmp, tmp_size);
-        free (tmp);
+        if (NULL != manifest) {
+          rc = hioi_manifest_merge_data (manifest, manifest2);
+          hioi_manifest_release (manifest2);
+        } else {
+          manifest = manifest2;
+        }
       }
 
       free (path);
@@ -555,15 +779,20 @@ static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_data
     }
   }
 
+  fprintf (stderr, "dataset mode: %d\n", posix_dataset->base.ds_mode);
+
   /* share dataset information with all processes on this node */
   if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
-    rc = hioi_dataset_scatter_unique (&posix_dataset->base, manifest, manifest_size, rc);
+    rc = hioi_dataset_scatter_unique (&posix_dataset->base, manifest, rc);
   } else {
-    rc = hioi_dataset_scatter_comm (&posix_dataset->base, context->c_shared_comm, manifest, manifest_size, rc);
+    rc = hioi_dataset_scatter_comm (&posix_dataset->base, context->c_shared_comm, manifest, rc);
   }
 
   free (manifest_ids);
-  free (manifest);
+
+  if (manifest) {
+    hioi_manifest_release (manifest);
+  }
 
   return rc;
 }
@@ -573,8 +802,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
   hio_context_t context = hioi_object_context ((hio_object_t) dataset);
-  unsigned char *manifest = NULL;
-  size_t manifest_size = 0;
+  hio_manifest_t manifest = NULL;
   uint64_t start, stop;
   int rc = HIO_SUCCESS;
   char *path = NULL;
@@ -637,7 +865,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     /* read the manifest if it exists */
     if (HIO_SUCCESS == rc) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: loading manifest header from %s...", path);
-      rc = hioi_manifest_read (path, &manifest, &manifest_size);
+      rc = hioi_manifest_read (context, path, &manifest);
       free (path);
       path = NULL;
     }
@@ -645,15 +873,15 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     rc = builtin_posix_create_dataset_dirs (posix_module, posix_dataset);
     if (HIO_SUCCESS == rc) {
       /* serialize the manifest to send to remote ranks */
-      rc = hioi_manifest_serialize (dataset, &manifest, &manifest_size, false, false);
+      rc = hioi_manifest_generate (dataset, false, &manifest);
     }
   }
 
 #if HIO_MPI_HAVE(1)
   /* share dataset header will all processes in the communication domain */
-  rc = hioi_dataset_scatter_comm (dataset, context->c_comm, manifest, manifest_size, rc);
+  rc = hioi_dataset_scatter_comm (dataset, context->c_comm, manifest, rc);
 #endif
-  free (manifest);
+  hioi_manifest_release (manifest);
   if (HIO_SUCCESS != rc) {
     free (posix_dataset->base_path);
     return rc;
@@ -723,9 +951,9 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   stop = hioi_gettime ();
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully %s posix dataset "
-            "%s:%" PRIu64 " on data root %s. open time %" PRIu64 " usec",
+            "%s:%" PRIu64 " on data root %s. open time %" PRIu64 " usec. file mode: %d",
             (dataset->ds_flags & HIO_FLAG_CREAT) ? "created" : "opened", hioi_object_identifier(dataset),
-            dataset->ds_id, module->data_root, stop - start);
+            dataset->ds_id, module->data_root, stop - start, posix_dataset->ds_fmode);
 
   builtin_posix_trace (posix_dataset, "open", 0, 0, start, stop);
 
@@ -736,10 +964,9 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   hio_context_t context = hioi_object_context ((hio_object_t) dataset);
   hio_module_t *module = dataset->ds_module;
-  unsigned char *manifest = NULL;
+  hio_manifest_t manifest = NULL;
   uint64_t start, stop;
   int rc = HIO_SUCCESS;
-  size_t manifest_size;
 
   start = hioi_gettime ();
 
@@ -762,7 +989,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
     char *path;
 
     /* write manifest header */
-    POSIX_TRACE_CALL(posix_dataset, rc = hioi_dataset_gather_manifest (dataset, &manifest, &manifest_size, false, true),
+    POSIX_TRACE_CALL(posix_dataset, rc = hioi_dataset_gather_manifest (dataset, &manifest, true),
                      "gather_manifest", 0, 0);
     if (HIO_SUCCESS != rc) {
       dataset->ds_status = rc;
@@ -775,8 +1002,8 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
         return hioi_err_errno (errno);
       }
 
-      rc = hioi_manifest_save (dataset, manifest, manifest_size, path);
-      free (manifest);
+      rc = hioi_manifest_save (manifest, false, path);
+      hioi_manifest_release (manifest);
       free (path);
       if (HIO_SUCCESS != rc) {
         hioi_err_push (rc, &dataset->ds_object, "posix: error writing dataset manifest");
@@ -786,8 +1013,8 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
 #if HIO_MPI_HAVE(3)
     if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
       /* optimized mode requires a data manifest to describe how the data landed on the filesystem */
-      POSIX_TRACE_CALL(posix_dataset, rc = hioi_dataset_gather_manifest_comm (dataset, context->c_shared_comm, &manifest, &manifest_size,
-                                                                              posix_dataset->ds_use_bzip, false),
+      POSIX_TRACE_CALL(posix_dataset, rc = hioi_dataset_gather_manifest_comm (dataset, context->c_shared_comm, &manifest,
+                                                                              false),
                        "gather_manifest", 0, 0);
       if (HIO_SUCCESS != rc) {
         dataset->ds_status = rc;
@@ -800,8 +1027,8 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
           return hioi_err_errno (errno);
         }
 
-        rc = hioi_manifest_save (dataset, manifest, manifest_size, path);
-        free (manifest);
+        rc = hioi_manifest_save (manifest, posix_dataset->ds_use_bzip, path);
+        hioi_manifest_release (manifest);
         free (path);
         if (HIO_SUCCESS != rc) {
           hioi_err_push (rc, &dataset->ds_object, "posix: error writing dataset manifest");
@@ -836,8 +1063,59 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
   return rc;
 }
 
+#define UNLINK_MAX_THREADS 16
+
+static pthread_mutex_t unlink_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t unlink_threads[UNLINK_MAX_THREADS];
+static uint32_t unlink_mask;
+static int unlink_error;
+
+static void *builtin_posix_unlink_thread (void *arg) {
+  int ret = remove ((const char *) arg);
+  if (ret != 0 && !unlink_error) {
+    unlink_error = errno;
+  }
+
+  free (arg);
+
+  return NULL;
+}
+
+
 static int builtin_posix_unlink_cb (const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf) {
-  return remove (path);
+  char *new_path = strdup (path);
+  static int last = 0;
+  void *ret;
+
+  if (FTW_DP == typeflag) {
+    /* wait for all previous threads to exit before trying to remove a directory */
+    for (int i = 0 ; i < UNLINK_MAX_THREADS ; ++i) {
+      if (unlink_mask & (1 << i)) {
+        pthread_join (unlink_threads[i], &ret);
+      }
+    }
+
+    /* all threads clear */
+    unlink_mask = 0;
+
+    /* remove directory */
+    builtin_posix_unlink_thread ((void *) new_path);
+    return 0;
+  }
+
+  for (int i = 0 ; i < UNLINK_MAX_THREADS ; ++ i) {
+    if (!(unlink_mask & (1 << i))) {
+      unlink_mask |= (1 << i);
+      pthread_create (unlink_threads + i, NULL, builtin_posix_unlink_thread, (void *) new_path);
+      return 0;
+    }
+  }
+
+  pthread_join (unlink_threads[last], &ret);
+  last = (last + 1) % UNLINK_MAX_THREADS;
+  pthread_create (unlink_threads + last, NULL, builtin_posix_unlink_thread, (void *) new_path);
+
+  return 0;
 }
 
 static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
@@ -863,15 +1141,27 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
             name, set_id);
 
   /* use tree walk depth-first to remove all of the files for this dataset */
+
+  pthread_mutex_lock (&unlink_mutex);
+  unlink_mask = 0;
+  unlink_error = 0;
   rc = nftw (path, builtin_posix_unlink_cb, 32, FTW_DEPTH | FTW_PHYS);
   free (path);
-  if (0 > rc) {
-    hioi_err_push (hioi_err_errno (errno), &module->context->c_object, "posix: could not unlink dataset. errno: %d",
-                  errno);
-    return hioi_err_errno (errno);
+
+  for (int i = 0 ; i < UNLINK_MAX_THREADS ; ++i) {
+    void *ret;
+    if (unlink_mask & (1 << i)) {
+      pthread_join (unlink_threads[i], &ret);
+    }
+  }
+  pthread_mutex_unlock (&unlink_mutex);
+
+  if (unlink_error) {
+    hioi_err_push (hioi_err_errno (unlink_error), &module->context->c_object, "posix: could not unlink dataset. errno: %d",
+                  unlink_error);
   }
 
-  return HIO_SUCCESS;
+  return hioi_err_errno (unlink_error);
 }
 
 static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
@@ -940,7 +1230,7 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  if (access (path, R_OK) && !(HIO_FLAG_WRITE & posix_dataset->base.ds_flags)) {
+  if (F_OK != access (path, R_OK) && !(HIO_FLAG_WRITE & posix_dataset->base.ds_flags)) {
     /* fall back on old naming scheme */
     free (path);
 
@@ -1237,7 +1527,7 @@ static void builtin_posix_stripe_unlock (hio_element_t element, int stripe_id) {
 static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t *posix_module, hio_element_t element,
                                                          uint64_t offset, hio_iovec_t *iovec, int count, bool reading) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
-  size_t bytes_transferred = 0, ret, total = 0, iov_index, iov_count, partial, current;
+  size_t bytes_transferred = 0, ret, total = 0, iov_index, iov_count, remaining, current;
   hio_dataset_t dataset = &posix_dataset->base;
   uint64_t stop, start, data;
   int rc, locked_stripe_id = -1;
@@ -1263,7 +1553,7 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
   iov_index = 0;
   iov_count = iovec[0].count;
   data = iovec[0].base;
-  partial = 0;
+  remaining = iovec[0].size;
 
   do {
     size_t req = total, actual = total;
@@ -1279,7 +1569,7 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
     req = actual;
 
     do {
-      current = partial ? partial : (actual < iovec[iov_index].size ? actual : iovec[iov_index].size);
+      current = actual < remaining ? actual : remaining;
       hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
                 "posix: writing %lu bytes to file offset %" PRIu64, current, file->f_offset);
 
@@ -1323,6 +1613,7 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
       if (ret > 0) {
         bytes_transferred += ret;
         actual -= current;
+        remaining -= current;
       }
 
       if (ret < current) {
@@ -1333,23 +1624,26 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
       data += current;
       offset += current;
 
-      if (current < (iovec[iov_index].size - partial)) {
-        /* wrote only a part of the block */
-        partial = iovec[iov_index].size - partial;
-      } else if (1 == iov_count) {
-        /* finished with this entry */
-        ++iov_index;
-        if (iov_index < count) {
-          iov_count = iovec[iov_index].count;
-          data = iovec[iov_index].base;
+      if (0 == remaining) {
+        if (1 == iov_count) {
+          /* finished with this entry */
+          ++iov_index;
+          if (iov_index < count) {
+            iov_count = iovec[iov_index].count;
+            data = iovec[iov_index].base;
+          } else {
+            /* should be nothing left. assert if there is */
+            assert (0 == actual);
+          }
         } else {
-          /* should be nothing left. assert if there is */
-          assert (0 == actual);
+          /* move on to the next piece */
+          data += iovec[iov_index].stride;
+          --iov_count;
         }
-      } else {
-        /* move on to the next piece */
-        data += iovec[iov_index].stride;
-        --iov_count;
+
+        if (iov_index < count) {
+          remaining = iovec[iov_index].size;
+        }
       }
     } while (actual);
 
@@ -1506,6 +1800,7 @@ hio_module_t builtin_posix_module_template = {
   .ds_object_size = sizeof (builtin_posix_module_dataset_t),
 
   .dataset_list   = builtin_posix_module_dataset_list,
+  .dataset_dump   = builtin_posix_module_dataset_dump,
 
   .fini           = builtin_posix_module_fini,
 };
