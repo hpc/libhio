@@ -43,9 +43,11 @@ static char * help =
   "  e <count>     write <count> lines to stderr\n"
   "  s <seconds>   sleep for <seconds>\n"
   "  srr <seed>    seed random rank - seed RNG with <seed> mixed with rank (if MPI)\n"
-  "  va <bytes>    malloc <bytes> of memory\n"
-  "  vt <stride>   touch most recently allocated memory every <stride> bytes\n"
-  "  vf            free most recently allocated memory\n"
+  "  va <bytes>    allocate <bytes> of memory with malloc\n"
+  "  vt <stride>   touch latest allocation every <stride> bytes\n"
+  "  vw            write data pattern to latest allocation\n" 
+  "  vr            read (and check) data pattern from latest allocation\n" 
+  "  vf            free latest allocation\n"
   "  hx <min> <max> <blocks> <limit> <count>\n"
   "                Perform <count> malloc/touch/free cycles on memory blocks ranging\n"
   "                in size from <min> to <max>.  Allocate no more than <limit> bytes\n"
@@ -204,8 +206,8 @@ ACTION_CHECK(va_check) {
   S.memcount++;
 }
 
-ACTION_CHECK(vt_check) {
-  if (S.memcount <= 0) ERRX("%s: touch without corresponding allocate", A.desc);
+ACTION_CHECK(vtwr_check) {
+  if (S.memcount <= 0) ERRX("%s: %s without corresponding va allocation", A.desc, A.action);
 }
 
 ACTION_CHECK(vf_check) {
@@ -250,6 +252,46 @@ ACTION_RUN(vt_run) {
 
   } else {
     VERB0("mem_hand - Warning: no memory allocation to touch");
+  }
+}
+
+ACTION_RUN(vw_run) {
+  if (S.memcount > 0) {
+    ETIMER tmr;
+    char * p = (char*)S.memptr + sizeof(struct memblk);
+    size_t len = S.memptr->size - sizeof(struct memblk);
+    if (! G.wbuf_ptr ) dbuf_init(&G,RAND22, 20 * 1024 * 1024); 
+    DBG4("Writing memory at %p, length 0x%llx", p, len);
+    void * expected = get_wbuf_ptr(&G, "vw", 0, (U64)p);
+    ETIMER_START(&tmr);
+    memcpy(p, expected, len);
+    double delta_t = ETIMER_ELAPSED(&tmr);
+    prt_mmmst(&G, (double)len/delta_t, "vw rate", "B/S");
+  } else {
+    VERB0("mem_hand - Warning: no memory allocation to write");
+  }
+}
+
+ACTION_RUN(vr_run) {
+  if (S.memcount > 0) {
+    ETIMER tmr;
+    char * p = (char*)S.memptr + sizeof(struct memblk);
+    size_t len = S.memptr->size - sizeof(struct memblk);
+    if (! G.wbuf_ptr ) dbuf_init(&G,RAND22, 20 * 1024 * 1024); 
+    DBG4("Reading memory at %p, length 0x%llx", p, len);
+    ETIMER_START(&tmr);
+    if (G.options & OPT_RCHK) {
+      int rc = check_read_data(&G, "vr", p, len, 0, (U64)p);
+      if (rc) { 
+        G.local_fails++;
+      }
+    } else {
+      memcpy(G.rbuf_ptr, p, len);
+    }
+    double delta_t = ETIMER_ELAPSED(&tmr);
+    prt_mmmst(&G, (double)len/delta_t, "vr rate", "B/S");
+  } else {
+    VERB0("mem_hand - Warning: no memory allocation to read");
   }
 }
 
@@ -604,7 +646,9 @@ MODULE_INSTALL(xexec_base_install) {
     {"s",     {DOUB, NONE, NONE, NONE, NONE}, sleep_check,   sleep_run   },
     {"srr",   {SINT, NONE, NONE, NONE, NONE}, NULL,          srr_run     },
     {"va",    {UINT, NONE, NONE, NONE, NONE}, va_check,      va_run      },
-    {"vt",    {PINT, NONE, NONE, NONE, NONE}, vt_check,      vt_run      },
+    {"vt",    {PINT, NONE, NONE, NONE, NONE}, vtwr_check,    vt_run      },
+    {"vw",    {NONE, NONE, NONE, NONE, NONE}, vtwr_check,    vw_run      },
+    {"vr",    {NONE, NONE, NONE, NONE, NONE}, vtwr_check,    vr_run      },
     {"vf",    {NONE, NONE, NONE, NONE, NONE}, vf_check,      vf_run      },
     {"hx",    {UINT, UINT, UINT, UINT, UINT}, hx_check,      hx_run      },
     {"ni",    {UINT, PINT, NONE, NONE, NONE}, ni_check,      ni_run      },

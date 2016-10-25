@@ -1,0 +1,43 @@
+#! /bin/bash
+# -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
+#
+# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+. ./run_setup
+
+# Write N-N test case with threaded element unlink.
+
+batch_sub $(( $ranks * $blksz * $nblk ))
+
+cmdw="
+  name run81 v $verbose_lev d $debug_lev mi 0
+  /@@ Write N-N test case with threaded element unlink @/
+  dbuf RAND22P 20Mi
+  hi MYCTX $HIO_TEST_ROOTS
+  hda NTNDS 97 WRITE,CREAT UNIQUE hdo
+  heo MYEL WRITE,CREAT,TRUNC
+  hvp c. .
+  lc $nblk
+    hew 0 $blksz
+  le
+  hec hdc hdf
+  mb hefum $nseg
+  hf mgf mf
+"
+
+clean_roots $HIO_TEST_ROOTS
+
+myrun $HIO_TEST_XEXEC $cmdw
+cmd aprun -n 1 find $DW_JOB_STRIPED -ls 
+cmd date 
+ 
+check_rc
+exit $max_rc
+

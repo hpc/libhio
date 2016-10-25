@@ -85,7 +85,7 @@ synexit() {
 # Functions for run_setup and test scripts to use
 #----------------------------------------------------------------------------
 cmd() {
-  echo "`date \"$datefmt\"` $host ---> $*"
+  echo "`date \"$datefmt\"` $host run_setup ---> $*"
   eval "$*"
   return $?
 }

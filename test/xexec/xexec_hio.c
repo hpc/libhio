@@ -12,6 +12,8 @@
 #include "xexec.h"
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
+#include <pthread.h>
 #ifdef HIO
 #include "hio.h"
 #include "hio_config.h"
@@ -46,6 +48,8 @@ static char * help =
   "  hdc           Dataset close\n"
   "  hdf           Dataset free\n"
   "  hdu <name> <id> CURRENT|FIRST|ALL  Dataset unlink\n"
+  "  heful         EXPERIMENTAL Local unlink of most recent element file\n"
+  "  hefum <th_ct> EXPERIMENTAL Multi-threaded unlink of most recent element files from rank 0\n"
   "  hf            Fini\n"
   "  hxrc <rc_name|ANY> Expect non-SUCCESS rc on next HIO action\n"
   "  hxct <count>  Expect count != request on next R/W.  -999 = any count\n"
@@ -377,6 +381,28 @@ ACTION_CHECK(her_check) {
   if (size > G.rwbuf_len) ERRX("%s; size > G.rwbuf_len", A.desc);
 }
 
+char * get_hio_dw_path(GLOBAL * gptr, struct action * actionp, int rank) {
+  // Return the HIO DataWarp physical file name; caller must free
+  // This works for the current version of HIO in basic mode, no guarantees
+   // going forward.
+  char * retval = NULL;
+  char * dw_path = getenv("DW_JOB_STRIPED");
+  if (dw_path) {
+    char path[512];
+    //                                      root
+    //                                         ctx    dsn
+    //                                                   id                     el_name
+    int len = snprintf(path, sizeof(path), "%s/%s.hio/%s/%"PRIi64"/element_data.%s",
+                       dw_path, S.hio_context_name, S.hio_dataset_name,
+                       S.hio_ds_id_act, S.hio_element_name);
+    if (HIO_SET_ELEMENT_UNIQUE == S.hio_dataset_mode) {
+      snprintf(path+len, sizeof(path)-len, ".%08d", rank);
+    }
+    retval = STRDUPX(path);
+  } 
+  return retval;
+}
+
 ACTION_RUN(her_run) {
   ssize_t hcnt;
   I64 ofs_param = V0.u;
@@ -392,30 +418,16 @@ ACTION_RUN(her_run) {
   S.hio_her_time += ETIMER_ELAPSED(&local_tmr);
   HCNT_TEST(hio_element_read)
   S.hio_rw_count[0] += hcnt;
-
+  
   if (G.options & OPT_RCHK) {
     ETIMER_START(&local_tmr);
     // Force error for unit test
-    // *(char *)(G.rbuf_ptr+16) = '\0';
+    //*(((char *)G.rbuf_ptr)+16) = '\0';
     int rc = check_read_data(&G, "hio_element_read", G.rbuf_ptr, hreq, ofs_abs, S.hio_element_hash);
     if (rc) { 
       G.local_fails++;
-      char * dw_path = getenv("DW_JOB_STRIPED");
-      if (dw_path) {
-        // Attempt to dump the datawarp physical file data directly (without HIO) 
-        // This works for the current version of HIO in basic mode, no guarantees
-        // going forward.
-        char path[512];
-        //                            root
-        //                               ctx    dsn
-        //                                         id              el_name
-        int len = snprintf(path, sizeof(path), "%s/%s.hio/%s/%"PRIi64"/element_data.%s",
-                           dw_path, S.hio_context_name, S.hio_dataset_name,
-                           S.hio_ds_id_act, S.hio_element_name);
-        if (HIO_SET_ELEMENT_UNIQUE == S.hio_dataset_mode) {
-          snprintf(path+len, sizeof(path)-len, ".%08d", G.myrank);
-        }
-
+      char * path = get_hio_dw_path(&G, actionp, G.myrank);
+      if (path) {
         FILE * elf = fopen(path, "r");
         if (!elf) {
           VERB0("fopen(\"%s\", \"r\") failed, errno: %d", path, errno);
@@ -435,6 +447,7 @@ ACTION_RUN(her_run) {
           }
         } 
       }
+      FREEX(path);
     }
     S.hio_exc_time += ETIMER_ELAPSED(&local_tmr);
   }
@@ -532,8 +545,73 @@ ACTION_RUN(hdu_run) {
   char * name = V0.s;
   U64 id = V1.u;
   hio_unlink_mode_t ulm = (enum hio_unlink_mode_t) V2.i;
-  hrc = hio_dataset_unlink(S.context, name, id, ulm);
+  hrc = hio_dataset_unlink(S.context, name, id, ulm); 
   HRC_TEST(hio_dataset_unlink)
+}
+
+ACTION_RUN(heful_run) {
+  char * path = get_hio_dw_path(&G, actionp, G.myrank);
+  if (path) {
+    ETIMER local_tmr;
+    ETIMER_START(&local_tmr);
+    int rc = unlink(path);
+    double unl_time = ETIMER_ELAPSED(&local_tmr);
+    if (rc) {
+      G.local_fails++;
+      VERB0("unlink(%s) rc: %d, errno: %d(%s)", path, rc, errno, strerror(errno));
+    }
+    prt_mmmst(&G, unl_time,"heful local unlink time", "S");
+    FREEX(path);
+  }
+}
+
+struct thparm {
+  pthread_t thread;
+  GLOBAL * gptr;
+  struct action * actionp;
+  int rank_first;
+  int rank_stride;
+};
+
+void * unlink_file(void * vtp) {
+  struct thparm * tp = (struct thparm *) vtp;
+  int retval = 0;
+  for (int rank = tp->rank_first; rank < tp->gptr->mpi_size; rank += tp->rank_stride) {
+    char * path = get_hio_dw_path(tp->gptr, tp->actionp, rank);
+    if (path) {
+      int rc = unlink(path);
+      if (rc) {
+        printf("unlink(%s) rc: %d errno: %d(%s)\n", (char *) path, rc, errno, strerror(errno));
+        retval = errno;
+      } 
+      free(path);
+    }
+  }
+  return (void *)(I64)retval;
+}
+
+ACTION_RUN(hefum_run) {
+  if (G.myrank == 0) {
+    int tnum = V0.u;
+    ETIMER local_tmr;
+    ETIMER_START(&local_tmr);
+    struct thparm tp[tnum];
+    for (int i=0; i<tnum; ++i) {
+      tp[i].gptr = &G;
+      tp[i].actionp = actionp;
+      tp[i].rank_first = i;
+      tp[i].rank_stride = tnum;
+      int rc = pthread_create(&tp[i].thread, NULL, unlink_file, &tp[i]);
+      if (rc) ERRX("ptread_create rc: %d(%s)", rc, strerror(rc));
+    }
+    for (int i=0; i<tnum; ++i) {
+      void * trc;
+      int rc = pthread_join(tp[i].thread, &trc);
+      if (rc || trc) ERRX("pthread_join rc: %d trc: %p", rc, trc);
+    } 
+    double unl_time = ETIMER_ELAPSED(&local_tmr);
+    VERB1("hefum threads: %d unlink time: %f S", tnum, unl_time);
+  } 
 }
 
 ACTION_RUN(hf_run) {
@@ -700,7 +778,7 @@ ACTION_RUN(hdsc_run) {
 ACTION_RUN(dsdo_run) {
   char * dw_dir = V0.s;
   char * pfs_dir = V1.s;
-  enum dw_stage_type type = V2.i;
+  enum dw_stage_type type = (enum dw_stage_type) V2.i;
   int rc = dw_stage_directory_out(dw_dir, pfs_dir, type);
   if (rc || MY_MSG_CTX->verbose_level >= 3) {                                          
     MSG("dw_stage_directory_out(%s, %s, %s) rc: %d", dw_dir, pfs_dir, enum_name(MY_MSG_CTX, &etab_dwst, type), rc);
@@ -770,6 +848,8 @@ MODULE_INSTALL(xexec_hio_install) {
     {"hdc",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
     {"hdf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdf_run     },
     {"hdu",   {STR,  UINT, HULM, NONE, NONE}, NULL,          hdu_run     },
+    {"heful", {NONE, NONE, NONE, NONE, NONE}, NULL,          heful_run   },
+    {"hefum", {UINT, NONE, NONE, NONE, NONE}, NULL,          hefum_run   },
     {"hf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
     {"hxrc",  {HERR, NONE, NONE, NONE, NONE}, NULL,          hxrc_run    },
     {"hxct",  {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },

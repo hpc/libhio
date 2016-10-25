@@ -140,21 +140,6 @@ typedef struct xexec_global {
   }                                                                                       \
   if ( (MY_MSG_CTX)->verbose_level >= VERB_LEV_MULTI ) RANK_SERIALIZE_END;
 
-#ifdef MPI
-#else
-
-
-
-#endif 
-
-
-
-
-
-
-
-
-
 //----------------------------------------------------------------------------
 // Action handler interface
 //----------------------------------------------------------------------------

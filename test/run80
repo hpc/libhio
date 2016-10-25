@@ -1,0 +1,38 @@
+#! /bin/bash
+# -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
+#
+# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+. ./run_setup
+
+# Memory write-read test case with read data value checking.
+
+batch_sub $(( $ranks * $blksz * $nblk ))
+
+cmd="
+  name run80 v $verbose_lev d $debug_lev mi 0
+  /@@ Read and write memory test case with read data value checking @/
+  dbuf RAND22 20Mi
+  lc $nseg
+    lc $nblk
+      va $blksz vw
+    le
+    lc $nblk
+      vr vf
+    le
+  le
+  mgf mf
+"
+
+clean_roots 
+myrun $HIO_TEST_XEXEC $cmd
+myrun $HIO_TEST_XEXEC $cmd
+check_rc
+exit $max_rc

@@ -80,13 +80,13 @@ synexit() {
 # Functions for run_setup and test scripts to use
 #----------------------------------------------------------------------------
 cmd() {
-  echo "$host run_combo: ---> $*"
+  echo "`date \"$datefmt\"` $host run_combo ---> $*"
   eval "$*"
   return $?
 }
 
 msg() {
-  echo "$host run_combo: $*"
+  echo "`date \"$datefmt\"` $host run_combo: $*"
 }
 
 is_not_flag() {
@@ -97,6 +97,7 @@ is_not_flag() {
 #----------------------------------------------------------------------------
 # Parse arguments
 #----------------------------------------------------------------------------
+datefmt="+%Y-%m-%d %H:%M:%S"
 args=$*
 host=`hostname -s`
 batch=0
@@ -202,6 +203,7 @@ if [[ ! $delay =~ ^[0-9]+$ ]]; then synexit "Error: invalid -e integer \"$delay\
 #----------------------------------------------------------------------------
 declare -a fails
 first=1
+count=0
 for r in "${ranks[@]}"; do
   for n in "${nodes[@]}"; do
     for p in "${ppn[@]}"; do
@@ -240,6 +242,7 @@ for r in "${ranks[@]}"; do
                 echo $c >> $output_file
                 echo $c
               fi 
+              count=$((count+1)) 
             done
           done
         done
@@ -248,6 +251,6 @@ for r in "${ranks[@]}"; do
   done
 done
 
-msg "Failure count: ${#fails[@]}"
+msg "Tests: $count  Failures: ${#fails[@]}"
 for (( i=0; i<${#fails[@]}; i++ )); do msg ${fails[$i]}; done
 # --- end of run_combo ---
