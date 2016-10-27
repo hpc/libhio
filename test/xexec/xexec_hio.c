@@ -419,11 +419,11 @@ ACTION_RUN(her_run) {
   HCNT_TEST(hio_element_read)
   S.hio_rw_count[0] += hcnt;
   
-  if (G.options & OPT_RCHK) {
+  if ((G.options & OPT_RCHK) && (hcnt >= 0)) {
     ETIMER_START(&local_tmr);
     // Force error for unit test
     //*(((char *)G.rbuf_ptr)+16) = '\0';
-    int rc = check_read_data(&G, "hio_element_read", G.rbuf_ptr, hreq, ofs_abs, S.hio_element_hash);
+    int rc = check_read_data(&G, "hio_element_read", G.rbuf_ptr, hcnt, ofs_abs, S.hio_element_hash);
     if (rc) { 
       G.local_fails++;
       char * path = get_hio_dw_path(&G, actionp, G.myrank);

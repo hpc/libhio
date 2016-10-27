@@ -216,6 +216,7 @@ for v in $vers; do
     ga-pgi    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
     t2-gnuk   ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu -l craype-mic-knl  ;;
+    t2-intelk ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs   ;;
 
     tt-gnu    ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
     tt-gnuk   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;

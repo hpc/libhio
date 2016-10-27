@@ -229,7 +229,7 @@ ACTION_RUN(fr_run) {
     ETIMER_START(&local_tmr);
     // Force error for unit test
     // *(char *)(G.rbuf_ptr+16) = '\0';
-    int rc = check_read_data(&G, "fread", G.rbuf_ptr, len_req, ofs_abs, S.fio_id_hash);
+    int rc = check_read_data(&G, "fread", G.rbuf_ptr, len_act, ofs_abs, S.fio_id_hash);
     if (rc) { 
       G.local_fails++;
     }
