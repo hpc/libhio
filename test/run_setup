@@ -42,6 +42,7 @@ synexit() {
   echo "        [-r <num_ranks>]"
   echo "        [-n <num_nodes>]"
   echo "        [-p <ppn>]"
+  echo "        [-j <tpp>]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
   echo "        [-b] [-c] [-a] [-q]"
@@ -62,6 +63,7 @@ synexit() {
   echo "    -n <num_nodes>    Number of nodes.  Default is all allocated nodes"
   echo "                      or 2 or 1 on Mac OS"
   echo "    -p <ppn>          PEs per node.  If specified with -n and -r, must agree"
+  echo "    -j <tpp>          Threads per processor, only valid on Cray, default 1"
   echo "    -v <verbose_lev>  Verbosity level for xexec2, default 1"
   echo "    -d <debug_lev>    Debug level for xexec2, default 0"
   echo "    -b                Submit batch job with these options"
@@ -166,10 +168,11 @@ batch_sub() {
     echo "cat $jobsh" >> $jobsh
     echo "echo \"\"" >> $jobsh
 
-    afterparm=""
-    if [[ $after -gt 0 ]]; then afterparm="-a"; fi
+    cparm=""
+    if [[ $after -gt 0 ]]; then cparm="-a"; fi
+    if [[ $tpp -ne 1 ]]; then cparm="$cparm -j $tpp"; fi
     echo "# Submit Args: $args" >>$jobsh
-    echo "$0 -s $size $afterparm -w $dw_alloc_mode -v $verbose_lev -d $debug_lev" >> $jobsh
+    echo "$0 -s $size $cparm -w $dw_alloc_mode -v $verbose_lev -d $debug_lev" >> $jobsh
 
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
 
@@ -281,6 +284,7 @@ clean_roots() {
 
 # function to invoke mpi on various platforms - sets max_rc
 myrun() {
+  if [[ $tpp -ne 1 ]]; then mympicmd="$mympicmd -j $tpp"; fi
   #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
   #cmd "$mympicmd -n $ranks echo \"LD_LIBRARY_PATH=\$LD_LIBRARY_PATH\""
   #cmd "$mympicmd -n $ranks ls -l \${LD_LIBRARY_PATH%%:*}"
@@ -305,6 +309,7 @@ jobstart=`date "$datefmt"`
 host=`hostname -s`
 hostpre=${HOST:0:3}
 max_rc=0
+tpp=1
 verbose_lev=1
 debug_lev=0
 batch=0
@@ -413,13 +418,14 @@ else
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:v:d:bcw:ax:k:m:u:q" optname; do
+while getopts "hs:r:n:p:j:v:d:bcw:ax:k:m:u:q" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
     r ) ranks=$OPTARG;;
     n ) nodes=$OPTARG;;
     p ) ppn=$OPTARG;;
+    j ) tpp=$OPTARG;;
     v ) verbose_lev=$OPTARG;;
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
@@ -448,9 +454,9 @@ esac
 # Figure out nodes, ranks and ppn
 until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
   # Two parm cases -- calc third parm
-  if   [[ -n $nodes && -n $ranks ]]; then   ppn=$(( $ranks / $nodes ))
-  elif [[ -n $nodes && -n $ppn ]];   then ranks=$(( $nodes * $ppn   ))
-  elif [[ -n $ranks && -n $ppn ]];   then nodes=$(( $ranks / $ppn   ))
+  if   [[ -n $nodes && -n $ranks ]]; then   ppn=$(( ranks / nodes / tpp ))
+  elif [[ -n $nodes && -n $ppn ]];   then ranks=$(( nodes * ppn * tpp   ))
+  elif [[ -n $ranks && -n $ppn ]];   then nodes=$(( ranks / ppn / tpp   ))
   # Nodes only specified, determine ppn and iterate
   elif [[ -n $nodes ]]; then
     if   [[ -n $PBS_NUM_PPN ]]; then ppn=$PBS_NUM_PPN
@@ -481,7 +487,7 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
   fi
 done
 
-if [[ $ranks -ne $(($nodes * $ppn)) ]]; then errx "ranks ($ranks) != nodes ($nodes) x ppn ($ppn)"; fi
+if [[ $ranks -ne $((nodes * ppn * tpp)) ]]; then errx "ranks ($ranks) != nodes ($nodes) x ppn ($ppn) x tpp ($tpp)"; fi
 
 
 # set some convenient constants
@@ -561,7 +567,7 @@ if [[ $batch -eq 0 ]]; then
   elif [[ ${OSTYPE:0:5} == "linux" ]];  then export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
   else errx "OSTYPE \"$OSTYPE\" not recognized"; fi
 
-  export HIO_TEST_MI_SHIFT=${ppn-0}
+  export HIO_TEST_MI_SHIFT=$((ppn * tpp))
   export HIO_TEST_XEXEC=${HIO_TEST_XEXEC="./xexec/.libs/xexec.x"}
 
   addifd() {
@@ -634,7 +640,7 @@ if [[ $batch -eq 0 ]]; then
     msg "                    build: \"$build\""
     msg "                     libs: \"$libs\""
     msg "                   mpicmd: \"$mympicmd\""
-    msg "          nodes/ranks/ppn: $nodes / $ranks / $ppn"
+    msg "      nodes/ranks/ppn/tpp: $nodes / $ranks / $ppn / $tpp"
     msg "                     size: \"$size\""
     msg "              totsz/blksz: $(cvt $totsz) / $(cvt $blksz)"
     msg "       nblk/nseg/nblkpseg: $(cvt $nblk) / $(cvt $nseg) / $(cvt $nblkpseg)"

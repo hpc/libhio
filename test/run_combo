@@ -25,6 +25,7 @@ synexit() {
   echo "        [-x <dw_alloc_pct> [<dw_alloc_pct>...] ]"
   echo "        [-s <size> [<size>...] ]"
   echo "        [-p <ppn> [<ppn>...] ]"
+  echo "        [-j <tpp> [<tpp>...] ]"
   echo "        [-n <num_nodes> [<num_nodes>...] ]"
   echo "        [-r <num_ranks> [<num_ranks>...] ]"
   echo "        [-m \"<msub args>\" [\"<msub_args>\"] ]"
@@ -50,6 +51,7 @@ synexit() {
   echo "                       blksz - size of each write/read in KiB"
   echo "                       nseg - number of segments (not used by all tests)"
   echo "    -p <ppn>           PPN parameters"
+  echo "    -j <tpp>           Thread-per-processor parameters, only valid on Cray"
   echo "    -n <num_nodes>     Number of nodes parameters."
   echo "    -r <num_ranks>     Number of ranks parameters"
   echo "  Non-iterating Options:"
@@ -107,7 +109,7 @@ uber_cmd=""
 output_file=""
 delay=0
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpxmv:d:bcaw:k:u:o:e:" optname; do
+while getopts "htsrnpjxmv:d:bcaw:k:u:o:e:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -142,6 +144,13 @@ while getopts "htsrnpxmv:d:bcaw:k:u:o:e:" optname; do
     p ) eval "aaa=\${$((OPTIND))}"
         while [[ -n $aaa ]] && is_not_flag "$aaa"; do
           ppn+=("$aaa")
+          OPTIND=$((OPTIND+1))
+          eval "aaa=\${$((OPTIND))}"
+        done
+        ;;
+    j ) eval "aaa=\${$((OPTIND))}"
+        while [[ -n $aaa ]] && is_not_flag "$aaa"; do
+          tpp+=("$aaa")
           OPTIND=$((OPTIND+1))
           eval "aaa=\${$((OPTIND))}"
         done
@@ -183,6 +192,7 @@ if [[ -z $size ]];  then size+=(" ");fi
 if [[ -z $ranks ]]; then ranks+=(" ");fi
 if [[ -z $nodes ]]; then nodes+=(" ");fi
 if [[ -z $ppn ]];   then ppn+=(" ");fi
+if [[ -z $tpp ]];   then tpp+=(" ");fi
 if [[ -z $pct ]];   then pct+=(" ");fi
 if [[ -z $marg ]];  then marg+=(" ");fi
 
@@ -191,6 +201,7 @@ if [[ -z $marg ]];  then marg+=(" ");fi
 #msg "ranks: '${ranks[@]}'"
 #msg "nodes: '${nodes[@]}'"
 #msg "ppn:   '${ppn[@]}'"
+#msg "tpp:   '${tpp[@]}'"
 #msg "pct:   '${pct[@]}'"
 #msg "marg:  '${marg[@]}'"
 
@@ -207,42 +218,45 @@ count=0
 for r in "${ranks[@]}"; do
   for n in "${nodes[@]}"; do
     for p in "${ppn[@]}"; do
-      for s in "${size[@]}"; do
-        for a in "${pct[@]}"; do
-          for t in "${test[@]}"; do
-            for m in "${marg[@]}"; do
-              #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" m: \"$m\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
-              c=$t
-              if [[ $s != " " ]]; then c="$c -s $s"; fi
-              if [[ $r != " " ]]; then c="$c -r $r"; fi
-              if [[ $n != " " ]]; then c="$c -n $n"; fi
-              if [[ $p != " " ]]; then c="$c -p $p"; fi
-              if [[ $a != " " ]]; then c="$c -x $a"; fi
-              if [[ $m != " " ]]; then c="$c -m \"$m\""; fi
-              if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
-              if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
-              if [[ $batch -eq 1 ]];    then c="$c -b"; fi
-              if [[ $chain -eq 1 ]];    then c="$c -c"; fi
-              if [[ $after -eq 1 ]];    then c="$c -a"; fi
-              if [[ -n $dw_alloc_mode ]];   then c="$c -w $dw_alloc_mode"; fi
-              if [[ -n $proc_type ]];   then c="$c -k $proc_type"; fi
-              if [[ -n $uber_cmd ]];    then c="$c -u \"$uber_cmd\""; fi
+      for j in "${tpp[@]}"; do
+        for s in "${size[@]}"; do
+          for a in "${pct[@]}"; do
+            for t in "${test[@]}"; do
+              for m in "${marg[@]}"; do
+                #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" j: \"$j\" m: \"$m\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
+                c=$t
+                if [[ $s != " " ]]; then c="$c -s $s"; fi
+                if [[ $r != " " ]]; then c="$c -r $r"; fi
+                if [[ $n != " " ]]; then c="$c -n $n"; fi
+                if [[ $p != " " ]]; then c="$c -p $p"; fi
+                if [[ $j != " " ]]; then c="$c -j $j"; fi
+                if [[ $a != " " ]]; then c="$c -x $a"; fi
+                if [[ $m != " " ]]; then c="$c -m \"$m\""; fi
+                if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
+                if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
+                if [[ $batch -eq 1 ]];    then c="$c -b"; fi
+                if [[ $chain -eq 1 ]];    then c="$c -c"; fi
+                if [[ $after -eq 1 ]];    then c="$c -a"; fi
+                if [[ -n $dw_alloc_mode ]];   then c="$c -w $dw_alloc_mode"; fi
+                if [[ -n $proc_type ]];   then c="$c -k $proc_type"; fi
+                if [[ -n $uber_cmd ]];    then c="$c -u \"$uber_cmd\""; fi
 
-              if [[ first -eq 0 && delay -ne 0 ]]
-                then cmd "sleep $delay"
-              else
-                first=0
-              fi              
+                if [[ first -eq 0 && delay -ne 0 ]]
+                  then cmd "sleep $delay"
+                else
+                  first=0
+                fi              
  
-              if [[ -z $output_file ]]; then  
-                cmd $c
-                rc=$?
-                if [[ rc -ne 0 ]]; then fails=("${fails[@]}" "rc:$rc cmd:$c"); fi
-              else
-                echo $c >> $output_file
-                echo $c
-              fi 
-              count=$((count+1)) 
+                if [[ -z $output_file ]]; then  
+                  cmd $c
+                  rc=$?
+                  if [[ rc -ne 0 ]]; then fails=("${fails[@]}" "rc:$rc cmd:$c"); fi
+                else
+                  echo $c >> $output_file
+                  echo $c
+                fi 
+                count=$((count+1)) 
+              done
             done
           done
         done
