@@ -13,6 +13,9 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <pthread.h>
 #ifdef HIO
 #include "hio.h"
@@ -67,6 +70,9 @@ static char * help =
   #if HIO_USE_DATAWARP
   "  dwds <directory> Issue dw_wait_directory_stage\n"
   "  dsdo <dw_dir> <pfs_dir> <type> Issue dw_stage_directory_out\n"
+  "  dwss <path> <size> <width> Issue dw_set_stripe_configuration; if file exists, must be\n"
+  "                             empty, if not exist, file created, if directory exists, striping set\n"
+  "  dwgs <path>   Issue dw_get_stripe_configuration, display results\n"
   #if DW_PH_2
   "  dwws <file>   Issue dw_wait_sync_complete\n"
   #endif // DW_PH_2
@@ -793,6 +799,121 @@ ACTION_RUN(dwds_run) {
   VERB1("dw_wait_directory_stage(%s) rc: %d (%s)  time: %f Sec", V0.s, rc, strerror(abs(rc)), ETIMER_ELAPSED(&tmr));
 }
 
+ACTION_RUN(dwss_run) {
+  char * path = V0.s;
+  int stripe_size = V1.u;
+  int stripe_width = V2.u;
+  int rc, quit = 0;
+  struct stat stat;
+
+  int fd = open(path, O_RDONLY);
+  if (-1 == fd) {
+    if (ENOENT == errno) {
+      fd = open(path, O_CREAT, S_IRUSR + S_IWUSR + S_IRGRP + S_IWGRP + S_IROTH + S_IWOTH );
+      if (-1 == fd) {
+        VERB0("dwss: unable to create path \"%s\", errno: %d(%s)", path, errno, strerror(errno));
+        quit = 1;
+      }
+    } else {  
+      VERB0("dwss: unable to open path \"%s\", errno: %d(%s)", path, errno, strerror(errno));
+      quit = 1;
+    }
+  }
+
+  if (!quit) {
+    rc = fstat(fd, &stat);
+    if (rc != 0) {
+      VERB0("dwss: fstat fails, errno: %d(%s)", errno, strerror(errno));
+      quit = 1;
+    }
+  }
+
+  if (!quit) {
+    if (stat.st_mode & S_IFREG && stat.st_size != 0) {
+      VERB0("dwss: cannot set striping on non-empty file %d", path);
+      quit = 1;
+    }
+  }
+
+  if (!quit) {
+    rc = dw_set_stripe_configuration(fd, stripe_size, stripe_width);
+    if (rc < 0) {
+      VERB0("dwgs: dw_set_stripe_configuration rc: %d(%s)", rc, strerror(-rc));
+      quit = 1;
+    }
+  }
+
+  if (!quit) {
+    char * type;
+    if (stat.st_mode & S_IFREG) type = "File";
+    else if (stat.st_mode & S_IFDIR) type = "Dir";
+    else type = "Other";
+
+    VERB1("dwss: %s %s set stripe size: %d width: %d", 
+          type, path, stripe_size, stripe_width);
+  }
+  
+  if (-1 != fd) {
+    rc = close(fd);
+    if (rc < 0) {
+      VERB0("dwss: close error, errno: %d(%s)", errno, strerror(errno));
+      quit = 1;
+    }
+  } 
+
+  if (quit) G.local_fails++;
+ 
+}
+
+ACTION_RUN(dwgs_run) {
+  char * path = V0.s;
+  int rc, quit = 0;
+  struct stat stat;
+  int stripe_size, stripe_width, starting_index;
+
+  int fd = open(path, O_RDONLY);
+  if (-1 == fd) {
+    VERB0("dwgs: unable to open path \"%s\", errno: %d(%s)", path, errno, strerror(errno));
+    quit = 1;
+  }
+
+  if (!quit) {
+    rc = fstat(fd, &stat);
+    if (rc != 0) {
+      VERB0("dwgs: fstat fails, errno: %d(%s)", errno, strerror(errno));
+      quit = 1;
+    }
+  }
+
+  if (!quit) {
+    rc = dw_get_stripe_configuration(fd, &stripe_size, &stripe_width, &starting_index);
+    if (rc < 0) {
+      VERB0("dwgs: dw_get_stripe_configuration rc: %d(%s)", rc, strerror(-rc));
+      quit = 1;
+    }
+  }
+  
+  if (!quit) {
+    char * type;
+    if (stat.st_mode & S_IFREG) type = "File";
+    else if (stat.st_mode & S_IFDIR) type = "Dir";
+    else type = "Other";
+
+    VERB1("dwgs: %s %s stripe size: %d width: %d start index: %d", 
+          type, path, stripe_size, stripe_width, starting_index);
+  }
+  
+  if (-1 != fd) {
+    rc = close(fd);
+    if (rc < 0) {
+      VERB0("dwgs: close error, errno: %d(%s)", errno, strerror(errno));
+      quit = 1;
+    }
+  } 
+
+  if (quit) G.local_fails++;
+}
+
 
 #if DW_PH_2
 ACTION_RUN(dwws_run) {
@@ -862,6 +983,8 @@ MODULE_INSTALL(xexec_hio_install) {
     #if HIO_USE_DATAWARP
     {"dsdo",  {STR,  STR,  DWST, NONE, NONE}, NULL,          dsdo_run    },
     {"dwds",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwds_run    },
+    {"dwss",  {STR,  UINT, UINT, NONE, NONE}, NULL,          dwss_run    },
+    {"dwgs",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwgs_run    },
     #if DW_PH_2
     {"dwws",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwws_run    },
     #endif  // DW_PH_2
