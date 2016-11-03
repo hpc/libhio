@@ -1,15 +1,20 @@
 #! /bin/bash
+datefmt="+%Y-%m-%d %H:%M:%S"
+echo "$(date "$datefmt") =============================================================================="
+dir=${1-run}
+echo "Searching: $(realpath $dir)"
+
 dwstat pools
-echo " *.jobid error:"
-grep -i err run/*.jobid
-echo "          *.sh: $(ls run/*.sh  | wc)"
-echo "       *.jobid: $(ls run/*.jobid | wc)"
-echo "         *.out: $(ls run/*.out | wc)"
-echo "showq  $LOGNAME: $(showq -u $LOGNAME | grep $LOGNAME | wc)"
-echo "showq  running: $(showq -u $LOGNAME | grep "$LOGNAME.*Running" | wc)"
-echo "showq stageout: $(showq -v -u $LOGNAME | grep "stageout.*Running" | wc)"
+echo "          *.sh: $(ls $dir/*.sh  | wc -l)"
+echo "       *.jobid: $(ls $dir/*.jobid | wc -l)"
+echo "         *.out: $(ls $dir/*.out | wc -l)"
+echo "showq  $LOGNAME: $(showq -u $LOGNAME | grep $LOGNAME | wc -l)"
+echo "showq  running: $(showq -u $LOGNAME | grep "$LOGNAME.*Running" | wc -l)"
+echo "showq stageout: $(showq -v -u $LOGNAME | grep "stageout.*Running" | wc -l )"
 showq -v | grep active
+echo " *.jobid error:"
+grep -i err $dir/*.jobid
 echo "*.out non-run90 && non-success:"
-egrep -L "run90|RESULT: SUCCESS" run/*.out | xargs ls -ld run/.  
-echo "*.out FAILURE|signal|killed:"
-egrep -l "FAILURE|signal|killed" run/*.out | xargs ls -ld run/.  
+egrep -L "run90|RESULT: SUCCESS" $dir/*.out | xargs ls -ld $dir/.  
+echo "*.out FAILURE|failed|signal|killed:"
+egrep -l "FAILURE|failed|signal|killed" $dir/*.out | xargs ls -ld $dir/.  
