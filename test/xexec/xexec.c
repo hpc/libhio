@@ -88,9 +88,10 @@ ENUM_NAMP(OPT_, XPERF)
 ENUM_NAMP(OPT_, PERFXCHK)
 ENUM_NAMP(OPT_, SMSGV1)
 ENUM_NAMP(OPT_, PAVM)
+ENUM_NAMP(OPT_, SIGHAND)
 ENUM_END(etab_opt, 1, "+")
 
-static const char * options_init = "-ROF+RCHK+XPERF-PERFXCHK-SMSGV1-PAVM"; 
+static const char * options_init = "-ROF+RCHK+XPERF-PERFXCHK-SMSGV1-PAVM+SIGHAND"; 
 
 #define MAX_LOOP 16
 enum looptype {COUNT, TIME, SYNC};
@@ -1126,7 +1127,6 @@ int main(int argc, char * * argv) {
   msg_context_init(MY_MSG_CTX, 0, 0);
   set_msg_id(&G);
 
-  sig_init();
   #define S ctrl_state
 
   add2tokv(&G, &S, argc-1, argv+1); // Make initial copy of argv so im works
@@ -1143,6 +1143,11 @@ int main(int argc, char * * argv) {
     parse_opt(&G, "XEXEC_OPT env var", xexec_opt, &set, &clear);
     newopt = (enum options) (clear & (set | newopt));
   }   
+  G.options = newopt;
+
+  if (G.options & OPT_SIGHAND) {
+    sig_init();
+  }
 
   // Add action routines to parse table
   rc = xexec_ctrl_install(&G); if (rc) ERRX("xexec_ctrl_init rc: %d", rc);

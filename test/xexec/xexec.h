@@ -39,7 +39,8 @@ enum options {
   OPT_XPERF    =  4,  // Extended Performance Messages
   OPT_PERFXCHK =  8,  // Exclude check time from Performance messages
   OPT_SMSGV1   = 16,  // Print success message v 1 so it can be suppressed with v 0 
-  OPT_PAVM     = 32   // Pavilion Messages
+  OPT_PAVM     = 32,  // Pavilion Messages
+  OPT_SIGHAND  = 64   // Install informational signal handler
 };
 
 #define XEXEC_VERSION "1.1.0"
