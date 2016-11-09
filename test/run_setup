@@ -71,6 +71,7 @@ synexit() {
   echo "    -a                Clean dirs After running"
   echo "    -q                Query data size. Output value like \"32GiB\" and exit"
   echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
+  echo "                      3=DataWarp only (via Moab)" 
   echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage."
   echo "       n<dw_nodes>    Or, if it starts with \"n\" request enough to allocate"
   echo "                      on that many DataWarp nodes based on granularity"
@@ -159,7 +160,7 @@ batch_sub() {
     echo "#MSUB -l walltime=4:00:00" >> $jobsh
     echo "#MSUB -o $jobout -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
-    if [[ $dw_alloc_mode -eq 2 ]]; then
+    if [[ $dw_alloc_mode -ge 2 ]]; then
       echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
     fi
     echo "echo \"\`date \"$datefmt\"\` Job $jobname start\"" >> $jobsh
@@ -550,6 +551,7 @@ case $dw_alloc_mode in
   0 ) ;;
   1 ) ;;
   2 ) ;;
+  3 ) ;;
   * ) synexit "invalid -w option $dw_alloc_mode";;
 esac
 
@@ -599,26 +601,29 @@ if [[ $batch -eq 0 ]]; then
     fi
 
     root_count=0;
-    if [[ $dw_alloc_mode -eq 1 || $dw_alloc_mode -eq 2 ]]; then
+    if [[ $dw_alloc_mode -ge 1 ]]; then
       HIO_TEST_ROOTS="DataWarp"
       root_count=$(($root_count + 1))
     fi
 
-    addifd "/lus/snx11004/$LOGNAME"
-    addifd "/lscratch1/$LOGNAME"
-    addifd "/lscratch2/$LOGNAME"
-    addifd "/lscratch3/$LOGNAME"
-    addifd "/lscratch4/$LOGNAME"
-    addifd "/lustre/scratch3/$LOGNAME"
-    addifd "/lustre/scratch4/$LOGNAME"
-    addifd "/lustre/scratch5/$LOGNAME"
-    addifd "/lustre/trscratch1/$LOGNAME"
-    addifd "/lustre/trscratch2/$LOGNAME"
-    addifd "/lustre/ttscratch1/$LOGNAME"
-    addifd "/scratch1/$LOGNAME"
-    addifd "/scratch1/users/$LOGNAME"
-    addifd "/lustre/scratch1/yellow/$LOGNAME"
-    addifd "$HOME/scratch-tmp"
+    if [[ $dw_alloc_mode -le 2 ]]; then
+      addifd "/lus/snx11004/$LOGNAME"
+      addifd "/lscratch1/$LOGNAME"
+      addifd "/lscratch2/$LOGNAME"
+      addifd "/lscratch3/$LOGNAME"
+      addifd "/lscratch4/$LOGNAME"
+      addifd "/lustre/scratch3/$LOGNAME"
+      addifd "/lustre/scratch4/$LOGNAME"
+      addifd "/lustre/scratch5/$LOGNAME"
+      addifd "/lustre/tr2scratch1/$LOGNAME"
+      addifd "/lustre/trscratch1/$LOGNAME"
+      addifd "/lustre/trscratch2/$LOGNAME"
+      addifd "/lustre/ttscratch1/$LOGNAME"
+      addifd "/scratch1/$LOGNAME"
+      addifd "/scratch1/users/$LOGNAME"
+      addifd "/lustre/scratch1/yellow/$LOGNAME"
+      addifd "$HOME/scratch-tmp"
+    fi
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
   fi
 

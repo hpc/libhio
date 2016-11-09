@@ -61,10 +61,12 @@ synexit() {
   echo "    -c                 Chain jobs - make this job dependant on previous job"
   echo "    -a                 Clean dirs After running"
   echo "    -w <dw_alloc>      DataWarp allocation policy 0=never, 1=static, 2=Moab"
+  echo "                       3=DataWarp only (via Moab)" 
   echo "    -k knl|haswell     Adds :<type> to msub -l option, influences -p default"
   echo "    -u <uber command and args>  Use to invoke a debugger"
   echo "    -o <output_file>   Instead of invoking, writes test commands to file"
-  echo "    -e <seconds>       Delay between test invocations"
+  echo "    -e <seconds>[,<dw_pct>[,<dw_limit>]] Delay between test invocations with"
+  echo "                       optional max percentage and count of DataWarp jobs"       
   echo ""
   echo "Example: run_combo -t ./run02 ./run03 -r 2 4 -s x"
   echo "  Will run:"
@@ -94,6 +96,32 @@ msg() {
 is_not_flag() {
   # Check if $1 is a flag; e.g. "-b"
   [[ "$1" =~ -.* ]] && return 1 || return 0
+}
+
+# Issues showq and sets dw_num, job_num and dw_pct
+awk='
+  BEGIN {jt=0; si=0; soi=0; sor=0} 
+  /Idle|Running/{jt++}
+  /datawarp-stagein/{si++}
+  /datawarp-stageout.*Idle/{soi++}
+  /datawarp-stageout.*Running/{sor++}
+  END{dw=soi+sor
+      jn=jt-si-2*soi
+      if (jn<dw) jn=dw
+      if (jn > 0) dwp=int(100*dw/jn) 
+      else if (dw == 0) dwp=0
+      else dwp = 100 
+      print "dw_num: " dw " job_num: " jn " dw_pct: " dwp " si: " si " sor: " sor " soi: " soi " jt: " jt
+     }
+'
+
+get_job_num() {
+  resp=$(showq -v | awk "$awk")
+  jobarr=($resp)
+  dw_num=${jobarr[1]}
+  job_num=${jobarr[3]}
+  dw_pct=${jobarr[5]}
+  msg "$resp"
 }
 
 #----------------------------------------------------------------------------
@@ -187,6 +215,16 @@ while getopts "htsrnpjxmv:d:bcaw:k:u:o:e:" optname; do
   esac
 done
 
+
+delarr=(${delay//,/ })
+if [[ -n ${delarr[3]} ]]; then synexit "Error: too many elements in delay: \"$delay\""; fi
+delay_sec=${delarr[0]}
+delay_dw_pct=99999
+if [[ -n ${delarr[1]} ]]; then delay_dw_pct=${delarr[1]}; fi
+delay_dw_limit=99999
+if [[ -n ${delarr[2]} ]]; then delay_dw_limit=${delarr[2]}; fi
+#msg "     delay_sec: $delay_sec  delay_dw_pct: $delay_dw_pct  delay_dw_limit: $delay_dw_limit"
+
 if [[ -z $test ]];  then synexit "Error: at least one test must be specified";fi
 if [[ -z $size ]];  then size+=(" ");fi
 if [[ -z $ranks ]]; then ranks+=(" ");fi
@@ -207,7 +245,7 @@ if [[ -z $marg ]];  then marg+=(" ");fi
 
 shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
-if [[ ! $delay =~ ^[0-9]+$ ]]; then synexit "Error: invalid -e integer \"$delay\""; fi
+if [[ ! $delay_sec =~ ^[0-9]+$ ]]; then synexit "Error: invalid -e integer \"$delay_sec\""; fi
 
 #----------------------------------------------------------------------------
 # Iterate through al combinations of specified parameters
@@ -241,10 +279,12 @@ for r in "${ranks[@]}"; do
                 if [[ -n $proc_type ]];   then c="$c -k $proc_type"; fi
                 if [[ -n $uber_cmd ]];    then c="$c -u \"$uber_cmd\""; fi
 
-                if [[ first -eq 0 && delay -ne 0 ]]
-                  then cmd "sleep $delay"
-                else
-                  first=0
+                if [[ delay_sec -ne 0 ]]; then
+                  get_job_num
+                  while [[ dw_pct -gt delay_dw_pct || dw_num -ge delay_dw_limit ]]; do
+                    cmd "sleep $delay_sec"
+                    get_job_num
+                  done
                 fi              
  
                 if [[ -z $output_file ]]; then  
@@ -256,6 +296,9 @@ for r in "${ranks[@]}"; do
                   echo $c
                 fi 
                 count=$((count+1)) 
+                if [[ delay_sec -ne 0 ]]; then
+                  cmd "sleep $delay_sec"
+                fi 
               done
             done
           done
