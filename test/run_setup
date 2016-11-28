@@ -157,7 +157,9 @@ batch_sub() {
     proc_parm=""
     if [[ -n $proc_type ]]; then proc_parm=":$proc_type"; fi
     echo "#MSUB -l nodes=$nodes$proc_parm:ppn=$ppn" >> $jobsh
-    echo "#MSUB -l walltime=4:00:00" >> $jobsh
+    walltime="4:00:00"
+    #walltime=$(($nodes*1800/256+1803))
+    echo "#MSUB -l walltime=$walltime" >> $jobsh
     echo "#MSUB -o $jobout -joe" >> $jobsh
     echo "#MSUB -d $PWD" >> $jobsh
     if [[ $dw_alloc_mode -ge 2 ]]; then
@@ -294,7 +296,7 @@ myrun() {
   #cmd "$mympicmd -n $ranks ls -l $1"
   #export LD_DEBUG=all
   #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
-  cmd "$uber_cmd $mympicmd -n $ranks $*"
+  cmd "$uber_cmd $mympicmd -n $ranks -N $ppn $*"
   rc=$?
   #unset LD_DEBUG
   #unset LD_DEBUG_OUTPUT
@@ -334,82 +336,9 @@ else
     # aprun available - must be a Cray
     mympicmd="aprun"
     size="m"
-    if [[ -n $PBS_JOBID ]]; then
-      set | egrep "^PBS|^MOAB|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
-      job_dir="/${PBS_JOBID%%.*}"
-    fi
-    if [[ -n $PBS_NODEFILE ]]; then
-      echo ""
-      cmd "cat $PBS_NODEFILE | sort | uniq | pr -t --columns 8"
-    fi
-    if [[ -n $DW_JOB_STRIPED ]]; then
-      # awk program to parse a few things out of dwstat output
-      c='
-        BEGIN       {st='0'; frags=""; nodelist=""}
-        /^ *sess /  {st="s"; sesshdr = $0}
-        /^ *inst /  {st="i"; insthdr = $0}
-        /^ *conf /  {st="c"; confhdr = $0}
-        /^ *reg /   {st="r"; reghdr  = $0}
-        /^ *activ / {st="a"; acthdr  = $0}
-        /^ *frag /  {st="f"; fraghdr = $0}
-        /^ *nss /   {st="n"; nsshdr  = $0}
-        {
-          nl = "\n## "
-          nl2 = "##\n## "
-          if (st == "s" && $3 == '$MOAB_JOBID') {
-            sess = $1
-            token = $3
-            sessln = $0
-          }
-          if (st == "i" && $3 == sess) {
-            inst = $1
-            bytes = $4
-            nodes = $5
-            instln = $0
-          } 
-          if (st == "c" && $3 == inst) {
-            conf = $1
-            confln = $0
-          }
-          if (st == "r" && $3 == sess) {
-            reg = $1
-            regln = $0
-          }
-          if (st == "a" && $3 == sess) {
-            act = $1
-            actln = $0
-          }
-          if (st == "f" && $3 == inst) {
-            frags = frags nl $0
-            nodelist = nodelist " " $5
-          }
-          print $0
-        }
-        END {
-          print nl "This job:"
-          print nl2 sesshdr nl sessln
-          print nl2 insthdr nl instln
-          print nl2 confhdr nl confln
-          print nl2 reghdr  nl regln
-          print nl2 acthdr  nl actln
-          print nl2 fraghdr nl substr(frags, 5) 
-          print nl2 "sess: " sess "  token: " token "  inst: " inst "  bytes: " bytes "  nodes: " nodes
-          print nl2 "dw_nodes:" nodelist
-          print   
-        } 
-      '
-      . $MODULESHOME/init/bash
-      module load dws
-      echo ""
-      cmd "dwstat all | awk \"\$c\""
-    fi
   else
     # aprun not available - use mpirun
     mympicmd="mpirun"
-    if [[ -n $SLURM_JOB_ID ]]; then
-      set | egrep "^SLURM|^DW"
-      job_dir="/$SLURM_JOB_ID"
-    fi
   fi
   if [[ $hostpre == "ga-" || $hostpre == "tt-" || $hostpre == "tr-" ]]; then
     dw_alloc_mode=2
@@ -557,6 +486,79 @@ esac
 
 # Following commands for actually running, i.e., not batch submission
 if [[ $batch -eq 0 ]]; then
+  if [[ -n $PBS_JOBID ]]; then
+    set | egrep "^PBS|^MOAB|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
+    job_dir="/${PBS_JOBID%%.*}"
+  fi
+  if [[ -n $PBS_NODEFILE ]]; then
+    echo ""
+    cmd "cat $PBS_NODEFILE | sort | uniq | pr -t --columns 8"
+  fi
+  if [[ -n $DW_JOB_STRIPED ]]; then
+    # awk program to parse a few things out of dwstat output
+    c='
+      BEGIN       {st='0'; frags=""; nodelist=""}
+      /^ *sess /  {st="s"; sesshdr = $0}
+      /^ *inst /  {st="i"; insthdr = $0}
+      /^ *conf /  {st="c"; confhdr = $0}
+      /^ *reg /   {st="r"; reghdr  = $0}
+      /^ *activ / {st="a"; acthdr  = $0}
+      /^ *frag /  {st="f"; fraghdr = $0}
+      /^ *nss /   {st="n"; nsshdr  = $0}
+      {
+         nl = "\n## "
+        nl2 = "##\n## "
+        if (st == "s" && $3 == '$MOAB_JOBID') {
+          sess = $1
+          token = $3
+          sessln = $0
+        }
+        if (st == "i" && $3 == sess) {
+          inst = $1
+          bytes = $4
+          nodes = $5
+          instln = $0
+        } 
+        if (st == "c" && $3 == inst) {
+          conf = $1
+          confln = $0
+        }
+        if (st == "r" && $3 == sess) {
+          reg = $1
+          regln = $0
+        }
+        if (st == "a" && $3 == sess) {
+          act = $1
+          actln = $0
+        }
+        if (st == "f" && $3 == inst) {
+          frags = frags nl $0
+          nodelist = nodelist " " $5
+        }
+        print $0
+      }
+      END {
+        print nl "This job:"
+        print nl2 sesshdr nl sessln
+        print nl2 insthdr nl instln
+        print nl2 confhdr nl confln
+        print nl2 reghdr  nl regln
+        print nl2 acthdr  nl actln
+        print nl2 fraghdr nl substr(frags, 5) 
+        print nl2 "sess: " sess "  token: " token "  inst: " inst "  bytes: " bytes "  nodes: " nodes
+        print nl2 "dw_nodes:" nodelist
+        print   
+      } 
+    '
+    . $MODULESHOME/init/bash
+    module load dws
+    echo ""
+    cmd "dwstat all | awk \"\$c\""
+  fi
+  if [[ -n $SLURM_JOB_ID ]]; then
+    set | egrep "^SLURM|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
+    job_dir="/$SLURM_JOB_ID"
+  fi
   # Add .lib dir to library path
   build=${BUILD_TREE:=$PWD/..}
   libs=$build/src/.libs

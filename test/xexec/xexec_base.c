@@ -353,6 +353,9 @@ ACTION_RUN(hx_run) {
     blk[n].size = 0;
   }
 
+  #ifdef __clang_analyzer__
+    memset(stat, 0, sizeof(stat));
+  #endif
   for (b=0; b<sizeof(stat)/sizeof(struct stat); ++b) {
     stat[b].count = 0;
     stat[b].atime = 0.0;
@@ -553,7 +556,7 @@ ACTION_RUN(dlo_run) {
 
 ACTION_RUN(dls_run) {
   char * symbol = V0.s;
-  char * error = dlerror();
+  char * error;
   void * sym = dlsym(S.dl_handle[S.dl_num], symbol);
   VERB3("%s; dlsym(%s) returns %p", A.desc, symbol, sym);
   error = dlerror();
@@ -629,8 +632,10 @@ ACTION_RUN(exit_run) {
 }
 
 ACTION_RUN(segv_run) {
-  VERB0("Forcing SIGSEGV");
-  * (volatile char *) 0 = '\0';
+  VERB0("Forcing SIGSEGV"); 
+  #ifndef __clang_analyzer__
+    * (volatile char *) 0 = '\0';
+  #endif
 }
 
 //----------------------------------------------------------------------------

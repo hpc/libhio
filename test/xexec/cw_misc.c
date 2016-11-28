@@ -73,15 +73,20 @@ void msg_writer(MSG_CONTEXT *msgctx, FILE * stream, int flush, const char *forma
 #define MY_MSG_CTX msgctx
 
 void *mallocx(MSG_CONTEXT *msgctx, const char *context, size_t size) {
+  #ifdef __clang_analyzer__
+    size = MAX(size, 1);
+  #endif
   void *r = malloc(size);
   DBG4("mallocx %s returns %p", context, r);
-  if (!r) ERRX("%s: malloc(%d) failed", context, size);
+  if (!r && size) ERRX("%s: malloc(%d) failed", context, size);
   return r;
 }
 
 void *reallocx(MSG_CONTEXT *msgctx, const char *context, void *ptr, size_t size) {
   void *r = realloc(ptr, size);
-  DBG4("reallocx %s old: %p new: %p", context, ptr, r);
+  #ifndef __clang_analyzer__
+    DBG4("reallocx %s old: %p new: %p", context, ptr, r);
+  #endif
   if (!r) ERRX("%s: realloc(%d) failed", context, size);
   return r;
 }
@@ -138,8 +143,8 @@ int enum_val_compare(const void * nv1, const void * nv2) {
 
 void enum_table_sort(MSG_CONTEXT *msgctx, ENUM_TABLE * etptr) {
   ENUM_NAME_VAL_PAIR * nvn = etptr->nv_by_name;
-  ENUM_NAME_VAL_PAIR * nvv = etptr->nv_by_val;
-  int i, n = etptr->nv_count;
+  ENUM_NAME_VAL_PAIR * nvv;
+  int i, n;
 
   // Count entries
   i = -1;
@@ -371,7 +376,6 @@ void hex_dump(void *data, int size) {
     if (strlen(hexstr) > 0) {
         if (skipped > 0) {
            printf("        %d identical lines skipped\n", skipped);
-           skipped = 0;
         }
         /* print rest of buffer if not empty */
         printf("[%6.6s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
