@@ -248,12 +248,6 @@ clean_cmd="
 
 # Function to clean data roots, i.e., create or empty them out
 clean_roots() {
-  if [[ ${OSTYPE:0:6} != "darwin" ]]; then
-    # Running on a cluster - record some physical node information
-    cmd "aprun -n $PBS_NUM_NODES -N 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c"
-    (export TERM=dumb; cmd "aprun -n 1 lstopo --of ascii -p")
-    cmd "aprun -n 1 lstopo --of console -p"
-  fi
 
   allroots=${1-$HIO_TEST_ROOTS}
   IFS=","; read -ra root <<< "$allroots"; unset IFS
@@ -558,6 +552,12 @@ if [[ $batch -eq 0 ]]; then
   if [[ -n $SLURM_JOB_ID ]]; then
     set | egrep "^SLURM|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
     job_dir="/$SLURM_JOB_ID"
+  fi
+  if [[ ${OSTYPE:0:6} != "darwin" ]]; then
+    # Running on a cluster - record some physical node information
+    cmd "$mympicmd -n $PBS_NUM_NODES -N 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c"
+    (export TERM=dumb; cmd "$mympicmd -n 1 lstopo --of ascii -p")
+    cmd "$mympicmd -n 1 lstopo --of console -p"
   fi
   # Add .lib dir to library path
   build=${BUILD_TREE:=$PWD/..}

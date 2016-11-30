@@ -28,6 +28,21 @@ cmdw="
     hew 0 $blksz
   le
   hec hdc hdf
+  hf mgf mf
+"
+
+cmdwu="
+  name run81 v $verbose_lev d $debug_lev mi 0
+  /@@ Write N-N test case @/
+  dbuf RAND22P 20Mi
+  hi MYCTX $HIO_TEST_ROOTS
+  hda NTNDS 97 WRITE,CREAT UNIQUE hdo
+  heo MYEL WRITE,CREAT,TRUNC
+  hvp c. .
+  lc $nblk
+    hew 0 $blksz
+  le
+  hec hdc hdf
   ifr 0
     v 2 hdu NTNDS 97 ALL v $verbose_lev
   eif
@@ -35,12 +50,17 @@ cmdw="
 "
 
 clean_roots $HIO_TEST_ROOTS
+cmd "aprun -n 1 bash -c \"find $DW_JOB_STRIPED | wc -l \""
+myrun $HIO_TEST_XEXEC $cmdwu
+cmd "aprun -n 1 bash -c \"find $DW_JOB_STRIPED | wc -l \""
 
-myrun $HIO_TEST_XEXEC $cmdw
-
-cmd aprun -n 1 find $DW_JOB_STRIPED -ls
 clean_roots $HIO_TEST_ROOTS
-cmd date
+cmd "aprun -n 1 bash -c \"find $DW_JOB_STRIPED | wc -l \""
+myrun $HIO_TEST_XEXEC $cmdw
+# Comment out find command since it may influence rm -fR speed
+#cmd "aprun -n 1 bash -c \"find $DW_JOB_STRIPED | wc -l \""
+clean_roots $HIO_TEST_ROOTS
+cmd "aprun -n 1 bash -c \"find $DW_JOB_STRIPED | wc -l \""
   
 check_rc
 exit $max_rc
