@@ -838,7 +838,7 @@ ACTION_RUN(dwss_run) {
   if (!quit) {
     rc = dw_set_stripe_configuration(fd, stripe_size, stripe_width);
     if (rc < 0) {
-      VERB0("dwgs: dw_set_stripe_configuration rc: %d(%s)", rc, strerror(-rc));
+      VERB0("dwss: dw_set_stripe_configuration rc: %d(%s)", rc, strerror(-rc));
       quit = 1;
     }
   }

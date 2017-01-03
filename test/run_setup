@@ -45,7 +45,7 @@ synexit() {
   echo "        [-j <tpp>]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
-  echo "        [-b] [-c] [-a] [-q]"
+  echo "        [-b [-f]] [-c] [-a] [-q]"
   echo "        [-w <dw_alloc>]"
   echo "        [-x <dw_alloc_pct>]"
   echo "        [-k knl|haswell]" 
@@ -67,6 +67,7 @@ synexit() {
   echo "    -v <verbose_lev>  Verbosity level for xexec2, default 1"
   echo "    -d <debug_lev>    Debug level for xexec2, default 0"
   echo "    -b                Submit batch job with these options"
+  echo "    -f                For batch job, append date to run dir name"
   echo "    -c                Chain jobs - make this job dependant on previous job"
   echo "    -a                Clean dirs After running"
   echo "    -q                Query data size. Output value like \"32GiB\" and exit"
@@ -138,6 +139,7 @@ batch_sub() {
   msg "DataWarp Capacity: $dw_cap"
   if [[ $batch -gt 0 ]]; then
     rundir="$PWD/run"
+    if [[ $dirdate -eq 1 ]]; then rundir="$rundir-`date +%Y%m%d`"; fi
     if [[ ! -d $rundir ]]; then cmd "mkdir -p $rundir"; fi
     lastjob="$rundir/last_jobid"
 
@@ -310,6 +312,7 @@ tpp=1
 verbose_lev=1
 debug_lev=0
 batch=0
+dirdate=0
 chain=0
 after=0
 dw_alloc_pct=100
@@ -342,7 +345,7 @@ else
 fi
 
 args="$0 $*"
-while getopts "hs:r:n:p:j:v:d:bcw:ax:k:m:u:q" optname; do
+while getopts "hs:r:n:p:j:v:d:bfcw:ax:k:m:u:q" optname; do
   case $optname in
     h ) synexit;;
     s ) size=$OPTARG;;
@@ -353,6 +356,7 @@ while getopts "hs:r:n:p:j:v:d:bcw:ax:k:m:u:q" optname; do
     v ) verbose_lev=$OPTARG;;
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
+    f ) dirdate=1;;
     c ) chain=1;;
     w ) dw_alloc_mode=$OPTARG;;
     a ) after=1;;
@@ -374,6 +378,9 @@ case $proc_type in
   *       ) ppn_def=3;
             msg "Warning: processor type \"$proc_type\" not recognized, using anyway";;
 esac
+
+if [[ $dirdate -eq 1 && $batch -eq 0 ]]; then synexit "-f specified without -b"; fi 
+
 
 # Figure out nodes, ranks and ppn
 until [[ -n $nodes && -n $ranks && -n $ppn ]]; do

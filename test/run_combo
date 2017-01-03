@@ -31,7 +31,7 @@ synexit() {
   echo "        [-m \"<msub args>\" [\"<msub_args>\"] ]"
   echo "        [-v <verbose_level>]"
   echo "        [-d <debug_level>]"
-  echo "        [-b] [-c] [-a]"
+  echo "        [-b [-f]] [-c] [-a]"
   echo "        [-w <dw_alloc>]"
   echo "        [-k knl|haswell]" 
   echo "        [-u <uber command and args>]"
@@ -58,6 +58,7 @@ synexit() {
   echo "    -v <verbose_lev>   Verbosity level for xexec2, default 1"
   echo "    -d <debug_lev>     Debug level for xexec2, default 0"
   echo "    -b                 Submit batch job with these options"
+  echo "    -f                 For batch job, append date to run dir name"
   echo "    -c                 Chain jobs - make this job dependant on previous job"
   echo "    -a                 Clean dirs After running"
   echo "    -w <dw_alloc>      DataWarp allocation policy 0=never, 1=static, 2=Moab"
@@ -131,13 +132,14 @@ datefmt="+%Y-%m-%d %H:%M:%S"
 args=$*
 host=`hostname -s`
 batch=0
+dirdate=0
 chain=0
 proc_type=""
 uber_cmd=""
 output_file=""
 delay=0
 # Work around getopts limitations to support multiple arguments
-while getopts "htsrnpjxmv:d:bcaw:k:u:o:e:" optname; do
+while getopts "htsrnpjxmv:d:bfcaw:k:u:o:e:" optname; do
   #msg "optname: $optname OPTIND: $OPTIND OPTARG: $OPTARG"
   case $optname in
     h ) synexit;;
@@ -201,6 +203,7 @@ while getopts "htsrnpjxmv:d:bcaw:k:u:o:e:" optname; do
     v ) verbose_lev=$OPTARG;;
     d ) debug_lev=$OPTARG;;
     b ) batch=1;;
+    f ) dirdate=1;;
     c ) chain=1;;
     a ) after=1;;
     w ) dw_alloc_mode=$OPTARG;;
@@ -214,7 +217,6 @@ while getopts "htsrnpjxmv:d:bcaw:k:u:o:e:" optname; do
    \? ) synexit "Error: invalid option";;
   esac
 done
-
 
 delarr=(${delay//,/ })
 if [[ -n ${delarr[3]} ]]; then synexit "Error: too many elements in delay: \"$delay\""; fi
@@ -246,6 +248,8 @@ if [[ -z $marg ]];  then marg+=(" ");fi
 shift $((OPTIND - 1 ))
 if [[ -n $1 ]]; then synexit "Error: extra parameters"; fi
 if [[ ! $delay_sec =~ ^[0-9]+$ ]]; then synexit "Error: invalid -e integer \"$delay_sec\""; fi
+if [[ $dirdate -eq 1 && $batch -eq 0 ]]; then synexit "-f specified without -b"; fi 
+
 
 #----------------------------------------------------------------------------
 # Iterate through al combinations of specified parameters
@@ -261,7 +265,7 @@ for r in "${ranks[@]}"; do
           for a in "${pct[@]}"; do
             for t in "${test[@]}"; do
               for m in "${marg[@]}"; do
-                #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" j: \"$j\" m: \"$m\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" c: \"$chain\""
+                #echo "t: \"$t\" s: \"$s\" r: \"$r\" n:\"$n\" p: \"$p\" j: \"$j\" m: \"$m\" v: \"$verbose_lev\" d: \"$debug_lev\" b: \"$batch\" f: \"$dirdate\" c: \"$chain\""
                 c=$t
                 if [[ $s != " " ]]; then c="$c -s $s"; fi
                 if [[ $r != " " ]]; then c="$c -r $r"; fi
@@ -273,6 +277,7 @@ for r in "${ranks[@]}"; do
                 if [[ -n $verbose_lev ]]; then c="$c -v $verbose_lev"; fi
                 if [[ -n $debug_lev ]];   then c="$c -d $debug_lev"; fi
                 if [[ $batch -eq 1 ]];    then c="$c -b"; fi
+                if [[ $dirdate -eq 1 ]];  then c="$c -f"; fi
                 if [[ $chain -eq 1 ]];    then c="$c -c"; fi
                 if [[ $after -eq 1 ]];    then c="$c -a"; fi
                 if [[ -n $dw_alloc_mode ]];   then c="$c -w $dw_alloc_mode"; fi
