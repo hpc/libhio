@@ -310,7 +310,7 @@
  *
  * @page page_example Examples
  * @section sec_example_c C Example
- * @include example.c
+ * @include hio_example.c
  */
 
 #if !defined(HIO_H)

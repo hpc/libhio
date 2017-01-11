@@ -45,15 +45,16 @@ synexit() {
 }
 
 cmd() {
-  echo "$host ---> $*" 2>&1 | tee -a $log
+  echo "`date \"$datefmt\"` $host ---> $*" 2>&1 | tee -a $log
   eval $*              2>&1 | tee -a $log
 }
 
 msg() { 
-  echo "$host $*" 2>&1 | tee -a $log
+  echo "`date \"$datefmt\"` $host $*" 2>&1 | tee -a $log
 }
 
 # Set up temporary log directory and file
+datefmt="+%Y-%m-%d %H:%M:%S"
 logfn="hiobuild.out"
 tdir=$(mktemp -d /tmp/hiobuild.tmp.XXXX)
 log="$tdir/$logfn"
@@ -143,7 +144,7 @@ if [[ ${OSTYPE:0:6} == "darwin" ]]; then
 else
   files="src/.libs/libhio.so.1.0.0"
 fi
-files="$files test/error_test.x test/.libs/test01.x test/xexec/.libs/xexec.x"
+files="$files test/error_test.x test/.libs/test01.x test/.libs/hio_example.x test/xexec/.libs/xexec.x"
 
 if [[ $extra -gt 0 ]]; then
   cmd make docs

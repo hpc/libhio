@@ -1,5 +1,5 @@
 subdirs=template
-EXTRA_DIST=doxygen.conf.in example.c
+EXTRA_DIST=doxygen.conf.in
 
 if HAVE_PDFLATEX
 EXTRA_DIST += libhio_api.pdf

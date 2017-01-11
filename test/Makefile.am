@@ -11,7 +11,7 @@
 
 LDADD = ../src/libhio.la
 AM_CPPFLAGS = -I$(top_srcdir)/src/include
-EXTRA_DIST = run_setup run_combo run01 run02 run03 run04 run05 run07 run08 run09 run10 run12 run20 run80 run81 run82 run83 run84 run85 run90 run91 dw_simple_sub.sh check_test dw_rm_all_sess cancelme
+EXTRA_DIST = run_setup run_combo run01 run02 run03 run04 run05 run07 run08 run09 run10 run12 run20 run80 run81 run82 run83 run84 run85 run90 run91 dw_simple_sub.sh hio_example.sh check_test dw_rm_all_sess 
 
 SUBDIRS = xexec
 
@@ -20,7 +20,7 @@ clean-local:
 
 if ENABLE_TESTS
 
-noinst_PROGRAMS = test01.x error_test.x
+noinst_PROGRAMS = test01.x error_test.x hio_example.x
 
 check_PROGRAMS = ${noinst_PROGRAMS}
 TESTS = run01 error_test.x

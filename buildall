@@ -61,12 +61,12 @@ synexit() {
 }
 
 cmd() {
-  echo "$host ---> $*" 2>&1 | tee -a $log
+  echo "`date \"$datefmt\"` $host ---> $*" 2>&1 | tee -a $log
   eval $*              2>&1 | tee -a $log
 }
 
 msg() { 
-  echo "$host $*" 2>&1 | tee -a $log
+  echo "`date \"$datefmt\"` $host $*" 2>&1 | tee -a $log
 }
 
 #----------------------------------------------------------------------------
@@ -137,6 +137,7 @@ build_r() {
 
 
 # Set up temporary log directory and file
+datefmt="+%Y-%m-%d %H:%M:%S"
 logfn="buildall.out"
 tdir=$(mktemp -d /tmp/buildall.tmp.XXXX)
 log="$tdir/$logfn"
