@@ -43,7 +43,7 @@ enum options {
   OPT_SIGHAND  = 64   // Install informational signal handler
 };
 
-#define XEXEC_VERSION "1.1.0"
+#define XEXEC_VERSION "1.1.1"
 typedef struct xexec_global {
   char id_string[256];
   int id_string_len;
@@ -187,7 +187,7 @@ enum ptype {
   UINT = CVT_NNINT,
   PINT = CVT_PINT,
   DOUB = CVT_DOUB,
-  STR, REGX, DBUF, HFLG, HDSM, HERR, HULM, HDSI, HCPR, DWST, ONFF, NONE };
+  STR, REGX, DBUF, HFLG, HDSM, HERR, HULM, HDSI, HCPR, HVAT, HVAO, DWST, ONFF, NONE };
 
 struct xexec_act_parse {
   char * cmd;

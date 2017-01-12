@@ -875,7 +875,7 @@ int parse_comp(const void * p1, const void * p2) {
 }
 
 // hio related enums defined in xexec_hio.c
-extern ENUM_TABLE etab_hflg, etab_hdsm, etab_herr, etab_hulm, etab_hdsi, etab_hcpr;
+extern ENUM_TABLE etab_hflg, etab_hdsm, etab_herr, etab_hulm, etab_hdsi, etab_hcpr, etab_hvat, etab_hvao;
 
 // Convert one parameter token to its value based on type
 void cvt_param(GLOBAL * gptr, char * token, enum ptype type, PVAL * val, char * desc) {
@@ -924,6 +924,12 @@ void cvt_param(GLOBAL * gptr, char * token, enum ptype type, PVAL * val, char * 
       break;
     case HCPR:
       decode(&G, &etab_hcpr, token, "hio recommendation", desc, val);
+      break;
+    case HVAT:
+      decode(&G, &etab_hvat, token, "value assert type", desc, val);
+      break;
+    case HVAO:
+      decode(&G, &etab_hvao, token, "value assert operator", desc, val);
       break;
     #if HIO_USE_DATAWARP
     case DWST:

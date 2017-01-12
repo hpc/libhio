@@ -65,6 +65,11 @@ static char * help =
   "  hvsc <name> <value>  Set hio context variable\n"
   "  hvsd <name> <value>  Set hio dataset variable\n"
   "  hvse <name> <value>  Set hio element variable\n"
+  "  hvai <type> <name> <op> <integer value>  Assert hio integer variable\n"
+  "  hvaf <type> <name> <op> <float value>    Assert hio float variable\n"
+  "  hvai <type> <name> <op> <string value>   Assert hio integer variable\n"
+  "                type is {c|p} {c|d|e} like hvp. iop is {LT|LE|EQ|NE|GE|GT}\n"
+  "                false compare is an error. Config variables are all strings\n"   
   "  hdsc <name> <expected> Issue hio_dataset_should_checkpont. Valid <expected> are:\n"
   "                  %s\n"
   #if HIO_USE_DATAWARP
@@ -680,6 +685,17 @@ void pr_cfg(GLOBAL * gptr, hio_object_t object, char * obj_name, struct action *
   }
 }
 
+union config_type {                // Union member names match hio_config_type_t names
+  bool BOOL;
+  char STRING[512];
+  I32 INT32;
+  U32 UINT32;
+  I64 INT64;
+  U64 UINT64;
+  float FLOAT;
+  double DOUBLE;
+};
+
 void pr_perf(GLOBAL * gptr, hio_object_t object, char * obj_name, struct action * actionp) {
   hio_return_t hrc;
   int count;
@@ -689,17 +705,7 @@ void pr_perf(GLOBAL * gptr, hio_object_t object, char * obj_name, struct action 
   for (int i = 0; i< count; i++) {
     char * name;
     hio_config_type_t type;
-
-    union {                // Union member names match hio_config_type_t names
-      bool BOOL;
-      char STRING[512];
-      I32 INT32;
-      U32 UINT32;
-      I64 INT64;
-      U64 UINT64;
-      float FLOAT;
-      double DOUBLE;
-    } value;
+    union config_type value;
 
     hrc = hio_perf_get_info((hio_object_t) object, i, &name, &type);
     HRC_TEST("hio_perf_get_info");
@@ -761,6 +767,276 @@ ACTION_RUN(hvse_run) {
   HRC_TEST("hio_config_set_value");
 }
 
+//----------------------------------------------------------------------------
+// hva{i|f|s} HIO value assert routines
+// Note: due to HIO currently only utilizing integer data types for perf vars,
+//       other data have not been tested.
+//----------------------------------------------------------------------------
+enum hva_type { // HIO variable assert type
+  HVAT_cc,      // Config - context
+  HVAT_cd,      // Config - dataset
+  HVAT_ce,      // Config - element
+  HVAT_pc,      // Perf - context
+  HVAT_pd,      // Perf - dataset
+  HVAT_pe       // Perf - element
+};
+
+ENUM_START(etab_hvat) // hva_type
+ENUM_NAMP(HVAT_, cc)
+ENUM_NAMP(HVAT_, cd)
+ENUM_NAMP(HVAT_, ce)
+ENUM_NAMP(HVAT_, pc)
+ENUM_NAMP(HVAT_, pd)
+ENUM_NAMP(HVAT_, pe)
+ENUM_END(etab_hvat, 0, NULL)
+
+enum hva_op {  // HIO variable assert operator 
+  HVAO_LT,     // Less than
+  HVAO_LE,     // Less than or equal
+  HVAO_EQ,     // Equal
+  HVAO_GE,     // Greater than or equal
+  HVAO_GT,     // Greater than
+  HVAO_NE      // Not equal
+};
+
+ENUM_START(etab_hvao) // hva_op
+ENUM_NAMP(HVAO_, LT)
+ENUM_NAMP(HVAO_, LE)
+ENUM_NAMP(HVAO_, EQ)
+ENUM_NAMP(HVAO_, GE)
+ENUM_NAMP(HVAO_, GT)
+ENUM_NAMP(HVAO_, NE)
+ENUM_END(etab_hvao, 0, NULL)
+
+hio_return_t get_perf_type(GLOBAL * gptr, hio_object_t obj, char * name, hio_config_type_t *type, struct action * actionp) {
+  hio_return_t hrc;
+  int count, i;
+  char * vname;
+  hio_config_type_t vtype;
+
+  hrc = hio_perf_get_count(obj, &count);  
+  HRC_TEST("hio_perf_get_count");
+  if (HIO_SUCCESS == hrc) {
+  for (i=0; i<count; ++i) {
+      hrc = hio_perf_get_info(obj, i, &vname, &vtype);
+      HRC_TEST("hio_perf_get_info");
+      if (HIO_SUCCESS == hrc && !strcmp(vname, name)) {
+        *type = vtype;
+        return hrc;
+      }
+    }
+  }
+  return HIO_ERR_NOT_FOUND;
+}    
+    
+ACTION_CHECK(hvaif_check) {
+  enum hva_type type = V0.i;
+  if ( HVAT_cc == type || HVAT_cd == type || HVAT_ce == type ) {
+    ERRX("%s: Configuration variable is not comparable with integer or float", A.desc);
+  }
+}  
+
+
+ACTION_RUN(hvai_run) {
+  enum hva_type type = V0.i;
+  char * name = V1.s;
+  enum hva_op op = V2.i;
+  I64 val = V3.u;
+  hio_return_t hrc = HIO_SUCCESS;
+  hio_object_t obj = NULL;
+  hio_config_type_t vtype;
+  union config_type pval;
+  I64 vi64 = 0;
+
+  DBG4("hvai: type: %s name: %s op: %s val: %lld", enum_name(MY_MSG_CTX, &etab_hvat, type),
+        name, enum_name(MY_MSG_CTX, &etab_hvao, op), val);
+ 
+       if (HVAT_pc == type) obj = (hio_object_t) S.context;
+  else if (HVAT_pd == type) obj = (hio_object_t) S.dataset;
+  else if (HVAT_pe == type) obj = (hio_object_t) S.element;
+  else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+ 
+  hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
+  HRC_TEST("get_perf_type");
+  if (HIO_SUCCESS == hrc) {
+    hrc = hio_perf_get_value(obj, name, &pval, sizeof(pval));
+    HRC_TEST("hio_get_perf_value");
+    if (HIO_SUCCESS == hrc) {
+      switch(vtype) {
+        case HIO_CONFIG_TYPE_BOOL:
+          vi64 = pval.BOOL ? 1 : 0;
+          break;
+        case HIO_CONFIG_TYPE_INT32:
+          vi64 = (I64) pval.INT32; 
+          break;
+        case HIO_CONFIG_TYPE_UINT32:
+          vi64 = (I64) pval.INT32; 
+          break;
+        case HIO_CONFIG_TYPE_INT64:
+          vi64 = (I64) pval.INT32; 
+          break;
+        case HIO_CONFIG_TYPE_UINT64:
+          vi64 = (I64) pval.UINT64; 
+          break;
+        case HIO_CONFIG_TYPE_STRING:
+        case HIO_CONFIG_TYPE_FLOAT:
+        case HIO_CONFIG_TYPE_DOUBLE:
+          MSG("%s: Perf variable %s is %s, not comparable with integer",
+              A.desc, name, enum_name(MY_MSG_CTX, &etab_hcfg, vtype)); 
+          hrc = HIO_ERR_BAD_PARAM;
+          G.local_fails += S.hio_fail = 1;
+          break;
+      }
+    }
+    if (HIO_SUCCESS == hrc) {
+      switch(op) {
+        case HVAO_LT: if ( !(vi64 <  val) ) S.hio_fail = 1; break;
+        case HVAO_LE: if ( !(vi64 <= val) ) S.hio_fail = 1; break;
+        case HVAO_EQ: if ( !(vi64 == val) ) S.hio_fail = 1; break;
+        case HVAO_GE: if ( !(vi64 >= val) ) S.hio_fail = 1; break;
+        case HVAO_GT: if ( !(vi64 >  val) ) S.hio_fail = 1; break;
+        case HVAO_NE: if ( !(vi64 != val) ) S.hio_fail = 1; break;
+      }
+      G.local_fails += S.hio_fail;
+      if (S.hio_fail || MY_MSG_CTX->verbose_level >= 2) {
+        MSG("%s: Assert %s.  Actual value: %lld", A.desc, S.hio_fail ? "failed" : "succeeded", vi64);
+      }
+    }
+  }
+}
+
+ACTION_RUN(hvaf_run) {
+  enum hva_type type = V0.i;
+  char * name = V1.s;
+  enum hva_op op = V2.i;
+  double val = V3.d;
+  hio_return_t hrc = HIO_SUCCESS;
+  hio_object_t obj = NULL;
+  hio_config_type_t vtype;
+  union config_type pval;
+  double vdoub = 0.0;
+
+  DBG4("hvaf: type: %s name: %s op: %s val: %f", enum_name(MY_MSG_CTX, &etab_hvat, type),
+        name, enum_name(MY_MSG_CTX, &etab_hvao, op), val);
+ 
+       if (HVAT_pc == type) obj = (hio_object_t) S.context;
+  else if (HVAT_pd == type) obj = (hio_object_t) S.dataset;
+  else if (HVAT_pe == type) obj = (hio_object_t) S.element;
+  else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+ 
+  hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
+  HRC_TEST("get_perf_type");
+  if (HIO_SUCCESS == hrc) {
+    hrc = hio_perf_get_value(obj, name, &pval, sizeof(pval));
+    HRC_TEST("hio_get_perf_value");
+    if (HIO_SUCCESS == hrc) {
+      switch(vtype) {
+        case HIO_CONFIG_TYPE_FLOAT:
+          vdoub = pval.FLOAT;
+          break;
+        case HIO_CONFIG_TYPE_DOUBLE:
+          vdoub = pval.DOUBLE;
+          break;
+        case HIO_CONFIG_TYPE_BOOL:
+        case HIO_CONFIG_TYPE_INT32:
+        case HIO_CONFIG_TYPE_UINT32:
+        case HIO_CONFIG_TYPE_INT64:
+        case HIO_CONFIG_TYPE_UINT64:
+        case HIO_CONFIG_TYPE_STRING:
+          MSG("%s: Perf variable %s is %s, not comparable with float",
+              A.desc, name, enum_name(MY_MSG_CTX, &etab_hcfg, vtype)); 
+          hrc = HIO_ERR_BAD_PARAM;
+          G.local_fails += S.hio_fail = 1;
+          break;
+      }
+    }
+    if (HIO_SUCCESS == hrc) {
+      switch(op) {
+        case HVAO_LT: if ( !(vdoub <  val) ) S.hio_fail = 1; break;
+        case HVAO_LE: if ( !(vdoub <= val) ) S.hio_fail = 1; break;
+        case HVAO_EQ: if ( !(vdoub == val) ) S.hio_fail = 1; break;
+        case HVAO_GE: if ( !(vdoub >= val) ) S.hio_fail = 1; break;
+        case HVAO_GT: if ( !(vdoub >  val) ) S.hio_fail = 1; break;
+        case HVAO_NE: if ( !(vdoub != val) ) S.hio_fail = 1; break;
+      }
+      G.local_fails += S.hio_fail;
+      if (S.hio_fail || MY_MSG_CTX->verbose_level >= 2) {
+        MSG("%s: Assert %s.  Actual value: %f", A.desc, S.hio_fail ? "failed" : "succeeded", vdoub);
+      }
+    }
+  }
+}
+
+ACTION_RUN(hvas_run) {
+  enum hva_type type = V0.i;
+  char * name = V1.s;
+  enum hva_op op = V2.i;
+  char * val = V3.s;
+  hio_return_t hrc = HIO_SUCCESS;
+  hio_object_t obj = NULL;
+  hio_config_type_t vtype;
+  union config_type pval;
+  char * vstr;
+
+  DBG4("hvaf: type: %s name: %s op: %s val: \"%s\"", enum_name(MY_MSG_CTX, &etab_hvat, type),
+        name, enum_name(MY_MSG_CTX, &etab_hvao, op), val);
+ 
+       if (HVAT_pc == type || HVAT_cc == type) obj = (hio_object_t) S.context;
+  else if (HVAT_pd == type || HVAT_cd == type) obj = (hio_object_t) S.dataset;
+  else if (HVAT_pe == type || HVAT_ce == type) obj = (hio_object_t) S.element;
+  else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+ 
+  if (HVAT_pc == type || HVAT_pd == type || HVAT_pe == type) {
+    hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
+    HRC_TEST("get_perf_type");
+    if (HIO_SUCCESS == hrc) {
+      hrc = hio_perf_get_value(obj, name, &pval, sizeof(pval));
+      HRC_TEST("hio_get_perf_value");
+      if (HIO_SUCCESS == hrc) {
+        switch(vtype) {
+          case HIO_CONFIG_TYPE_FLOAT:
+          case HIO_CONFIG_TYPE_DOUBLE:
+          case HIO_CONFIG_TYPE_BOOL:
+          case HIO_CONFIG_TYPE_INT32:
+          case HIO_CONFIG_TYPE_UINT32:
+          case HIO_CONFIG_TYPE_INT64:
+          case HIO_CONFIG_TYPE_UINT64:
+            MSG("%s: Perf variable %s is %s, not comparable with string",
+                A.desc, name, enum_name(MY_MSG_CTX, &etab_hcfg, vtype)); 
+            hrc = HIO_ERR_BAD_PARAM;
+            G.local_fails += S.hio_fail = 1;
+            break; 
+          case HIO_CONFIG_TYPE_STRING:
+            vstr = pval.STRING;
+            break;
+        }
+      }
+    } 
+   } else { // Must be config var
+    hrc = hio_config_get_value(obj, name, &vstr);
+    HRC_TEST("hio_config_get_value");
+  }
+
+  if (HIO_SUCCESS == hrc) {
+    int cmp = strcmp(vstr, val);
+    switch(op) {
+      case HVAO_LT: if ( !(cmp <  0) ) S.hio_fail = 1; break;
+      case HVAO_LE: if ( !(cmp <= 0) ) S.hio_fail = 1; break;
+      case HVAO_EQ: if ( !(cmp == 0) ) S.hio_fail = 1; break;
+      case HVAO_GE: if ( !(cmp >= 0) ) S.hio_fail = 1; break;
+      case HVAO_GT: if ( !(cmp >  0) ) S.hio_fail = 1; break;
+      case HVAO_NE: if ( !(cmp != 0) ) S.hio_fail = 1; break;
+    }
+    G.local_fails += S.hio_fail;
+    if (S.hio_fail || MY_MSG_CTX->verbose_level >= 2) {
+      MSG("%s: Assert %s.  Actual value: \"%s\"", A.desc, S.hio_fail ? "failed" : "succeeded", vstr);
+    }
+  }
+}
+
+//----------------------------------------------------------------------------
+// hdsc - hio_dataset_shoud_checkpoint action handler
+//----------------------------------------------------------------------------
 ACTION_RUN(hdsc_run) {
   // char * name = V0.s;
   hio_recommendation_t expected = (enum hio_recommendation_t) V1.i;
@@ -780,6 +1056,9 @@ ACTION_RUN(hdsc_run) {
   
 }
 
+//----------------------------------------------------------------------------
+// DataWarp API action handlers
+//----------------------------------------------------------------------------
 #if HIO_USE_DATAWARP
 ACTION_RUN(dsdo_run) {
   char * dw_dir = V0.s;
@@ -980,6 +1259,9 @@ MODULE_INSTALL(xexec_hio_install) {
     {"hvsd",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsd_run    },
     {"hvse",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvse_run    },
     {"hdsc",  {STR,  HCPR, NONE, NONE, NONE}, NULL,          hdsc_run    },
+    {"hvai",  {HVAT, STR,  HVAO, SINT, NONE}, hvaif_check,   hvai_run    },
+    {"hvaf",  {HVAT, STR,  HVAO, DOUB, NONE}, hvaif_check,   hvaf_run    },
+    {"hvas",  {HVAT, STR,  HVAO, STR,  NONE}, NULL,          hvas_run    },
     #if HIO_USE_DATAWARP
     {"dsdo",  {STR,  STR,  DWST, NONE, NONE}, NULL,          dsdo_run    },
     {"dwds",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwds_run    },
