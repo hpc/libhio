@@ -1,0 +1,152 @@
+# -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
+#
+# Copyright (c) 2017 Los Alamos National Security, LLC.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+Notes on using DataWarp on LANL Cray systems
+============================================
+
+Last Update 11 Jan 2017
+Cornell Wright
+
+DataWarp is a Cray product that provides a high speed storage device based on
+SSD technologies that is more closely integrated with the compute nodes on an
+HPC system than a traditional parallel file system (PFS).
+
+A full description of DataWarp is available in the documents:
+
+XC™ Series DataWarp™ User Guide (CLE 6.0.UP02) S-2558 (CLE 6.0.UP02.) and
+XC™ Series DataWarp™ Installation and Administration Guide (CLE 6.0.UP02) S-2564 (CLE 6.0.UP02.)
+
+both of which are available on the web site: https://pubs.cray.com.
+
+
+A Brief Description
+-------------------
+
+DataWarp is implemented as a set of service nodes, each of which has about 6 TiB 
+of SSD installed.  When requested by a directive in a job script, a DataWarp
+filesystem is initialized on some or all of the DataWarp nodes and made available
+to the job's compute nodes via a mount on each compute node.  The DataWarp
+filesysem can operate in a variety of modes, including both scratch and cache;
+this document will focus only on "striped scratch" mode which is suitable for
+checkpoints.
+
+In addition to the job script directive allocating the DataWarp filesystem, 
+additional directives are supported to cause pre-job stage-in of files or
+post-job stage-out of files between DataWarp and the PFS.
+
+Examples of those directives:
+
+	#DW jobdw type=scratch access_mode=striped capacity=100GiB
+	#DW stage_in destination=$DW_JOB_STRIPED/<dir> source=<pfs_dir> type=directory
+	#DW stage_out source=$DW_JOB_STRIPED/<dir> destination=<pfs_dir> type=directory
+
+
+DataWarp Usage
+--------------
+
+When a DataWarp filesystem has been allocated, its mount point can be located 
+via environment variable DW_JOB_STRIPED.  This variable is set both on the 
+internal login node and on all the compute nodes.  DataWarp itself is only
+accessible from the compute nodes.  The compute nodes see DataWarp as a normal
+POSIX compatible filesystem.  In addition to the POSIX functionality, files
+and directories can be transferred between DataWarp and the PFS independent
+of the compute nodes.  These transfers can be invoked as mentioned above by
+job script directives or by DataWarp API calls made by the application.  They
+are documented in the User Guide. 
+
+When a DataWarp job is submitted, 3 additional jobs are automatically submitted
+by Moab.  They are called: stage-in, stage-out and coordinating.  The message 
+printed to stdout by msub that normally contains the job ID, for a DataWarp
+job contains the stage-in, compute and stage-out job IDs in that order.  
+
+Like this:
+
+	msub /lustre/ttscratch1/cornell/run_dw_simple_20170111.130847/dw_simple_job.sh
+	55983.datawarp-stagein 55984 55983.datawarp-stageout
+
+The additional jobs are submitted by a Moab function, the DataWarp filter.  It
+logs its actions to the file ac_datawarp.log in the user's home directory.
+
+The state of DataWarp and all of a user's allocations can be displayed by
+the dwstat command (documented in the User Guide.)  An example:
+
+	module load dws
+	dwstat most
+	    pool units quantity     free  gran 
+	wlm_pool bytes 34.88TiB 34.69TiB 32GiB 
+
+	sess state token     creator owner             created expiration nodes 
+	  20 CA--- 45722 MOAB-TORQUE  4611 2016-12-05T13:42:20      never     0 
+	  21 CA--- 45716 MOAB-TORQUE  4611 2016-12-05T13:42:20      never     0 
+
+	inst state sess bytes nodes             created expiration intact label public confs 
+	  20 CA---   20 32GiB     1 2016-12-05T13:42:20      never   true I20-0  false     1 
+	  21 CA---   21 32GiB     1 2016-12-05T13:42:20      never   true I21-0  false     1 
+
+	conf state inst    type activs 
+	  22 CA---   20 scratch      0 
+	  23 CA---   21 scratch      0 
+
+The libHIO package (described below) contains a script, dw_simple_sub.sh, which
+will submit a simple DataWarp test job.  This can be used to familiarize oneself
+with the process of creating and submitting a DataWarp job. 
+
+An application team could choose to use DataWarp directly by issuing POSIX IO
+calls and initiating stage-in and stage-out either via job script directives
+or via DataWarp API calls. Alternatively, the LANL developed, open source package
+libHIO could be used.  See below for more information on libHIO.
+
+
+libHIO
+------
+
+libHIO is a flexible, high-performance parallel IO package developed at LANL.
+It has been released as open source and is available at:
+
+https://github.com/hpc/libhio
+
+libHIO supports IO to either a conventional PFS or to DataWarp with management
+of DataWarp space and stage-in and stage-out from and to the PFS.
+
+For more information on using libHIO, see the github package, in particular:
+
+README
+libhio_api.pdf
+hio_example.c
+
+
+LANL Systems with DataWarp
+--------------------------
+
+System			DW Nodes	Capacity	Theoretical
+							Speed	
+--------------		--------	--------	-----------
+Trinity Ph 1		300		1743 TiB	1589 GiB/S
+Trinity Ph 2		234		1360 TiB	1239 GiB/S
+Trinity Combined	576		3347 TiB	3050 GiB/S
+Trinitite		  6		  35 TiB	  32 GiB/S
+
+As of the writing of this document, actual peak speeds are running 
+at about 90% of theoretical for N-N and at about 75% for N-1.
+
+
+Known Problems:
+--------------
+
+Proxy environment variables, e.g., HTTP_PROXY, HTTPS_PROXY, can cause problems
+with job submission because they interfere with some of Moab and/or DataWarp's 
+communications.  If you use these settings, unset them before submitting a 
+DataWarp job.  This should be corrected soon.
+
+--- end of README.datawarp ---
+
+
+
