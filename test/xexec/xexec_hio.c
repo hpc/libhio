@@ -68,7 +68,7 @@ static char * help =
   "  hvai <type> <name> <op> <integer value>  Assert hio integer variable\n"
   "  hvaf <type> <name> <op> <float value>    Assert hio float variable\n"
   "  hvai <type> <name> <op> <string value>   Assert hio integer variable\n"
-  "                type is {c|p} {c|d|e} like hvp. iop is {LT|LE|EQ|NE|GE|GT}\n"
+  "                type is {c|p} {c|d|e} like hvp. op is {LT|LE|EQ|NE|GE|GT}\n"
   "                false compare is an error. Config variables are all strings\n"   
   "  hdsc <name> <expected> Issue hio_dataset_should_checkpont. Valid <expected> are:\n"
   "                  %s\n"
