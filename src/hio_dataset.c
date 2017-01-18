@@ -292,10 +292,10 @@ int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, hio
 
 int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifest_t manifest, int rc) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  unsigned char *manifest_data;
-  size_t manifest_size;
+  unsigned char *manifest_data = NULL;
+  size_t manifest_size = 0;
   int rank;
-  long ar_data[5];
+  long ar_data[6];
 
   if (!hioi_context_using_mpi (context)) {
     return HIO_SUCCESS;
@@ -312,6 +312,7 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifes
   ar_data[2] = dataset->ds_flags;
   ar_data[3] = dataset->ds_fsattr.fs_scount;
   ar_data[4] = dataset->ds_fsattr.fs_ssize;
+  ar_data[5] = dataset->ds_fsattr.fs_lock_strategy;
 
   rc = MPI_Bcast (ar_data, 5, MPI_LONG, 0, comm);
   if (MPI_SUCCESS != rc) {
@@ -360,6 +361,7 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifes
   dataset->ds_flags = ar_data[2];
   dataset->ds_fsattr.fs_scount = ar_data[3];
   dataset->ds_fsattr.fs_ssize = ar_data[4];
+  dataset->ds_fsattr.fs_lock_strategy = ar_data[5];
 
   return rc;
 }

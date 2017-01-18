@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -93,6 +93,15 @@ static int hioi_fs_open_lustre (hio_context_t context, const char *path, hio_fs_
       return hioi_err_errno (errno);
     }
 
+#if defined(LL_IOC_GROUP_LOCK)
+    if (HIO_FS_LOCK_GROUP == fs_attr->fs_lock_strategy) {
+      rc = ioctl (fd,  LL_IOC_GROUP_LOCK, 1);
+    }
+#endif
+    if (HIO_FS_LOCK_DISABLE == fs_attr->fs_lock_strategy) {
+      rc = ioctl (fd, LL_IOC_SETFLAGS, &(int){LL_FILE_IGNORE_LOCK});
+    }
+
     return fd;
   }
 
@@ -122,10 +131,13 @@ static int hioi_fs_open_lustre (hio_context_t context, const char *path, hio_fs_
     }
 
 #if defined(LL_IOC_GROUP_LOCK)
-    if (fs_attr->fs_use_group_locking) {
+    if (HIO_FS_LOCK_GROUP == fs_attr->fs_lock_strategy) {
       rc = ioctl (fd,  LL_IOC_GROUP_LOCK, 1);
     }
 #endif
+    if (HIO_FS_LOCK_DISABLE == fs_attr->fs_lock_strategy) {
+      rc = ioctl (fd, LL_IOC_SETFLAGS, &(int){LL_FILE_IGNORE_LOCK});
+    }
 
     return fd;
   }

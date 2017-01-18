@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -34,6 +34,14 @@
 #include <sys/stat.h>
 #endif
 
+static hio_var_enum_t hioi_dataset_lock_strategies = {
+  .count = 3,
+  .values = (hio_var_enum_value_t []){
+    {.string_value = "default", .value = HIO_FS_LOCK_DEFAULT},
+    {.string_value = "group", .value = HIO_FS_LOCK_GROUP},
+    {.string_value = "disable", .value = HIO_FS_LOCK_DISABLE},
+  },
+};
 
 static hio_var_enum_value_t hioi_dataset_file_mode_values[] = {
   {.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
@@ -637,10 +645,11 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
       fs_attr->fs_ssize = 1 << 24;
 
       /* use group locking if available as we guarantee stripe exclusivity in optimized mode */
-      fs_attr->fs_use_group_locking = true;
-      hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_use_group_locking,
-                       "use_group_locking", HIO_CONFIG_TYPE_BOOL, NULL, "Use lustre group locking if "
-                       "available (default: true)", 0);
+      fs_attr->fs_lock_strategy = HIO_FS_LOCK_GROUP;
+      hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_lock_strategy,
+                       "lock_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_lock_strategies,
+                       "Lock mode for underlying files. default - Use filesystem default, "
+                       " group - Use group locking, disabled - Disable locking", 0);
 
 #if HIO_MPI_HAVE(3)
       /* if group locking is not available then each rank should attempt to write to

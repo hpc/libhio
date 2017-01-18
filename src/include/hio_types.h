@@ -492,6 +492,15 @@ enum {
   HIO_FS_TYPE_MAX,
 };
 
+enum {
+  /** use filesystem's default locking */
+  HIO_FS_LOCK_DEFAULT,
+  /** use group locking (lustre) */
+  HIO_FS_LOCK_GROUP,
+  /** disable locking entirely */
+  HIO_FS_LOCK_DISABLE,
+};
+
 struct hio_fs_attr_t {
   /** filesystem type index */
   int32_t  fs_type;
@@ -523,7 +532,7 @@ struct hio_fs_attr_t {
   hio_fs_open_fn_t fs_open;
 
   /** use lustre group locking feature if available */
-  bool fs_use_group_locking;
+  int32_t fs_lock_strategy;
 };
 typedef struct hio_fs_attr_t hio_fs_attr_t;
 
