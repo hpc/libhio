@@ -462,7 +462,7 @@ int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t
     return HIO_ERR_BAD_PARAM;
   }
 
-  (void) mergesort (headers, count, sizeof (headers[0]), compar);
+  (void) qsort (headers, count, sizeof (headers[0]), compar);
   return HIO_SUCCESS;
 }
 
