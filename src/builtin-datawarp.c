@@ -279,7 +279,7 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
                  HIO_CONFIG_TYPE_INT32, NULL, "Total number of resident dataset ids for this "
                  "dataset kind", 0);
 
-  if (dataset->ds_flags & HIO_FLAG_WRITE) {
+  if (0 == context->c_rank && dataset->ds_flags & HIO_FLAG_WRITE) {
     /* default to auto mode */
     datawarp_dataset->stage_mode = -1;
     hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->stage_mode,
@@ -292,7 +292,7 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
                      "Keep last n dataset ids written to datawarp (default: 1)", 0);
     if (datawarp_dataset->keep_last > HIO_DATAWARP_MAX_KEEP || datawarp_dataset->keep_last <= 0) {
       hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "builtin-datawarp: invalid value specified for datawarp_keep_last: %d. value must be in "
-                     "the range [1, %d]", HIO_DATAWARP_MAX_KEEP);
+                     "the range [1, %d]", datawarp_dataset->keep_last, HIO_DATAWARP_MAX_KEEP);
       datawarp_dataset->keep_last = ds_data->keep_last;
     }
 
@@ -415,11 +415,13 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
 
     if (DW_STAGE_AT_JOB_END == stage_mode) {
       builtin_datawarp_dataset_backend_data_t *be_data;
-      int next_index = be_data->next_index;
+      int next_index;
 
       be_data = builtin_datawarp_get_dbd (dataset->ds_data);
       /* backend data should have created when this dataset was opened */
       assert (NULL != be_data);
+
+      next_index = be_data->next_index;
 
       if (be_data->resident_ids[next_index].id >= 0) {
         builtin_datawarp_module_dataset_unlink (&posix_module->base, hioi_object_identifier (&dataset->ds_object),
@@ -481,11 +483,11 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
   hio_context_t context = datawarp_module->posix_module.base.context;
   builtin_datawarp_dataset_backend_data_t *be_data;
   struct dirent context_entry, *tmp = NULL;
-  hio_dataset_header_t *headers;
+  hio_dataset_header_t *headers = NULL;
   hio_dataset_data_t *ds_data;
   char *context_path;
   DIR *context_dir;
-  int rc, count;
+  int rc, count = 0;
 
   if (0 != context->c_rank) {
     /* nothing to do */
@@ -505,7 +507,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
     return HIO_SUCCESS;
   }
 
-  while (!readdir_r (context_dir, &context_entry, &tmp)) {
+  while (!readdir_r (context_dir, &context_entry, &tmp) && NULL != tmp) {
     if ('.' == context_entry.d_name[0]) {
       continue;
     }
@@ -556,6 +558,8 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
     be_data->num_resident = count;
 
     free (headers);
+    headers = NULL;
+    count = 0;
   }
 
   closedir (context_dir);
