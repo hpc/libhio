@@ -43,15 +43,26 @@ static hio_var_enum_t hioi_dataset_lock_strategies = {
   },
 };
 
-static hio_var_enum_value_t hioi_dataset_file_mode_values[] = {
-  {.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
-  {.string_value = "file_per_node", .value = HIO_FILE_MODE_OPTIMIZED},
-  {.string_value = "strided", .value = HIO_FILE_MODE_STRIDED},
+enum {
+  BUILTIN_POSIX_API_POSIX,
+  BUILTIN_POSIX_API_STDIO,
+};
+
+static hio_var_enum_t builtin_posix_apis = {
+  .count = 2,
+  .values = (hio_var_enum_value_t []){
+    {.string_value = "posix", .value = BUILTIN_POSIX_API_POSIX},
+    {.string_value = "stdio", .value = BUILTIN_POSIX_API_STDIO},
+  },
 };
 
 static hio_var_enum_t hioi_dataset_file_modes = {
   .count  = 3,
-  .values = hioi_dataset_file_mode_values,
+  .values = (hio_var_enum_value_t []){
+    {.string_value = "basic", .value = HIO_FILE_MODE_BASIC},
+    {.string_value = "file_per_node", .value = HIO_FILE_MODE_OPTIMIZED},
+    {.string_value = "strided", .value = HIO_FILE_MODE_STRIDED},
+  },
 };
 
 /** static functions */
@@ -865,6 +876,18 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     return rc;
   }
 
+  /* NTH: need to dig a little deeper into this but stdio gives better performance when used
+   * with datawarp. In all other cases the POSIX read/write calls appear to be faster. */
+  if (HIO_FS_TYPE_DATAWARP == dataset->ds_fsattr.fs_type) {
+    posix_dataset->ds_file_api = BUILTIN_POSIX_API_STDIO;
+  } else {
+    posix_dataset->ds_file_api = BUILTIN_POSIX_API_POSIX;
+  }
+
+  hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_file_api,
+                   "posix_file_api", HIO_CONFIG_TYPE_INT32, &builtin_posix_apis,
+                   "API set to use for reading/writing files. Valid values: (0: posix, 1: stdio) (default: posix)", 0);
+
   if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     posix_dataset->ds_use_bzip = true;
     hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_use_bzip,
@@ -1201,9 +1224,7 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
                                     char *path, hio_file_t *file) {
   hio_object_t hio_object = &posix_dataset->base.ds_object;
   int open_flags = 0, fd;
-#if BUILTIN_POSIX_USE_STDIO
   char *file_mode;
-#endif
 
   /* determine the fopen file mode to use */
   if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
@@ -1223,23 +1244,24 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
     return fd;
   }
 
-#if BUILTIN_POSIX_USE_STDIO
-  if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
-    file_mode = "w";
-  } else {
-    file_mode = "r";
-  }
+  if (BUILTIN_POSIX_API_STDIO == posix_dataset->ds_file_api) {
+    if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
+      file_mode = "w";
+    } else {
+      file_mode = "r";
+    }
 
-  file->f_hndl = fdopen (fd, file_mode);
-  if (NULL == file->f_hndl) {
-    int hrc = hioi_err_errno (errno);
-    hioi_err_push (hrc, hio_object, "posix: error opening element file %s. "
-                   "errno: %d", path, errno);
-    return hrc;
+    file->f_hndl = fdopen (fd, file_mode);
+    if (NULL == file->f_hndl) {
+      int hrc = hioi_err_errno (errno);
+      hioi_err_push (hrc, hio_object, "posix: error opening element file %s. "
+                     "errno: %d", path, errno);
+      return hrc;
+    }
+  } else {
+    file->f_fd = fd;
+    file->f_hndl = NULL;
   }
-#else
-  file->f_fd = fd;
-#endif
 
   file->f_offset = 0;
 
@@ -1286,14 +1308,14 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
     return rc;
   }
 
-#if BUILTIN_POSIX_USE_STDIO
-  fseek (element->e_file.f_hndl, 0, SEEK_END);
-  element->e_size = ftell (element->e_file.f_hndl);
-  fseek (element->e_file.f_hndl, 0, SEEK_SET);
-#else
-  element->e_size = lseek (element->e_file.f_fd, 0, SEEK_END);
-  lseek (element->e_file.f_fd, 0, SEEK_SET);
-#endif
+  if (element->e_file.f_hndl) {
+    fseek (element->e_file.f_hndl, 0, SEEK_END);
+    element->e_size = ftell (element->e_file.f_hndl);
+    fseek (element->e_file.f_hndl, 0, SEEK_SET);
+  } else {
+    element->e_size = lseek (element->e_file.f_fd, 0, SEEK_END);
+    lseek (element->e_file.f_fd, 0, SEEK_SET);
+  }
 
   return HIO_SUCCESS;
 }

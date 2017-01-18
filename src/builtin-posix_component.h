@@ -71,6 +71,9 @@ typedef struct builtin_posix_module_dataset_t {
 
   /** exclusively write to a single stripe in optimized mode */
   bool                ds_stripe_exclusivity;
+
+  /** API to use to read/write files */
+  int                 ds_file_api;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;
