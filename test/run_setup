@@ -563,8 +563,9 @@ if [[ $batch -eq 0 ]]; then
   if [[ ${OSTYPE:0:6} != "darwin" ]]; then
     # Running on a cluster - record some physical node information
     cmd "$mympicmd -n $PBS_NUM_NODES -N 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c"
-    (export TERM=dumb; cmd "$mympicmd -n 1 lstopo --of ascii -p")
-    cmd "$mympicmd -n 1 lstopo --of console -p"
+    # lstopo having problems, skip for now
+    #(export TERM=dumb; cmd "$mympicmd -n 1 lstopo --of ascii -p")
+    #cmd "$mympicmd -n 1 lstopo --of console -p"
   fi
   # Add .lib dir to library path
   build=${BUILD_TREE:=$PWD/..}

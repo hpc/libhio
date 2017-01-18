@@ -92,6 +92,7 @@ static struct hio_state {
   char * hio_dataset_name;
   I64 hio_ds_id_req;
   I64 hio_ds_id_act;
+  I64 hio_ds_id_latest; // Most recent Dataset ID alloc'd
   hio_flags_t hio_dataset_flags;
   hio_dataset_mode_t hio_dataset_mode;
   char * hio_element_name;
@@ -160,9 +161,15 @@ ENUM_NAMP(HIO_UNLINK_MODE_, FIRST)
 ENUM_NAMP(HIO_UNLINK_MODE_, ALL)
 ENUM_END(etab_hulm, 0, NULL)
 
+
+#define HIO_DATASET_ID_PREVIOUS -0x10000098  // "special" value, most recently used ID
+#define HIO_DATASET_ID_NEXT -0x10000099      // "special" means 1 greater than previous ID
+
 ENUM_START(etab_hdsi) // hio_dataset_id
 ENUM_NAMP(HIO_DATASET_, ID_NEWEST)
 ENUM_NAMP(HIO_DATASET_, ID_HIGHEST)
+ENUM_NAMP(HIO_DATASET_, ID_PREVIOUS)
+ENUM_NAMP(HIO_DATASET_, ID_NEXT)
 ENUM_END(etab_hdsi, 0, NULL)
 
 #define HIO_SCP_ANY -999  // "special" recommendation value, means any value OK
@@ -185,6 +192,7 @@ ENUM_END(etab_dwst, 0, NULL)
 
 MODULE_INIT(xexec_hio_init) {
   struct hio_state * s = state;
+  s->hio_ds_id_latest = 0;
   s->hio_rc_exp = HIO_SUCCESS;
   s->hio_cnt_exp = HIO_CNT_REQ;
   s->hio_dsid_exp = -999;
@@ -262,9 +270,22 @@ ACTION_RUN(hda_run) {
   hio_return_t hrc = HIO_SUCCESS;
   ETIMER local_tmr;
   S.hio_dataset_name = V0.s;
-  S.hio_ds_id_req = V1.u;
   S.hio_dataset_flags = (enum hio_flags_t) V2.i;
   S.hio_dataset_mode = (enum hio_dataset_mode_t) V3.i;
+
+  switch (V1.u) {
+    case HIO_DATASET_ID_PREVIOUS:
+      S.hio_ds_id_req = S.hio_ds_id_latest;
+      break;
+    case HIO_DATASET_ID_NEXT:
+      S.hio_ds_id_req = S.hio_ds_id_latest + 1;
+      break;
+    default:
+      S.hio_ds_id_req = V1.u;
+      break;
+  } 
+  S.hio_ds_id_latest = S.hio_ds_id_req; 
+
   S.hio_rw_count[0] = S.hio_rw_count[1] = 0;
   IF_MPI(MPI_CK(MPI_Barrier( G.mpi_comm)));
   S.hio_hda_time = S.hio_hdo_time = S.hio_heo_time = S.hio_hew_time = S.hio_her_time =
@@ -554,7 +575,21 @@ ACTION_RUN(hdf_run) {
 ACTION_RUN(hdu_run) {
   hio_return_t hrc;
   char * name = V0.s;
-  U64 id = V1.u;
+  U64 id;
+
+  switch (V1.u) {
+    case HIO_DATASET_ID_PREVIOUS:
+      id = S.hio_ds_id_latest;
+      break;
+    case HIO_DATASET_ID_NEXT:
+      id = S.hio_ds_id_latest + 1;
+      break;
+    default:
+      id = V1.u;
+      break;
+  } 
+  S.hio_ds_id_latest = id; 
+
   hio_unlink_mode_t ulm = (enum hio_unlink_mode_t) V2.i;
   hrc = hio_dataset_unlink(S.context, name, id, ulm); 
   HRC_TEST(hio_dataset_unlink)
@@ -1247,7 +1282,7 @@ MODULE_INSTALL(xexec_hio_install) {
     {"hec",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hec_run     },
     {"hdc",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdc_run     },
     {"hdf",   {NONE, NONE, NONE, NONE, NONE}, NULL,          hdf_run     },
-    {"hdu",   {STR,  UINT, HULM, NONE, NONE}, NULL,          hdu_run     },
+    {"hdu",   {STR,  HDSI, HULM, NONE, NONE}, NULL,          hdu_run     },
     {"heful", {NONE, NONE, NONE, NONE, NONE}, NULL,          heful_run   },
     {"hefum", {UINT, NONE, NONE, NONE, NONE}, NULL,          hefum_run   },
     {"hf",    {NONE, NONE, NONE, NONE, NONE}, NULL,          hf_run      },
