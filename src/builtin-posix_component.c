@@ -1814,6 +1814,7 @@ hio_module_t builtin_posix_module_template = {
   .dataset_dump   = builtin_posix_module_dataset_dump,
 
   .fini           = builtin_posix_module_fini,
+  .version        = HIO_MODULE_VERSION_1,
 };
 
 static int builtin_posix_component_init (hio_context_t context) {
@@ -1875,4 +1876,5 @@ hio_component_t builtin_posix_component = {
   .query = builtin_posix_component_query,
   .flags = 0,
   .priority = 10,
+  .version = HIO_COMPONENT_VERSION_1,
 };

@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -115,6 +115,9 @@ typedef struct hio_module_t {
 
   /** minimum size needed for a dataset object */
   size_t                          ds_object_size;
+
+  /** module versioning */
+  int                             version;
 } hio_module_t;
 
 /**
@@ -170,7 +173,13 @@ typedef struct hio_component_t {
 
   /** relative priority 0-100 (0 - lowest, 100 - highest) */
   int                     priority;
+
+  /** component version */
+  int                     version;
 } hio_component_t;
+
+#define HIO_COMPONENT_VERSION_1 1
+#define HIO_MODULE_VERSION_1    1
 
 /**
  * Initialize the hio component system
