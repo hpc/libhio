@@ -1,6 +1,6 @@
 # -*- mode: shell-script-mode -*-
 #
-# Copyright (c) 2014-2016 Los Alamos National Security, LLC. All rights
+# Copyright (c) 2014-2017 Los Alamos National Security, LLC. All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -10,7 +10,7 @@
 #
 
 AC_PREREQ([2.69])
-AC_INIT([libhio], [1.4], [hjelmn@lanl.gov])
+AC_INIT([libhio], [1.4.0], [hjelmn@lanl.gov])
 AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
