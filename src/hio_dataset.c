@@ -436,4 +436,33 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
   return rc;
 }
 
+static int hioi_dataset_header_compare_newest (const void *a, const void *b) {
+  const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
+  const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
+
+  return ((headera->ds_mtime > headerb->ds_mtime) - (headera->ds_mtime < headerb->ds_mtime));
+}
+
+static int hioi_dataset_header_compare_highest (const void *a, const void *b) {
+  const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
+  const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
+
+  return ((headera->ds_id > headerb->ds_id) - (headera->ds_id < headerb->ds_id));
+}
+
+int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t id) {
+  int (*compar) (const void *, const void *);
+
+  if (HIO_DATASET_ID_NEWEST == id) {
+    compar = hioi_dataset_header_compare_newest;
+  } else if (HIO_DATASET_ID_HIGHEST == id) {
+    compar = hioi_dataset_header_compare_highest;
+  } else {
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  (void) mergesort (headers, count, sizeof (headers[0]), compar);
+  return HIO_SUCCESS;
+}
+
 #endif

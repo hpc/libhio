@@ -343,6 +343,17 @@ hio_dataset_backend_data_t *hioi_dbd_alloc (hio_dataset_data_t *data, const char
  */
 hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *data, const char *backend_name);
 
+/**
+ * Sort array of dataset headers by newest or highest id.
+ *
+ * @param[in] headers     header array to sort
+ * @param[in] count       number of elements in the headers array
+ * @param[in] id          dataset id key (HIO_DATASET_ID_HIGHEST or HIO_DATASET_ID_NEWEST)
+ *
+ * This function is used internally for sorting header arrays.
+ */
+int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t id);
+
 /* element functions */
 
 /**

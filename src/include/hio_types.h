@@ -760,6 +760,8 @@ struct hio_element {
 };
 
 struct hio_dataset_header_t {
+  /** associated module */
+  struct hio_module_t *module;
   /** dataset name */
   char     ds_name[HIO_DATASET_NAME_MAX];
   /** dataset identifier */

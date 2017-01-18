@@ -236,6 +236,8 @@ static int builtin_posix_module_dataset_list_internal (struct hio_module_t *modu
         ++set_id_index;
       }
 
+      header->module = module;
+
       free (manifest_path);
     }
 
