@@ -1257,5 +1257,9 @@ int hioi_manifest_ranks (hio_manifest_t manifest, int **ranks, int *rank_count) 
 }
 
 int hioi_manifest_read_header (hio_manifest_t manifest, hio_dataset_header_t *header) {
+  if (NULL == manifest) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
   return hioi_manifest_parse_header_2_0 (manifest->context, header, manifest->json_object);
 }

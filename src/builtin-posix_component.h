@@ -75,4 +75,7 @@ typedef struct builtin_posix_module_dataset_t {
 
 extern hio_component_t builtin_posix_component;
 
+int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name,
+                                                hio_dataset_header_t **headers, int *count);
+
 #endif /* BUILTIN_POSIX_COMPONENT_H */
