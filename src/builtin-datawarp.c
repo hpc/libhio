@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <sys/stat.h>
 

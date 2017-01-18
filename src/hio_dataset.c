@@ -389,7 +389,8 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
     rc = hioi_err_mpi (mpirc);
   }
 
-  if (HIO_SUCCESS != rc) {
+  /* the second conditional is not necessary but keeps static analysis happy */
+  if (HIO_SUCCESS != rc || NULL == all_ranks) {
     free (ranks);
     free (all_ranks);
     return rc;

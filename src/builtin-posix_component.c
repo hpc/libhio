@@ -370,6 +370,10 @@ static int builtin_posix_module_dataset_dump_specific (struct hio_module_t *modu
   if (F_OK != access (manifest_path, R_OK)) {
     free (manifest_path);
     rc = asprintf (&manifest_path, "%s/manifest.json", path);
+    if (0 > rc) {
+      free (path);
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
   }
 
   rc = hioi_manifest_read (context, manifest_path, &manifest);
@@ -380,7 +384,6 @@ static int builtin_posix_module_dataset_dump_specific (struct hio_module_t *modu
     free (manifest_path);
     return rc;
   }
-  fprintf (fh, "Manifest: %s\n", path);
   free (manifest_path);
 
   if (flags & HIO_DUMP_FLAG_ELEMENTS) {
@@ -392,11 +395,14 @@ static int builtin_posix_module_dataset_dump_specific (struct hio_module_t *modu
         unsigned char *tmp_data;
         size_t tmp_size;
 
-        rc = asprintf (&manifest_path, "%s/manifest.%x.json", path, manifest_ids[i]);
+        /* check for compressed manifest first */
+        rc = asprintf (&manifest_path, "%s/manifest.%x.json.bz2", path, manifest_ids[i]);
         assert (0 < rc);
         if (F_OK != access(manifest_path, R_OK)) {
           free (manifest_path);
-          rc = asprintf (&manifest_path, "%s/manifest.%x.json.bz2", path, manifest_ids[i]);
+          /* compressed manifest not found. see if an uncompressed manifest exists */
+          rc = asprintf (&manifest_path, "%s/manifest.%x.json", path, manifest_ids[i]);
+          assert (0 < rc);
         }
 
         rc = hioi_manifest_read (context, manifest_path, &manifest2);
@@ -420,7 +426,7 @@ static int builtin_posix_module_dataset_dump_specific (struct hio_module_t *modu
   rc = hioi_manifest_dump (manifest, flags, rank, fh);
   if (HIO_SUCCESS != rc) {
     hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_list: could not dump manifest at path: %s. rc: %d",
-              manifest_path, rc);
+              path, rc);
   }
 
   free (path);
@@ -498,7 +504,7 @@ static int builtin_posix_module_dataset_dump (struct hio_module_t *module, const
         continue;
       }
 
-      (void) builtin_posix_module_dataset_dump_internal (module, dp->d_name, -1, flags, rank, fh);
+      rc = builtin_posix_module_dataset_dump_internal (module, dp->d_name, -1, flags, rank, fh);
     }
 
     closedir (dir);
@@ -506,7 +512,7 @@ static int builtin_posix_module_dataset_dump (struct hio_module_t *module, const
     rc = builtin_posix_module_dataset_dump_internal (module, name, id, flags, rank, fh);
   }
 
-  return HIO_SUCCESS;
+  return rc;
 }
 
 static int manifest_index_compare (const void *a, const void *b) {
@@ -822,8 +828,6 @@ static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_data
       }
     }
   }
-
-  fprintf (stderr, "dataset mode: %d\n", posix_dataset->base.ds_mode);
 
   /* share dataset information with all processes on this node */
   if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
@@ -1201,7 +1205,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
   pthread_mutex_lock (&unlink_mutex);
   unlink_mask = 0;
   unlink_error = 0;
-  rc = nftw (path, builtin_posix_unlink_cb, 32, FTW_DEPTH | FTW_PHYS);
+  (void) nftw (path, builtin_posix_unlink_cb, 32, FTW_DEPTH | FTW_PHYS);
   free (path);
 
   for (int i = 0 ; i < UNLINK_MAX_THREADS ; ++i) {
