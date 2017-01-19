@@ -381,6 +381,8 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
 
     if (HIO_DATAWARP_STAGE_MODE_AUTO == datawarp_dataset->stage_mode) {
       stage_mode = DW_STAGE_AT_JOB_END;
+    } else {
+      stage_mode = datawarp_dataset->stage_mode;
     }
 
     rc = hioi_mkpath (context, pfs_path, pfs_mode);
@@ -501,9 +503,9 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
   }
 
   context_dir = opendir (context_path);
-  free (context_path);
   if (NULL == context_dir) {
     /* no context directory == no datasets */
+    free (context_path);
     return HIO_SUCCESS;
   }
 
@@ -515,11 +517,13 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
     rc = hioi_dataset_data_lookup (context, context_entry.d_name, &ds_data);
     if (HIO_SUCCESS != rc) {
       /* should not happen */
+      free (context_path);
       return rc;
     }
 
     be_data = builtin_datawarp_get_dbd (ds_data);
     if (NULL == be_data) {
+      free (context_path);
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
@@ -528,6 +532,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
     rc = builtin_posix_module_dataset_list_internal (&datawarp_module->posix_module.base, context_entry.d_name,
                                                      &headers, &count);
     if (HIO_SUCCESS != rc) {
+      free (context_path);
       return rc;
     }
 
@@ -545,12 +550,32 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
     hioi_dataset_headers_sort (headers, count, HIO_DATASET_ID_NEWEST);
 
     for (int i = 0 ; i < count ; ++i) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%lu with status %d",
-                context_entry.d_name, headers[i].ds_id, headers[i].ds_status);
+      int complete = 0, pending = 0, deferred = 0, failed = 0;
+      char *ds_path;
 
       be_data->resident_ids[i].id = headers[i].ds_id;
-      /* we do not need to cancel the stage on this dataset */
-      be_data->resident_ids[i].stage_mode = HIO_DATAWARP_STAGE_MODE_DISABLE;
+
+      rc = asprintf (&ds_path, "%s/%s/%ld", context_path, context_entry.d_name, headers[i].ds_id);
+      if (0 > rc) {
+        free (headers);
+        free (context_path);
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
+
+      rc = dw_query_directory_stage (ds_path, &complete, &pending, &deferred, &failed);
+      free (ds_path);
+
+      if (0 == rc) {
+        /* end of job stages will have all files in the deferred stage. anything else is
+         * an immediate stage */
+        be_data->resident_ids[i].stage_mode = (deferred > 0) ? DW_STAGE_AT_JOB_END : DW_STAGE_IMMEDIATE;
+      } else {
+        /* no stage active. we do not need to cancel the stage on this dataset */
+        be_data->resident_ids[i].stage_mode = HIO_DATAWARP_STAGE_MODE_DISABLE;
+      }
+
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%lu with status %d. stage mode %d",
+                context_entry.d_name, headers[i].ds_id, headers[i].ds_status, be_data->resident_ids[i].stage_mode);
     }
 
     be_data->next_index = 0;
