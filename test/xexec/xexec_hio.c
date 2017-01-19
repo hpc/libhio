@@ -849,11 +849,13 @@ hio_return_t get_perf_type(GLOBAL * gptr, hio_object_t obj, char * name, hio_con
   char * vname;
   hio_config_type_t vtype;
 
-  hrc = hio_perf_get_count(obj, &count);  
+  hrc = hio_perf_get_count(obj, &count); 
+  DBG4("hio_perf_get_count count:%d rc:%d", count, hrc); 
   HRC_TEST("hio_perf_get_count");
   if (HIO_SUCCESS == hrc) {
   for (i=0; i<count; ++i) {
       hrc = hio_perf_get_info(obj, i, &vname, &vtype);
+      DBG4("hio_perf_get_info i: %d name: %s type: %s rc: %d", i, vname, enum_name(MY_MSG_CTX, &etab_hcfg, vtype), hrc); 
       HRC_TEST("hio_perf_get_info");
       if (HIO_SUCCESS == hrc && !strcmp(vname, name)) {
         *type = vtype;

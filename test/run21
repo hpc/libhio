@@ -17,20 +17,21 @@
 batch_sub $(( $ranks * $blksz * $nblk ))
 
 c_init="
-  name run02w v $verbose_lev d $debug_lev mi 0
+  name run21 v $verbose_lev d $debug_lev mi 0
   /@@ run21 - dataset ID management test @/
   dbuf RAND22P 20Mi
   hi MYCTX $HIO_TEST_ROOTS
+  opt -XPERF 
 "
 
 c_w1="
   hda NTNDS ID_NEXT WRITE,CREAT UNIQUE hdo
   heo MYEL WRITE,CREAT,TRUNC
-  hvp c. .
   lc $nblk
     hew 0 $blksz
   le
-  hec hdc hdf
+  hec hdc
+  hvp . \"resident.|.last\"
 "
 
 c_fini="
@@ -38,50 +39,49 @@ c_fini="
 "
 
 
-# Need correct names for dsid_count and dsid_keep
 # /@ n n @/ indicates expected extant DS IDs
 cmd="$c_init
-     $c_w1 $c_w1
+     $c_w1 hdf $c_w1
      /@ 1 2 @/
-     hvai pd dsid_count EQ 2 
+     hvai pd resident_id_count EQ 2 hdf
      $c_w1
      /@ 2 3 @/
-     hvai pd dsid_count EQ 2 
-     hvsc dsid_keep 4
+     hvai pd resident_id_count EQ 2 
+     hvsc datawarp_keep_last 4 hdf
      $c_w1
      /@ 2 3 4 @/
-     hvai pd dsid_count EQ 3 
+     hvai pd resident_id_count EQ 3 hdf 
      $c_w1
      /@ 2 3 4 5 @/
-     hvai pd dsid_count EQ 4 
+     hvai pd resident_id_count EQ 4 hdf
      $c_w1
      /@ 3 4 5 6 @/
-     hvai pd dsid_count EQ 4 
-     hvsc dsid_keep 3
+     hvai pd resident_id_count EQ 4 
+     hvsc datawarp_keep_last 3 hdf
      $c_w1
      /@ 5 6 7 @/
-     hvai pd dsid_count EQ 3
+     hvai pd resident_id_count EQ 3 hdf
      hdu NTNDS 6 CURRENT
      /@ 5 7 @/
-     hvai pd dsid_count EQ 2
+     hvai pd resident_id_count EQ 2
      hdu NTNDS 7 CURRENT
      /@ 5 @/
-     hvai pd dsid_count EQ 1
+     hvai pd resident_id_count EQ 1
      hdu NTNDS 5 CURRENT
      /@ none @/
-     hvai pd dsid_count EQ 0
+     hvai pd resident_id_count EQ 0
      $c_w1
      /@ 8 @/
-     hvai pd dsid_count EQ 1 
+     hvai pd resident_id_count EQ 1 hdf
      $c_w1
      /@ 8 9 @/
-     hvai pd dsid_count EQ 2 
+     hvai pd resident_id_count EQ 2 hdf
      $c_w1
      /@ 8 9 10 @/
-     hvai pd dsid_count EQ 3 
+     hvai pd resident_id_count EQ 3 hdf
      $c_w1
      /@ 9 10 11 @/ 
-     hvai pd dsid_count EQ 3
+     hvai pd resident_id_count EQ 3 hdf
      $c_fini
 "
 
