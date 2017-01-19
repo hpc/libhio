@@ -38,10 +38,32 @@ static int hioi_dataset_open_last (hio_dataset_t dataset) {
 
   hioi_dataset_headers_sort (headers, count, id);
 
-  for (int i = 0 ; i < count ; ++i) {
+  /* debug output */
+  if (0 == context->c_rank && HIO_VERBOSE_DEBUG_MED <= context->c_verbose) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "found %d dataset ids accross all data roots:", count);
+
+    for (int i = 0 ; i < count ; ++i) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "dataset %s::%ld: mtime = %ld, status = %d, data_root = %s",
+                hioi_object_identifier (&dataset->ds_object), headers[i].ds_id,
+                headers[i].ds_mtime, headers[i].ds_status, headers[i].module->data_root);
+    }
+  }
+
+  for (int i = count - 1 ; i >= 0 ; --i) {
+    module = headers[i].module;
+
+    if (0 != headers[i].ds_status) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "skipping dataset with non-zero status: %s::%ld. status = %d",
+                hioi_object_identifier (&dataset->ds_object), headers[i].ds_id, headers[i].ds_status);
+      continue;
+    }
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "attempting to open dataset %s::%ld on data root %s (module: %p). index %d",
+              hioi_object_identifier (&dataset->ds_object), headers[i].ds_id, module->data_root, module, i);
+
     /* set the current dataset id to the one we are attempting to open */
     dataset->ds_id = headers[i].ds_id;
-    rc = hioi_dataset_open_internal (headers[i].module, dataset);
+    rc = hioi_dataset_open_internal (module, dataset);
     if (HIO_SUCCESS == rc) {
       break;
     }

@@ -203,11 +203,9 @@ int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, con
       break;
     }
 
-    num_set_ids += *count;
-
-    tmp = realloc (*headers, num_set_ids * sizeof (**headers));
+    tmp = realloc (*headers, (num_set_ids + *count) * sizeof (**headers));
     if (NULL == tmp) {
-      num_set_ids = *count;
+      num_set_ids = 0;
       break;
     }
     *headers = (hio_dataset_header_t *) tmp;
@@ -232,6 +230,8 @@ int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, con
         continue;
       }
 
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_list: processing dataset %s::%ld", name, ds_id);
+
       rc = asprintf (&manifest_path, "%s/%s/manifest.json.bz2", path, dp->d_name);
       assert (0 <= rc);
 
@@ -255,19 +255,18 @@ int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, con
         }
 
         /* directory exists but there is a broken/no manifest. still include this manifest in the list */
-        strncpy (header->ds_name, dp->d_name, sizeof (header->ds_name));
+        strncpy (header->ds_name, name, sizeof (header->ds_name));
         header->ds_id = ds_id;
         header->ds_status = HIO_ERR_NOT_AVAILABLE;
         header->ds_mtime = 0;
       }
-
-      header->module = module;
 
       hioi_manifest_release (manifest);
       free (manifest_path);
       manifest = NULL;
 
       ++set_id_index;
+      rc = HIO_SUCCESS;
     }
 
     num_set_ids = set_id_index;
@@ -286,8 +285,8 @@ int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, con
 
 static int builtin_posix_module_dataset_list (struct hio_module_t *module, const char *name,
                                               hio_dataset_header_t **headers, int *count) {
+  int rc = HIO_SUCCESS, num_sets = *count, new_sets;
   hio_context_t context = module->context;
-  int rc = HIO_SUCCESS, num_sets = 0;
   void *tmp;
   struct dirent *dp;
   char *path = NULL;
@@ -329,22 +328,33 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
   }
 #endif
 
-  if (0 >= num_sets) {
+  new_sets = num_sets - *count;
+
+  if (0 == new_sets) {
+    return HIO_SUCCESS;
+  }
+
+  if (0 > num_sets) {
     return num_sets;
   }
 
-  *count = num_sets;
-
   if (0 != context->c_rank) {
-    *headers = (hio_dataset_header_t *) calloc (num_sets, sizeof (**headers));
+    *headers = (hio_dataset_header_t *) realloc (*headers, num_sets * sizeof (**headers));
     assert (NULL != *headers);
   }
 
 #if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {
-    MPI_Bcast (*headers, sizeof (**headers) * num_sets, MPI_BYTE, 0, context->c_comm);
+    MPI_Bcast (*headers + *count, sizeof (**headers) * new_sets, MPI_BYTE, 0, context->c_comm);
   }
 #endif
+
+  /* set the correct module pointer for this rank */
+  for (int i = *count ; i < num_sets ; ++i) {
+    headers[0][i].module = module;
+  }
+
+  *count = num_sets;
 
   return HIO_SUCCESS;
 }
