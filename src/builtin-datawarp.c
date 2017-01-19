@@ -345,10 +345,11 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) dataset->ds_module;
   builtin_posix_module_t *posix_module = &datawarp_module->posix_module;
   builtin_posix_module_dataset_t *posix_dataset = &datawarp_dataset->posix_dataset;
+  builtin_datawarp_dataset_backend_data_t *be_data;
   mode_t pfs_mode = posix_module->access_mode;
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   char *dataset_path = NULL;
-  int rc, stage_mode;
+  int rc, stage_mode, next_index;
 
   if (0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE)) {
     /* keep a copy of the base path used by the posix module */
@@ -376,15 +377,15 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
       return HIO_ERR_OUT_OF_RESOURCE;
     }
 
-    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: staging datawarp dataset %s::%lld. "
-              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  hioi_object_identifier(dataset),
-              dataset->ds_id, dataset_path, pfs_path, datawarp_dataset->stage_mode);
-
     if (HIO_DATAWARP_STAGE_MODE_AUTO == datawarp_dataset->stage_mode) {
       stage_mode = DW_STAGE_AT_JOB_END;
     } else {
       stage_mode = datawarp_dataset->stage_mode;
     }
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: staging datawarp dataset %s::%lld. "
+              "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  hioi_object_identifier(dataset),
+              dataset->ds_id, dataset_path, pfs_path, stage_mode);
 
     rc = hioi_mkpath (context, pfs_path, pfs_mode);
     if (HIO_SUCCESS != rc) {
@@ -416,24 +417,29 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
       return HIO_ERROR;
     }
 
-    if (DW_STAGE_AT_JOB_END == stage_mode) {
-      builtin_datawarp_dataset_backend_data_t *be_data;
-      int next_index;
+    be_data = builtin_datawarp_get_dbd (dataset->ds_data);
+    /* backend data should have created when this dataset was opened */
+    assert (NULL != be_data);
 
-      be_data = builtin_datawarp_get_dbd (dataset->ds_data);
-      /* backend data should have created when this dataset was opened */
-      assert (NULL != be_data);
+    next_index = be_data->next_index;
 
-      next_index = be_data->next_index;
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: resident datasets: %d, keep: %d", be_data->num_resident,
+              be_data->keep_last);
 
-      if (be_data->resident_ids[next_index].id >= 0) {
-        builtin_datawarp_module_dataset_unlink (&posix_module->base, hioi_object_identifier (&dataset->ds_object),
-                                                be_data->resident_ids[next_index].id);
-      }
-      ++be_data->num_resident;
+    if (be_data->resident_ids[next_index].id >= 0) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: removing resident dataset with id %ld",
+                be_data->resident_ids[next_index].id);
 
-      be_data->next_index = (next_index + 1) & be_data->keep_last;
+      rc = builtin_datawarp_module_dataset_unlink (&posix_module->base, hioi_object_identifier (&dataset->ds_object),
+                                                   be_data->resident_ids[next_index].id);
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: builtin_datawarp_module_dataset_unlink returned %d. resident ids %d",
+                rc, be_data->num_resident);
     }
+
+    ++be_data->num_resident;
+    be_data->resident_ids[next_index].id = dataset->ds_id;
+    be_data->resident_ids[next_index].stage_mode = stage_mode;
+    be_data->next_index = (next_index + 1) % be_data->keep_last;
   }
 
   return rc;
