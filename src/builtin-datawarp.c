@@ -273,62 +273,63 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
     if (NULL == ds_data) {
         return HIO_ERR_OUT_OF_RESOURCE;
     }
-  }
 
-  hioi_perf_add (context, &dataset->ds_object, &ds_data->num_resident, "resident_id_count",
-                 HIO_CONFIG_TYPE_INT32, NULL, "Total number of resident dataset ids for this "
-                 "dataset kind", 0);
+    if (dataset->ds_flags & HIO_FLAG_WRITE) {
+      hioi_perf_add (context, &dataset->ds_object, &ds_data->num_resident, "resident_id_count",
+                     HIO_CONFIG_TYPE_INT32, NULL, "Total number of resident dataset ids for this "
+                     "dataset kind", 0);
 
-  if (0 == context->c_rank && dataset->ds_flags & HIO_FLAG_WRITE) {
-    /* default to auto mode */
-    datawarp_dataset->stage_mode = -1;
-    hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->stage_mode,
-                     "datawarp_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
-                     "Datawarp stage mode to use with this dataset instance", 0);
+      /* default to auto mode */
+      datawarp_dataset->stage_mode = HIO_DATAWARP_STAGE_MODE_AUTO;
+      hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->stage_mode,
+                       "datawarp_stage_mode", HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
+                       "Datawarp stage mode to use with this dataset instance", 0);
 
-    datawarp_dataset->keep_last = ds_data->keep_last;
-    hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->keep_last,
-                     "datawarp_keep_last", HIO_CONFIG_TYPE_INT32, NULL,
-                     "Keep last n dataset ids written to datawarp (default: 1)", 0);
-    if (datawarp_dataset->keep_last > HIO_DATAWARP_MAX_KEEP || datawarp_dataset->keep_last <= 0) {
-      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "builtin-datawarp: invalid value specified for datawarp_keep_last: %d. value must be in "
-                     "the range [1, %d]", datawarp_dataset->keep_last, HIO_DATAWARP_MAX_KEEP);
       datawarp_dataset->keep_last = ds_data->keep_last;
-    }
-
-    if (datawarp_dataset->keep_last != ds_data->keep_last) {
-      if (datawarp_dataset->keep_last > ds_data->keep_last) {
-        int id_index = ds_data->next_index;
-        for (int i = 0 ; i < (datawarp_dataset->keep_last - ds_data->keep_last) ; ++i) {
-          int64_t ds_id = ds_data->resident_ids[id_index].id;
-
-          if (ds_id < 0) {
-            continue;
-          }
-
-          hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%lu from datawarp", hioi_object_identifier (dataset),
-                    ds_id);
-
-          builtin_datawarp_module_dataset_unlink (module, hioi_object_identifier (dataset), ds_id);
-
-          id_index = (id_index + 1) % ds_data->keep_last;
-        }
-
-        if (id_index != 0) {
-          for (int i = 0 ; i < datawarp_dataset->keep_last ; ++i) {
-            ds_data->resident_ids[i] = ds_data->resident_ids[id_index];
-            id_index = (id_index + 1) % ds_data->keep_last;
-          }
-        }
-      } else {
-        for (int i = 0 ; i < datawarp_dataset->keep_last ; ++i) {
-          if (-1 == ds_data->resident_ids[i].id) {
-            ds_data->next_index = i;
-            break;
-          }
-        }
+      hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->keep_last,
+                       "datawarp_keep_last", HIO_CONFIG_TYPE_INT32, NULL,
+                       "Keep last n dataset ids written to datawarp (default: 1)", 0);
+      if (datawarp_dataset->keep_last >= HIO_DATAWARP_MAX_KEEP || datawarp_dataset->keep_last <= 0) {
+        hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "builtin-datawarp: invalid value specified for datawarp_keep_last: %d. value must be in "
+                       "the range [1, %d]", datawarp_dataset->keep_last, HIO_DATAWARP_MAX_KEEP);
+        datawarp_dataset->keep_last = ds_data->keep_last;
       }
-      ds_data->keep_last = datawarp_dataset->keep_last;
+
+      if (datawarp_dataset->keep_last != ds_data->num_resident) {
+        if (datawarp_dataset->keep_last > ds_data->num_resident) {
+          int id_index = ds_data->next_index;
+          for (int i = 0 ; i < (datawarp_dataset->keep_last - ds_data->num_resident) ; ++i) {
+            int64_t ds_id = ds_data->resident_ids[id_index].id;
+
+            if (ds_id < 0) {
+              continue;
+            }
+
+            hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%lu from datawarp", hioi_object_identifier (dataset),
+                      ds_id);
+
+            builtin_datawarp_module_dataset_unlink (module, hioi_object_identifier (dataset), ds_id);
+
+            id_index = (id_index + 1) % ds_data->num_resident;
+          }
+
+          if (id_index != 0) {
+            for (int i = 0 ; i < datawarp_dataset->keep_last ; ++i) {
+              ds_data->resident_ids[i] = ds_data->resident_ids[id_index];
+              id_index = (id_index + 1) % ds_data->num_resident;
+            }
+          }
+        } else {
+          for (int i = 0 ; i < datawarp_dataset->keep_last ; ++i) {
+            if (-1 == ds_data->resident_ids[i].id) {
+              ds_data->next_index = i;
+              break;
+            }
+          }
+        }
+
+        ds_data->keep_last = datawarp_dataset->keep_last;
+      }
     }
   }
 
