@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -41,8 +41,8 @@ int hio_dataset_close (hio_dataset_t dataset) {
   tmp[4] = atomic_load(&dataset->ds_stat.s_rcount);
   tmp[5] = atomic_load(&dataset->ds_stat.s_wcount);
 
-  context->c_bread = dataset->ds_stat.s_bread;
-  context->c_bwritten = dataset->ds_stat.s_bwritten;
+  context->c_bread += dataset->ds_stat.s_bread;
+  context->c_bwritten += dataset->ds_stat.s_bwritten;
 
   rc = hioi_dataset_close_internal (dataset);
 
