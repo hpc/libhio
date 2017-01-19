@@ -148,6 +148,12 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bwritten, "bytes_written",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
 
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rcount, "read_count",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to read APIs in this dataset instance", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_wcount, "write_count",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset instance", 0);
+
   hioi_list_init (new_dataset->ds_elist);
 
   return new_dataset;
