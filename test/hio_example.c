@@ -6,6 +6,7 @@
  * This file demonstates the usage of libhio.
  */
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include <mpi.h>

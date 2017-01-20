@@ -867,7 +867,7 @@ hio_return_t get_perf_type(GLOBAL * gptr, hio_object_t obj, char * name, hio_con
 }    
     
 ACTION_CHECK(hvaif_check) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   if ( HVAT_cc == type || HVAT_cd == type || HVAT_ce == type ) {
     ERRX("%s: Configuration variable is not comparable with integer or float", A.desc);
   }
@@ -875,9 +875,9 @@ ACTION_CHECK(hvaif_check) {
 
 
 ACTION_RUN(hvai_run) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   char * name = V1.s;
-  enum hva_op op = V2.i;
+  enum hva_op op = (enum hva_op)V2.i;
   I64 val = V3.u;
   hio_return_t hrc = HIO_SUCCESS;
   hio_object_t obj = NULL;
@@ -943,9 +943,9 @@ ACTION_RUN(hvai_run) {
 }
 
 ACTION_RUN(hvaf_run) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   char * name = V1.s;
-  enum hva_op op = V2.i;
+  enum hva_op op = (enum hva_op)V2.i;
   double val = V3.d;
   hio_return_t hrc = HIO_SUCCESS;
   hio_object_t obj = NULL;
@@ -1005,9 +1005,9 @@ ACTION_RUN(hvaf_run) {
 }
 
 ACTION_RUN(hvas_run) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   char * name = V1.s;
-  enum hva_op op = V2.i;
+  enum hva_op op = (enum hva_op)V2.i;
   char * val = V3.s;
   hio_return_t hrc = HIO_SUCCESS;
   hio_object_t obj = NULL;

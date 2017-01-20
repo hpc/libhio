@@ -283,7 +283,6 @@ clean_roots() {
 
 # function to invoke mpi on various platforms - sets max_rc
 myrun() {
-  if [[ $tpp -ne 1 ]]; then mympicmd="$mympicmd -j $tpp"; fi
   #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
   #cmd "$mympicmd -n $ranks echo \"LD_LIBRARY_PATH=\$LD_LIBRARY_PATH\""
   #cmd "$mympicmd -n $ranks ls -l \${LD_LIBRARY_PATH%%:*}"
@@ -292,13 +291,38 @@ myrun() {
   #cmd "$mympicmd -n $ranks ls -l $1"
   #export LD_DEBUG=all
   #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
-  cmd "$uber_cmd $mympicmd -n $ranks -N $ppn $*"
+
+  case $mympicmd in
+    aprun)  pernode="-N $((ppn * tpp))"
+            percore="-j $tpp";;
+    mpirun) pernode="--map-by ppr:$ppn:node"
+            percore="";;
+  esac         
+
+  cmd "$uber_cmd $mympicmd -n $ranks $pernode $percore $*"
   rc=$?
   #unset LD_DEBUG
   #unset LD_DEBUG_OUTPUT
   max_rc=$((rc > max_rc ? rc : max_rc))
   return $rc
 }
+
+# Run a command on a single rank per node
+myrun1ppn() {
+  case $mympicmd in
+    aprun)  pernode="-N 1";;
+    mpirun) pernode="--map-by node";;
+  esac         
+
+  cmd "$mympicmd -n $nodes $pernode $*"
+}
+
+# Run a command on a single rank
+myrun1() {
+  cmd "$mympicmd -n 1 $*"
+}
+
+
 
 #----------------------------------------------------------------------------
 # Parse arguments and other common setup
@@ -499,7 +523,7 @@ if [[ $batch -eq 0 ]]; then
   if [[ -n $DW_JOB_STRIPED ]]; then
     # awk program to parse a few things out of dwstat output
     c='
-      BEGIN       {st='0'; frags=""; nodelist=""}
+      BEGIN       {st="0"; frags=""; nodelist=""}
       /^ *sess /  {st="s"; sesshdr = $0}
       /^ *inst /  {st="i"; insthdr = $0}
       /^ *conf /  {st="c"; confhdr = $0}
@@ -558,15 +582,15 @@ if [[ $batch -eq 0 ]]; then
     cmd "dwstat all | awk \"\$c\""
   fi
   if [[ -n $SLURM_JOB_ID ]]; then
-    set | egrep "^SLURM|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
+    set | egrep "^SLURM|^MOAB|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
     job_dir="/$SLURM_JOB_ID"
   fi
   if [[ ${OSTYPE:0:6} != "darwin" ]]; then
     # Running on a cluster - record some physical node information
-    cmd "$mympicmd -n $PBS_NUM_NODES -N 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c"
+    myrun1ppn bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c
     # lstopo having problems, skip for now
-    #(export TERM=dumb; cmd "$mympicmd -n 1 lstopo --of ascii -p")
-    #cmd "$mympicmd -n 1 lstopo --of console -p"
+    #(export TERM=dumb; myrun1 lstopo --of ascii -p)
+    #cmd "myrun1 lstopo --of console -p"
   fi
   # Add .lib dir to library path
   build=${BUILD_TREE:=$PWD/..}
