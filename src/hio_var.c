@@ -124,7 +124,7 @@ static uint64_t hioi_string_to_int (const char *strval) {
   return value;
 }
 
-static int hioi_var_set_value_internal (hio_context_t context, hio_var_t *var, const char *strval) {
+static int hioi_var_set_value_internal (hio_context_t context, hio_object_t object, hio_var_t *var, const char *strval) {
   uint64_t intval = hioi_string_to_int(strval);
 
   if (NULL == strval) {
@@ -202,6 +202,10 @@ static int hioi_var_set_value_internal (hio_context_t context, hio_var_t *var, c
     break;
   }
 
+  if (var->var_cb) {
+    var->var_cb (object, var);
+  }
+
   return HIO_SUCCESS;
 }
 
@@ -227,7 +231,7 @@ static int hioi_config_set_from_kv_list (hio_config_kv_list_t *list, hio_object_
         !strcmp (var->var_name, kv->key)) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from file",
                 var->var_name, kv->value);
-      return hioi_var_set_value_internal (context, var, kv->value);
+      return hioi_var_set_value_internal (context, object, var, kv->value);
     }
   }
 
@@ -250,7 +254,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     if (NULL != string_value) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
                 var->var_name, string_value, env_name);
-      return hioi_var_set_value_internal (context, var, string_value);
+      return hioi_var_set_value_internal (context, object, var, string_value);
     }
 
     snprintf (env_name, 256, "%sdataset_%s_%s", hio_config_env_prefix, object->identifier, var->var_name);
@@ -261,7 +265,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
     if (NULL != string_value) {
       hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
                 var->var_name, string_value, env_name);
-      return hioi_var_set_value_internal (context, var, string_value);
+      return hioi_var_set_value_internal (context, object, var, string_value);
     }
   }
 
@@ -274,7 +278,7 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
   if (NULL != string_value) {
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
               var->var_name, string_value, env_name);
-    return hioi_var_set_value_internal (context, var, string_value);
+    return hioi_var_set_value_internal (context, object, var, string_value);
   }
 
   snprintf (env_name, 256, "%s%s", hio_config_env_prefix, var->var_name);
@@ -285,14 +289,15 @@ static int hioi_config_set_from_env (hio_context_t context, hio_object_t object,
   if (NULL != string_value) {
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from ENV %s",
               var->var_name, string_value, env_name);
-    return hioi_var_set_value_internal (context, var, string_value);
+    return hioi_var_set_value_internal (context, object, var, string_value);
   }
 
   return HIO_SUCCESS;
 }
 
 int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
-		     hio_config_type_t type, hio_var_enum_t *var_enum, const char *description, int flags) {
+                     hio_var_notification_fn_t notify_cb, hio_config_type_t type, hio_var_enum_t *var_enum,
+                     const char *description, int flags) {
   hio_var_array_t *config = &object->configuration;
   int config_index, rc;
   hio_var_t *new_var;
@@ -324,6 +329,7 @@ int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, con
   new_var->var_flags       = flags;
   new_var->var_storage     = (hio_var_value_t *) addr;
   new_var->var_enum        = var_enum;
+  new_var->var_cb          = notify_cb;
 
   hioi_config_set_from_kv_list (&context->c_fconfig, object, new_var);
   hioi_config_set_from_env (context, object, new_var);
@@ -568,7 +574,7 @@ int hioi_config_set_value (hio_object_t object, const char *variable, const char
       break;
     }
 
-    rc = hioi_var_set_value_internal (hioi_object_context(object), var, value);
+    rc = hioi_var_set_value_internal (hioi_object_context(object), object, var, value);
   } while (0);
 
   hioi_object_unlock (object);
@@ -877,7 +883,7 @@ int hioi_perf_set_value (hio_object_t object, const char *variable, const char *
       break;
     }
 
-    rc = hioi_var_set_value_internal (hioi_object_context(object), var, value);
+    rc = hioi_var_set_value_internal (hioi_object_context(object), object, var, value);
   } while (0);
 
   hioi_object_unlock (object);

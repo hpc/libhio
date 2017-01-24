@@ -646,7 +646,7 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
   /* default to strided output mode */
   posix_dataset->ds_fmode = HIO_FILE_MODE_STRIDED;
   hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_fmode,
-                   "dataset_file_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
+                   "dataset_file_mode", NULL, HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
                    "Modes for writing dataset files. Valid values: (0: basic, 1: file_per_node, 2: strided)", 0);
 
   if (HIO_FILE_MODE_STRIDED == posix_dataset->ds_fmode && HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
@@ -657,7 +657,7 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
   if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode) {
     posix_dataset->ds_bs = 1ul << 23;
     hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_bs,
-                     "dataset_block_size", HIO_CONFIG_TYPE_INT64, NULL,
+                     "dataset_block_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
                      "Block size to use when writing in optimized mode (default: 8M)", 0);
   }
 
@@ -688,7 +688,7 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
     if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
       posix_dataset->ds_stripe_exclusivity = false;
       hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_stripe_exclusivity,
-                       "posix_stripe_exclusivity", HIO_CONFIG_TYPE_BOOL, NULL, "Each rank will write to "
+                       "posix_stripe_exclusivity", NULL, HIO_CONFIG_TYPE_BOOL, NULL, "Each rank will write to "
                        "its own stripe. This will potentially increase the metadata size associated "
                        "with the dataset", 0);
 
@@ -698,7 +698,7 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
       /* use group locking if available as we guarantee stripe exclusivity in optimized mode */
       fs_attr->fs_lock_strategy = HIO_FS_LOCK_GROUP;
       hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_lock_strategy,
-                       "lock_mode", HIO_CONFIG_TYPE_INT32, &hioi_dataset_lock_strategies,
+                       "lock_mode", NULL, HIO_CONFIG_TYPE_INT32, &hioi_dataset_lock_strategies,
                        "Lock mode for underlying files. default - Use filesystem default, "
                        " group - Use group locking, disabled - Disable locking", 0);
 
@@ -718,7 +718,7 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
 #endif
       posix_dataset->ds_fcount = context->c_size / fs_attr->fs_scount;
       hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_fcount,
-                       "dataset_file_count", HIO_CONFIG_TYPE_UINT64, NULL, "Number of files to use "
+                       "dataset_file_count", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "Number of files to use "
                        "in strided file mode", 0);
     } else if (HIO_SET_ELEMENT_UNIQUE != dataset->ds_mode) {
       /* set defaults striping count */
@@ -729,16 +729,16 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
     }
 
     hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_scount,
-                     "stripe_count", HIO_CONFIG_TYPE_UINT32, NULL, "Stripe count for all dataset "
+                     "stripe_count", NULL, HIO_CONFIG_TYPE_UINT32, NULL, "Stripe count for all dataset "
                      "data files", 0);
 
     hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_ssize,
-                     "stripe_size", HIO_CONFIG_TYPE_UINT64, NULL, "Stripe size for all dataset "
+                     "stripe_size", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "Stripe size for all dataset "
                      "data files", 0);
 
     if (fs_attr->fs_flags & HIO_FS_SUPPORTS_RAID) {
       hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_raid_level,
-                       "raid_level", HIO_CONFIG_TYPE_UINT64, NULL, "RAID level for dataset "
+                       "raid_level", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "RAID level for dataset "
                        "data files. Keep in mind that some filesystems only support 1/2 RAID "
                        "levels", 0);
     }
@@ -899,13 +899,13 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   }
 
   hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_file_api,
-                   "posix_file_api", HIO_CONFIG_TYPE_INT32, &builtin_posix_apis,
+                   "posix_file_api", NULL, HIO_CONFIG_TYPE_INT32, &builtin_posix_apis,
                    "API set to use for reading/writing files. Valid values: (0: posix, 1: stdio) (default: posix)", 0);
 
   if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     posix_dataset->ds_use_bzip = true;
     hioi_config_add (context, &dataset->ds_object, &posix_dataset->ds_use_bzip,
-                     "dataset_use_bzip", HIO_CONFIG_TYPE_BOOL, NULL,
+                     "dataset_use_bzip", NULL, HIO_CONFIG_TYPE_BOOL, NULL,
                      "Use bzip2 compression for dataset manifests", 0);
   }
 

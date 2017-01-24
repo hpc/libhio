@@ -306,6 +306,16 @@ typedef struct hio_var_enum_t {
   hio_var_enum_value_t *values;
 } hio_var_enum_t;
 
+struct hio_var_t;
+
+/**
+ * Callback function for notification that a variable has changed.
+ *
+ * @param[in] object    hio object handle
+ * @param[in] variable  variable that has been modified
+ */
+typedef void (*hio_var_notification_fn_t) (hio_object_t object, struct hio_var_t *variable);
+
 typedef struct hio_var_t {
   /** unique name for this variable (allocated) */
   char             *var_name;
@@ -319,6 +329,8 @@ typedef struct hio_var_t {
   const char       *var_description;
   /** variable enumerator (integer types only) */
   const hio_var_enum_t *var_enum;
+  /** optional callack after the value is set */
+  hio_var_notification_fn_t var_cb;
 } hio_var_t;
 
 typedef struct hio_var_array_t {
@@ -471,9 +483,14 @@ struct hio_dataset_data_t {
 typedef struct hio_dataset_data_t hio_dataset_data_t;
 
 struct hio_dataset_backend_data_t {
+  /** backend data is stored in a list */
   hio_list_t  dbd_list;
 
+  /** name of backend */
   const char *dbd_backend_name;
+
+  /** optional release function */
+  void (*dbd_release_fn) (struct hio_dataset_backend_data_t *);
 };
 typedef struct hio_dataset_backend_data_t hio_dataset_backend_data_t;
 

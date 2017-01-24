@@ -76,6 +76,9 @@ static void hioi_context_release (hio_object_t object) {
     /* clean up backend data */
     hioi_list_foreach_safe(db_data, db_next, ds_data->dd_backend_data, hio_dataset_backend_data_t, dbd_list) {
       hioi_list_remove(db_data, dbd_list);
+      if (db_data->dbd_release_fn) {
+        db_data->dbd_release_fn (db_data);
+      }
       free ((void *) db_data->dbd_backend_name);
       free (db_data);
     }
@@ -326,15 +329,15 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   }
 
   hioi_config_add (context, &context->c_object, &context->c_enable_tracing,
-                   "enable_tracing", HIO_CONFIG_TYPE_BOOL, NULL, "Enable full tracing", 0);
+                   "enable_tracing", NULL, HIO_CONFIG_TYPE_BOOL, NULL, "Enable full tracing", 0);
 
   hioi_config_add (context, &context->c_object, &context->c_verbose,
-                   "verbose", HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
+                   "verbose", NULL, HIO_CONFIG_TYPE_UINT32, NULL, "Debug level", 0);
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Set context verbosity to %d", context->c_verbose);
 
   hioi_config_add (context, &context->c_object, &context->c_droots,
-                   "data_roots", HIO_CONFIG_TYPE_STRING, NULL,
+                   "data_roots", NULL, HIO_CONFIG_TYPE_STRING, NULL,
                    "Comma-separated list of data roots to use with this context "
                    "(default: posix:$PWD)", 0);
 
@@ -347,19 +350,19 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   }
 
   hioi_config_add (context, &context->c_object, &context->c_print_stats,
-                   "print_statistics", HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
+                   "print_statistics", NULL, HIO_CONFIG_TYPE_BOOL, NULL, "Print statistics "
                    "to stdout when the context is closed (default: 0)", 0);
 
 #if HIO_USE_DATAWARP
   context->c_dw_root = strdup ("auto");
   hioi_config_add (context, &context->c_object, &context->c_dw_root,
-                   "datawarp_root", HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
+                   "datawarp_root", NULL, HIO_CONFIG_TYPE_STRING, NULL, "Mount path "
                    "for datawarp (burst-buffer) (default: auto-detect)", HIO_VAR_FLAG_DEFAULT);
   #ifdef HIO_DATAWARP_DEBUG_LOG
     context->c_dw_debug_mask = 0;
     context->c_dw_debug_installed = false;
     hioi_config_add (context, &context->c_object, &context->c_dw_debug_mask,
-                     "datawarp_debug_mask", HIO_CONFIG_TYPE_UINT64, NULL, "Mask for "
+                     "datawarp_debug_mask", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "Mask for "
                      "datawarp debug log messages (default: 0)", HIO_VAR_FLAG_DEFAULT);
   #endif
 #endif
@@ -367,28 +370,28 @@ static int hio_init_common (hio_context_t context, const char *config_file, cons
   /* mtti configuration */
   context->c_job_sys_int_rate = 138889;
   hioi_config_add (context, &context->c_object, &context->c_job_sys_int_rate,
-                   "job_sys_int_rate", HIO_CONFIG_TYPE_UINT64, NULL, "Total "
+                   "job_sys_int_rate", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "Total "
                    "system interrupt rate in failures per 10^9 hours (default: "
                    "138889)", 0);
 
   context->c_job_node_int_rate = 5758;
   hioi_config_add (context, &context->c_object, &context->c_job_node_int_rate,
-                   "job_node_int_rate", HIO_CONFIG_TYPE_UINT64, NULL, "Node "
+                   "job_node_int_rate", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "Node "
                    "interrupt rate in failures per 10^9 hours (default: 5758)", 0);
 
   context->c_job_node_sw_rate = 0;
   hioi_config_add (context, &context->c_object, &context->c_job_node_sw_rate,
-                   "job_node_sw_rate", HIO_CONFIG_TYPE_UINT64, NULL, "Software "
+                   "job_node_sw_rate", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "Software "
                    "failure rate in failures per 10^9 hours (default: 0)", 0);
 
   context->c_end_time = 0;
   hioi_config_add (context, &context->c_object, &context->c_end_time,
-                   "end_time", HIO_CONFIG_TYPE_UINT64, NULL, "Job end time "
+                   "end_time", NULL, HIO_CONFIG_TYPE_UINT64, NULL, "Job end time "
                    "in UNIX time format (default: 0)", 0);
 
   context->c_job_sigusr1_warning_time = 1800;
   hioi_config_add (context, &context->c_object, &context->c_job_sigusr1_warning_time,
-                   "sigusr1_warning_time", HIO_CONFIG_TYPE_UINT64, NULL,
+                   "sigusr1_warning_time", NULL, HIO_CONFIG_TYPE_UINT64, NULL,
                    "Time remaining in job when SIGUSR1 is caught", 0);
 
   context->c_start_time = time (NULL);

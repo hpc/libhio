@@ -128,17 +128,17 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
 
   new_dataset->ds_fsattr.fs_type = HIO_FS_TYPE_DEFAULT;
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_fsattr.fs_type,
-                   "dataset_filesystem_type", HIO_CONFIG_TYPE_INT32, &hioi_dataset_fs_type_enum,
+                   "dataset_filesystem_type", NULL, HIO_CONFIG_TYPE_INT32, &hioi_dataset_fs_type_enum,
                    "Type of filesystem this dataset resides on", HIO_VAR_FLAG_READONLY);
 
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_data->dd_average_size,
-                   "dataset_expected_size", HIO_CONFIG_TYPE_INT64, NULL,
+                   "dataset_expected_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
                    "Expected global size of this dataset", 0);
 
   /* default to a megabyte for the buffer size */
   new_dataset->ds_buffer_size = 1 << 20;
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_buffer_size,
-                   "dataset_buffer_size", HIO_CONFIG_TYPE_INT64, NULL,
+                   "dataset_buffer_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
                    "Buffer size to use for aggregating read and write operations", 0);
 
   /* set up performance variables */
