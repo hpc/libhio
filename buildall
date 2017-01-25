@@ -201,6 +201,13 @@ for v in $vers; do
     gr-intel  ) build_r none    gr-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
     ml-gnu    ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    ml-intel  ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+
+    sn-gnu    ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    sn-intel  ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+
+    wf-gnu    ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    wf-intel  ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
     ga-gnu    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
     ga-gnuk   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;

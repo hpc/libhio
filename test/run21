@@ -36,7 +36,7 @@ c_w1() {
       hew 0 $blksz
     le
     hec v $verbose_lev hdc 
-    hvai pd resident_id_count EQ $exp 
+    ifr 0 hvai pd resident_id_count EQ $exp eif
     hvp . \"resident.|.last\"
     hdf
   "
@@ -71,15 +71,12 @@ cmd="$c_init
 
      /@@ 5 7 @/
      hdu NTNDS 6 CURRENT
-     hvai pd resident_id_count EQ 2
 
      /@@ 5 @/
-     hdu NTNDS 6 CURRENT
-     hvai pd resident_id_count EQ 1
+     hdu NTNDS 7 CURRENT
 
      /@@ none @/
      hdu NTNDS 5 CURRENT
-     hvai pd resident_id_count EQ 0
 
      /@@ 8 @/
      `c_w1 1`

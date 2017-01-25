@@ -78,6 +78,8 @@ static char * help =
   "  dwss <path> <size> <width> Issue dw_set_stripe_configuration; if file exists, must be\n"
   "                             empty, if not exist, file created, if directory exists, striping set\n"
   "  dwgs <path>   Issue dw_get_stripe_configuration, display results\n"
+  "  dwmp <dw_root> <ppn> Issue dw_get_mds_path wuth <dw_root> int(rank/<ppn>).  Set env var\n"
+  "                HIO_datawarp_root from result.\n"   
   #if DW_PH_2
   "  dwws <file>   Issue dw_wait_sync_complete\n"
   #endif // DW_PH_2
@@ -891,7 +893,9 @@ ACTION_RUN(hvai_run) {
        if (HVAT_pc == type) obj = (hio_object_t) S.context;
   else if (HVAT_pd == type) obj = (hio_object_t) S.dataset;
   else if (HVAT_pe == type) obj = (hio_object_t) S.element;
-  else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+  else ERRX("%s: internal error: invalid type %d", A.desc, type);
+
+  if (!obj) ERRX("%s: object not valid (type: %s)", A.desc, enum_name(MY_MSG_CTX, &etab_hvat, type));
  
   hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
   HRC_TEST("get_perf_type");
@@ -960,6 +964,8 @@ ACTION_RUN(hvaf_run) {
   else if (HVAT_pd == type) obj = (hio_object_t) S.dataset;
   else if (HVAT_pe == type) obj = (hio_object_t) S.element;
   else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+
+  if (!obj) ERRX("%s: object not valid (type: %s)", A.desc, enum_name(MY_MSG_CTX, &etab_hvat, type));
  
   hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
   HRC_TEST("get_perf_type");
@@ -1022,6 +1028,8 @@ ACTION_RUN(hvas_run) {
   else if (HVAT_pd == type || HVAT_cd == type) obj = (hio_object_t) S.dataset;
   else if (HVAT_pe == type || HVAT_ce == type) obj = (hio_object_t) S.element;
   else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+
+  if (!obj) ERRX("%s: object not valid (type: %s)", A.desc, enum_name(MY_MSG_CTX, &etab_hvat, type));
  
   if (HVAT_pc == type || HVAT_pd == type || HVAT_pe == type) {
     hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
@@ -1072,7 +1080,7 @@ ACTION_RUN(hvas_run) {
 }
 
 //----------------------------------------------------------------------------
-// hdsc - hio_dataset_shoud_checkpoint action handler
+// hdsc - hio_dataset_should_checkpoint action handler
 //----------------------------------------------------------------------------
 ACTION_RUN(hdsc_run) {
   // char * name = V0.s;
@@ -1230,6 +1238,20 @@ ACTION_RUN(dwgs_run) {
   if (quit) G.local_fails++;
 }
 
+ACTION_RUN(dwmp_run) {
+  char * dw_root = V0.s;
+  U64 ppn = V1.u;
+  char * prefix;
+
+  U64 key = G.myrank/ppn;
+  ERRX("dwmp not yet supported"); 
+  //prefix = dw_get_mds_path(dw_root, key);
+  prefix="";
+  VERB1("dw_get_mds_path(\"%s\", %lld) returns \"%s\"", dw_root, key, prefix);
+  int rc = setenv("HIO_datawarp_root", prefix, 1);
+  if (rc) ERRX("setenv(%s, %s) rc: %d errno: %d(%s)", "HIO_datawarp_root", prefix, rc, errno, strerror(errno));
+}
+
 
 #if DW_PH_2
 ACTION_RUN(dwws_run) {
@@ -1304,6 +1326,7 @@ MODULE_INSTALL(xexec_hio_install) {
     {"dwds",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwds_run    },
     {"dwss",  {STR,  UINT, UINT, NONE, NONE}, NULL,          dwss_run    },
     {"dwgs",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwgs_run    },
+    {"dwmp",  {STR,  UINT, NONE, NONE, NONE}, NULL,          dwmp_run    },
     #if DW_PH_2
     {"dwws",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwws_run    },
     #endif  // DW_PH_2
