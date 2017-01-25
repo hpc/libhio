@@ -853,6 +853,7 @@ int hioi_perf_add (hio_context_t context, hio_object_t object, void *addr, const
   new_var->var_flags       = flags;
   new_var->var_storage     = (hio_var_value_t *) addr;
   new_var->var_enum        = NULL;
+  new_var->var_cb          = NULL;
 
   return HIO_SUCCESS;
 }
