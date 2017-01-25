@@ -167,6 +167,7 @@ typedef ACTION_RUN(action_run);
 struct action {
   int tokn;             // Index of first token for action
   int actn;             // Index of this action element
+  int ife_num;          // If this is an ifr, index of cooresponding ife 
   char * action;        // Action name
   char * desc;          // Action description
   action_check * checker;

@@ -25,11 +25,12 @@ c_init="
 "
 
 c_w1() {
-  exp=$1
-  if [[ -n $2 ]]; then keep="hvsd datawarp_keep_last $2"
+  id=$1
+  exp=$2
+  if [[ -n $3 ]]; then keep="hvsd datawarp_keep_last $3"
   else keep=""; fi
   echo -n " 
-    hda NTNDS ID_NEXT WRITE,CREAT UNIQUE
+    hda NTNDS $id WRITE,CREAT UNIQUE
     $keep hdo 
     v 0 heo MYEL WRITE,CREAT,TRUNC
     lc $nblk
@@ -49,26 +50,27 @@ c_fini="
 # /@ n n @/ indicates expected extant DS IDs after next write
 cmd="$c_init
      /@@ 1 @/
-     `c_w1 1`
+     `c_w1 1 1`
 
      /@@ 2 @/
-     `c_w1 1`
+     `c_w1 2 1`
 
      /@@ 2 3 @/
-     `c_w1 2 4`
+     `c_w1 3 2 4`
 
      /@@ 2 3 4 @/
-     `c_w1 3`
+     `c_w1 4 3`
 
      /@@ 2 3 4 5 @/
-     `c_w1 4`
+     `c_w1 5 4`
 
      /@@ 3 4 5 6 @/
-     `c_w1 4`
+     `c_w1 6 4`
 
      /@@ 5 6 7 @/
-     `c_w1 3 3`
+     `c_w1 7 3 3`
 
+     ifr 0
      /@@ 5 7 @/
      hdu NTNDS 6 CURRENT
 
@@ -77,21 +79,24 @@ cmd="$c_init
 
      /@@ none @/
      hdu NTNDS 5 CURRENT
+     eif 
+    
+     mb
 
      /@@ 8 @/
-     `c_w1 1`
+     `c_w1 8 1`
 
      /@@ 8 9 @/
-     `c_w1 2`
+     `c_w1 9 2`
 
      /@@ 8 9 10 @/
-     `c_w1 3`
+     `c_w1 10 3`
 
      /@@ 9 10 11 @/
-     `c_w1 3`
+     `c_w1 11 3`
 
      /@@ 10 11 12 @/
-     `c_w1 3`
+     `c_w1 12 3`
 "
 
 cmd="$cmd $c_fini"
@@ -102,7 +107,7 @@ clean_roots $HIO_TEST_ROOTS
 
 myrun $HIO_TEST_XEXEC $cmd
 
-myrun find $DW_JOB_STRIPED
+myrun1 find $DW_JOB_STRIPED
   
 check_rc
 if [[ $max_rc -eq 0 && $after -gt 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi
