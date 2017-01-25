@@ -141,17 +141,6 @@ static void builtin_datawarp_bed_release (hio_dataset_backend_data_t *data) {
   }
 }
 
-static void builtin_datawarp_keep_last_set_cb (hio_object_t object, struct hio_var_t *variable) {
-  builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) object;
-  builtin_datawarp_dataset_backend_data_t *be_data;
-
-  be_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (datawarp_dataset->posix_dataset.base.ds_data,
-                                                                                      "datawarp");
-  if (NULL != be_data) {
-    be_data->keep_last = datawarp_dataset->keep_last;
-  }
-}
-
 static builtin_datawarp_dataset_backend_data_t *builtin_datawarp_get_dbd (hio_dataset_data_t *ds_data) {
   builtin_datawarp_dataset_backend_data_t *be_data;
 
@@ -285,6 +274,43 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
   return rc;
 }
 
+static void builtin_datawarp_cleanup (hio_dataset_t dataset, builtin_datawarp_dataset_backend_data_t *be_data) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
+  builtin_datawarp_resident_id_t *resident_id, *next;
+  hio_module_t *module = dataset->ds_module;
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin_datawarp_cleanup: there are %d resident dataset ids. keeping at most %d",
+            be_data->num_resident, be_data->keep_last);
+
+  hioi_list_foreach_safe (resident_id, next, be_data->resident_ids, builtin_datawarp_resident_id_t, dwrid_list) {
+    int64_t ds_id = resident_id->dwrid_id;
+
+    if (be_data->num_resident <= be_data->keep_last) {
+      break;
+    }
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%lu from datawarp", hioi_object_identifier (dataset),
+              ds_id);
+
+    builtin_datawarp_module_dataset_unlink (module, hioi_object_identifier (dataset), ds_id);
+  }
+}
+
+static void builtin_datawarp_keep_last_set_cb (hio_object_t object, struct hio_var_t *variable) {
+  builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) object;
+  hio_context_t context = hioi_object_context (object);
+  builtin_datawarp_dataset_backend_data_t *be_data;
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "user set keep_last variable to %d", datawarp_dataset->keep_last);
+
+  be_data = (builtin_datawarp_dataset_backend_data_t *) hioi_dbd_lookup_backend_data (datawarp_dataset->posix_dataset.base.ds_data,
+                                                                                      "datawarp");
+  if (NULL != be_data) {
+    be_data->keep_last = datawarp_dataset->keep_last;
+    builtin_datawarp_cleanup (&datawarp_dataset->posix_dataset.base, be_data);
+  }
+}
+
 
 static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset);
 
@@ -346,20 +372,11 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
         hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "builtin-datawarp: invalid value specified for datawarp_keep_last: %d. value must be in "
                        "the range [1, %d]", datawarp_dataset->keep_last, HIO_DATAWARP_MAX_KEEP);
         datawarp_dataset->keep_last = be_data->keep_last;
+      } else {
+        be_data->keep_last = datawarp_dataset->keep_last;
       }
 
-      num_resident = be_data->num_resident;
-      if (num_resident > datawarp_dataset->keep_last) {
-        hioi_list_foreach_safe (resident_id, next, be_data->resident_ids, builtin_datawarp_resident_id_t, dwrid_list) {
-          int64_t ds_id = resident_id->dwrid_id;
-          hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%lu from datawarp", hioi_object_identifier (dataset),
-                    ds_id);
-
-          builtin_datawarp_module_dataset_unlink (module, hioi_object_identifier (dataset), ds_id);
-        }
-      }
-
-      be_data->keep_last = datawarp_dataset->keep_last;
+      builtin_datawarp_cleanup (dataset, be_data);
     }
   }
 
