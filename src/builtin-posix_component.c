@@ -215,7 +215,7 @@ int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, con
     while (NULL != (dp = readdir (dir))) {
       hio_dataset_header_t *header = headers[0] + set_id_index;
       char *manifest_path, *tmp;
-      uint64_t ds_id;
+      int64_t ds_id;
 
       if ('.' == dp->d_name[0]) {
         continue;
@@ -230,7 +230,8 @@ int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, con
         continue;
       }
 
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_list: processing dataset %s::%ld", name, ds_id);
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_list: processing dataset %s::%" PRId64,
+                name, ds_id);
 
       rc = asprintf (&manifest_path, "%s/%s/manifest.json.bz2", path, dp->d_name);
       assert (0 <= rc);
