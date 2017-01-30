@@ -18,14 +18,14 @@
 #include "hio_internal.h"
 
 static void print_usage (void) {
-  printf ("Usage: hio_ds_info [options] <data root> <context name> [dataset name [dataset id]]\n");
+  printf ("Usage: hio_dump [options] <data root> <context name> [dataset name [dataset id]]\n");
   printf ("Dump metadata associated with libhio dataset(s).\n");
 
   exit (EXIT_FAILURE);
 }
 
 static void print_version (void) {
-  printf ("hio_ds_info %s", VERSION);
+  printf ("hio_dump %s", VERSION);
   printf ("Copyright © 2016 Los Alamos National Security, LLC\n\n");
 
   printf("libhio comes with NO WARRANTY.\n");
@@ -39,7 +39,7 @@ static void print_version (void) {
 
 int main (int argc, char *argv[]) {
   const char *data_root, *context = NULL, *dataset = NULL;
-  int rc, opt, opt_index, list_rank = -1;
+  int opt, opt_index, list_rank = -1;
   int64_t dataset_id = -1;
   uint32_t flags = 0;
 
