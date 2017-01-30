@@ -1,6 +1,6 @@
 # -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
 #
-# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+# Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -607,13 +607,6 @@ if [[ $batch -eq 0 ]]; then
   export HIO_TEST_MI_SHIFT=$((ppn * tpp))
   export HIO_TEST_XEXEC=${HIO_TEST_XEXEC="./xexec/.libs/xexec.x"}
 
-  addifd() {
-    if [[ $root_count -lt 2 && -d $1 ]]; then
-      HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"
-      root_count=$(($root_count + 1))
-    fi
-  }
-
   # If HIO_TEST_ROOTS not set, set up default
   if [[ -z $HIO_TEST_ROOTS ]]; then
 
@@ -642,22 +635,33 @@ if [[ $batch -eq 0 ]]; then
     fi
 
     if [[ $dw_alloc_mode -le 2 ]]; then
-      addifd "/lus/snx11004/$LOGNAME"
-      addifd "/lscratch1/$LOGNAME"
-      addifd "/lscratch2/$LOGNAME"
-      addifd "/lscratch3/$LOGNAME"
-      addifd "/lscratch4/$LOGNAME"
-      addifd "/lustre/scratch3/$LOGNAME"
-      addifd "/lustre/scratch4/$LOGNAME"
-      addifd "/lustre/scratch5/$LOGNAME"
-      addifd "/lustre/tr2scratch1/$LOGNAME"
-      addifd "/lustre/trscratch1/$LOGNAME"
-      addifd "/lustre/trscratch2/$LOGNAME"
-      addifd "/lustre/ttscratch1/$LOGNAME"
-      addifd "/scratch1/$LOGNAME"
-      addifd "/scratch1/users/$LOGNAME"
-      addifd "/lustre/scratch1/yellow/$LOGNAME"
-      addifd "$HOME/scratch-tmp"
+      # If a scratch directory is not found here, then either set the SCRATCHPATH
+      # environment variable or add additional default directories below.
+      # SCRATCHPATH is a colon (:) delimited list of directories
+      where=$(($LINENO+1))
+      default="/scratch1/users/$LOGNAME"
+      default="$default:/lustre/ttscratch1/$LOGNAME"
+      default="$default:/lustre/tr2scratch1/$LOGNAME"
+      default="$default:/lustre/trscratch1/$LOGNAME"
+      default="$default:/lustre/trscratch2/$LOGNAME"
+      default="$default:/lustre/scratch1/yellow/$LOGNAME"
+      default="$default:/lustre/scratch2/yellow/$LOGNAME"
+      default="$default:/lustre/scratch3/$LOGNAME"
+      default="$default:/lustre/scratch4/$LOGNAME"
+
+      SCRATCHPATH=${SCRATCHPATH-$default}
+      start_count=$root_count
+      for scratchdir in ${SCRATCHPATH//":"/" "}; do
+        if [[ $root_count -lt 2 && -d $scratchdir ]]; then
+          HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$scratchdir/hio_test$job_dir"
+          root_count=$(($root_count + 1))
+        fi
+      done
+
+      if [[ $root_count -le $start_count ]]; then
+        errx "Unable to find scratch directory; set SCRATCHPATH or add a directory near run_setup line $where"
+      fi
+
     fi
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
   fi
@@ -665,12 +669,6 @@ if [[ $batch -eq 0 ]]; then
   if [[ -z $HIO_TEST_ROOTS ]] ; then
     export HIO_TEST_ROOTS="posix:/tmp/hio_test"
     msg "Warning: HIO_TEST_ROOTS defaulted to $HIO_TEST_ROOTS"
-  fi
-
-  # Special hack for buffy - since no PFS, inhibit staging for sizes larger than tiny
-  if [[ $hostpre == "bu-" && $size != "t" ]]; then
-    msg "Buffy with size > tiny, disabling datawarp staging"
-    export HIO_datawarp_stage_mode="disable"
   fi
 
   if [[ $query_size -eq 0 ]]; then
@@ -693,6 +691,5 @@ if [[ $batch -eq 0 ]]; then
 
   fi
 fi
-
 
 # --- end of run_setup ---
