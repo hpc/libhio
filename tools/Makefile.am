@@ -1,6 +1,6 @@
 # -*- Makefile.am -*-
 #
-# Copyright (c) 2016      Los Alamos National Security, LLC. All rights
+# Copyright (c) 2016-2017 Los Alamos National Security, LLC. All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -12,6 +12,10 @@
 LDADD = ../src/libhio.la
 AM_CPPFLAGS = -I$(top_srcdir)/src/include
 
-bin_PROGRAMS = hio_ds_info
+# install tool manual pages
+man1_MANS = man/hio_dump.1
+dist_man_MANS = man/hio_dump.1
 
-hio_ds_info_SOURCES = hio_ds_info.c
+bin_PROGRAMS = hio_dump
+
+hio_dump_SOURCES = hio_dump.c

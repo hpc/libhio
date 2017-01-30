@@ -288,7 +288,6 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
                                               hio_dataset_header_t **headers, int *count) {
   int rc = HIO_SUCCESS, num_sets = *count, new_sets;
   hio_context_t context = module->context;
-  void *tmp;
   struct dirent *dp;
   char *path = NULL;
   DIR *dir;
@@ -403,9 +402,6 @@ static int builtin_posix_module_dataset_dump_specific (struct hio_module_t *modu
     rc = builtin_posix_module_dataset_manifest_list_all (path, &manifest_ids, &manifest_count, 1);
     if (HIO_SUCCESS == rc) {
       for (size_t i = 0 ; i < manifest_count ; ++i) {
-        unsigned char *tmp_data;
-        size_t tmp_size;
-
         /* check for compressed manifest first */
         rc = asprintf (&manifest_path, "%s/manifest.%x.json.bz2", path, manifest_ids[i]);
         assert (0 < rc);
@@ -534,7 +530,6 @@ static int manifest_index_compare (const void *a, const void *b) {
 static int builtin_posix_module_dataset_manifest_list_all (const char *path, int **manifest_ids, size_t *count, size_t nnodes) {
   int num_manifest_ids = 0, manifest_id_index = 0;
   unsigned int manifest_id;
-  int rc = HIO_SUCCESS;
   int *tmp = NULL;
   struct dirent *dp;
   DIR *dir;
@@ -589,12 +584,9 @@ static int builtin_posix_module_dataset_manifest_list_all (const char *path, int
 #if HIO_MPI_HAVE(3)
 static int builtin_posix_module_dataset_manifest_list (builtin_posix_module_dataset_t *posix_dataset, int **manifest_ids, size_t *count) {
   hio_context_t context = hioi_object_context (&posix_dataset->base.ds_object);
-  int num_manifest_ids = 0, manifest_id_index = 0;
-  unsigned int manifest_id;
+  int num_manifest_ids = 0;
   int rc = HIO_SUCCESS;
   int *tmp = NULL;
-  struct dirent *dp;
-  DIR *dir;
 
   *manifest_ids = NULL;
   *count = 0;

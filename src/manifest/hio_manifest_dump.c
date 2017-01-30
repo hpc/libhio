@@ -60,11 +60,11 @@ static void hioi_manifest_print_yaml (const char *key, json_object *object, FILE
   if (!array) {
     for (int i = 0 ; hioi_key_mapping[i].key ; ++i) {
       if (0 == strcasecmp (key, hioi_key_mapping[i].key)) {
-        if (hioi_key_mapping[i].key == HIO_MANIFEST_KEY_MTIME) {
+        if (0 == strcmp (hioi_key_mapping[i].key, HIO_MANIFEST_KEY_MTIME)) {
           is_time = true;
-        } else if (hioi_key_mapping[i].key == HIO_MANIFEST_KEY_SEGMENTS) {
+        } else if (0 == strcmp (hioi_key_mapping[i].key, HIO_MANIFEST_KEY_SEGMENTS)) {
           json_object_array_sort (object, hioi_manifest_segment_sort);
-        } else if (hioi_key_mapping[i].key == HIO_MANIFEST_KEY_ELEMENTS) {
+        } else if (0 == strcmp (hioi_key_mapping[i].key, HIO_MANIFEST_KEY_ELEMENTS)) {
           is_elements = true;
         }
         key = hioi_key_mapping[i].value;
@@ -113,8 +113,6 @@ static void hioi_manifest_print_yaml (const char *key, json_object *object, FILE
 
 static int hioi_manifest_dump_2_0 (hio_context_t context, json_object *object, int32_t flags, int rank, FILE *fh) {
   const char *tmp_string;
-  unsigned long value;
-  long svalue;
   int rc;
 
   /* check for compatibility with this manifest version */
@@ -145,8 +143,6 @@ static int hioi_manifest_dump_2_0 (hio_context_t context, json_object *object, i
 
 int hioi_manifest_dump_file (hio_context_t context, const char *path, uint32_t flags, int rank, FILE *fh) {
   hio_manifest_t manifest;
-  size_t manifest_size;
-  json_object *object;
   int rc;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "dumping json dataset manifest header from %s", path);
@@ -163,7 +159,5 @@ int hioi_manifest_dump_file (hio_context_t context, const char *path, uint32_t f
 }
 
 int hioi_manifest_dump (hio_manifest_t manifest, uint32_t flags, int rank, FILE *fh) {
-  int rc;
-
   return hioi_manifest_dump_2_0 (manifest->context, manifest->json_object, flags, rank, fh);
 }

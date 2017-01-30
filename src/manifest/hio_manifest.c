@@ -889,7 +889,6 @@ hio_manifest_t hioi_manifest_create (hio_context_t context) {
 int hioi_manifest_deserialize (hio_context_t context, const unsigned char *data, const size_t data_size, hio_manifest_t *manifest_out) {
   unsigned char *tmp = NULL;
   hio_manifest_t manifest;
-  bool free_data = false;
   json_object *object;
   int rc;
 
@@ -978,8 +977,6 @@ int hioi_manifest_read (hio_context_t context, const char *path, hio_manifest_t 
 
 int hioi_manifest_load (hio_dataset_t dataset, hio_manifest_t manifest) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  size_t manifest_size = 0;
-  int rc;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Loading dataset manifest on %s:%" PRIu64,
             dataset->ds_object.identifier, dataset->ds_id);
@@ -1181,7 +1178,6 @@ int hioi_manifest_ranks (hio_manifest_t manifest, int **ranks, int *rank_count) 
   int manifest_ranks = 0, element_count;
   unsigned char *rank_map = NULL;
   int *rank_list;
-  bool free_manifest = false;
   int rc = HIO_SUCCESS;
   unsigned long size;
 

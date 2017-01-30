@@ -16,10 +16,9 @@
 static int hioi_dataset_open_last (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context ((hio_object_t) dataset);
   hio_dataset_header_t *headers = NULL;
-  int item_count = 0, rc, count = 0;
   int64_t id = dataset->ds_id;
   hio_module_t *module;
-  void *tmp;
+  int rc, count = 0;
 
   for (int i = 0 ; i < context->c_mcount ; ++i) {
     module = context->c_modules[i];
