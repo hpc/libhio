@@ -11,7 +11,7 @@
 
 ACLOCAL_AMFLAGS=-I m4
 
-dirs = src design test
+dirs = src design test tools
 if HDF5_AVAILABLE
 dirs += hdf5-hio
 endif

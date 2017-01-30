@@ -1,6 +1,6 @@
 # -*- Makefile.am -*-
 #
-# Copyright (c) 2014-2016 Los Alamos National Security, LLC. All rights
+# Copyright (c) 2014-2017 Los Alamos National Security, LLC. All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -11,7 +11,12 @@
 
 LDADD = ../src/libhio.la
 AM_CPPFLAGS = -I$(top_srcdir)/src/include
-EXTRA_DIST = run_setup run_combo run01 run02 run03 run04 run05 run07 run08 run09 run10 run12 run20 run80 run81 run82 run83 run84 run85 run90 run91 dw_simple_sub.sh hio_example.sh check_test dw_rm_all_sess 
+ED1 = run_setup run_combo run01 run02 run03 run04 run05 run07 run08 run09
+ED2 = run10 run12 run20 run21
+ED3 = run80 run81 run82 run83 run84 run85 run90 run91 
+ED4 = dw_simple_sub.sh hio_example.sh check_test dw_rm_all_sess 
+
+EXTRA_DIST = ${ED1} ${ED2} ${ED3} ${ED4}
 
 SUBDIRS = xexec
 

@@ -153,7 +153,7 @@ msg "buildall $args: Starting at `date`"
 autogen=0
 incremental=0
 tree=$(dirname ${BASH_SOURCE[0]})   # -t defaults to location of this script
-tarname="libhio-1.4"
+tarname="libhio-1.4.0"
 dir_suffix=""        # Directory suffix - used to force version specific name on remote directory
 
 goodver="local mu-gnu mu-intel mu-pgi ct-gnu ct-intel tt-gnu bu-gnu bu-cray"
@@ -197,16 +197,17 @@ for v in $vers; do
   case $v in
     local     ) build_l -n $vs;;
 
-    mu-gnu    ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
-    mu-intel  ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
-    mu-pgi    ) build_r none    mu-fey     "$rmt_dir/$vs" $tarname -n $vs  -l pgi   -l openmpi ;;
+    gr-gnu    ) build_r none    gr-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    gr-intel  ) build_r none    gr-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
     ml-gnu    ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    ml-intel  ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
-    ct-gnu    ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-gnu   ;;
-    ct-intel  ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-intel ;;
-    ct-cray   ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-pgi,PrgEnv-cray  ;;
-    ct-pgi    ) build_r none    ct-fe1     "$rmt_dir/$vs" $tarname -n $vs                             ;;
+    sn-gnu    ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    sn-intel  ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+
+    wf-gnu    ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    wf-intel  ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
     ga-gnu    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
     ga-gnuk   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;

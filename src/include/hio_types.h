@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -37,18 +37,20 @@
 #elif HIO_ATOMICS_BUILTIN
 
 
-typedef unsigned long atomic_ulong;
+typedef volatile unsigned long atomic_ulong;
 
 #define atomic_init(p, v) (*(p) = v)
 #define atomic_fetch_add(p, v) __atomic_fetch_add(p, v, __ATOMIC_SEQ_CST)
+#define atomic_fetch_or(p, v) __atomic_fetch_or(p, v, __ATOMIC_SEQ_CST)
 #define atomic_load(v) (*(v))
 
 #elif HIO_ATOMICS_SYNC
 
-typedef unsigned long atomic_ulong;
+typedef volatile unsigned long atomic_ulong;
 
 #define atomic_init(p, v) (*(p) = v)
 #define atomic_fetch_add(p, v) __sync_fetch_and_add(p, v)
+#define atomic_fetch_or(p, v) __sync_fetch_and_or(p, v)
 #define atomic_load(v) (*(v))
 
 #endif
@@ -109,17 +111,11 @@ static inline bool hioi_list_empty (hio_list_t *list) {
 
 
 static inline size_t hioi_list_length (hio_list_t *list) {
-  hio_list_t *item = list;
   size_t count = 0;
 
-  if (hioi_list_empty (list)) {
-    return 0;
-  }
-
-  do {
+  for (hio_list_t *item = list->next ; item != list ; item = item->next) {
     ++count;
-    item = item->next;
-  } while (item != list);
+  }
 
   return count;
 }
@@ -128,6 +124,9 @@ static inline size_t hioi_list_length (hio_list_t *list) {
 
 /* forward declaration for internal request structure */
 struct hio_internal_request_t;
+
+struct hio_manifest;
+typedef struct hio_manifest *hio_manifest_t;
 
 /**
  * Close a dataset and release any internal state
@@ -242,6 +241,14 @@ typedef void (*hio_object_release_fn_t) (hio_object_t object);
 
 struct hio_config_t;
 
+enum {
+  HIO_DUMP_FLAG_DEFAULT  = 0x0,
+  HIO_DUMP_FLAG_CONFIG   = 0x1,
+  HIO_DUMP_FLAG_ELEMENTS = 0x2,
+  HIO_DUMP_FLAG_PERF     = 0x4,
+  HIO_DUMP_FLAG_MASK     = 0xf,
+};
+
 typedef enum {
   HIO_OBJECT_TYPE_CONTEXT,
   HIO_OBJECT_TYPE_DATASET,
@@ -299,6 +306,16 @@ typedef struct hio_var_enum_t {
   hio_var_enum_value_t *values;
 } hio_var_enum_t;
 
+struct hio_var_t;
+
+/**
+ * Callback function for notification that a variable has changed.
+ *
+ * @param[in] object    hio object handle
+ * @param[in] variable  variable that has been modified
+ */
+typedef void (*hio_var_notification_fn_t) (hio_object_t object, struct hio_var_t *variable);
+
 typedef struct hio_var_t {
   /** unique name for this variable (allocated) */
   char             *var_name;
@@ -312,6 +329,8 @@ typedef struct hio_var_t {
   const char       *var_description;
   /** variable enumerator (integer types only) */
   const hio_var_enum_t *var_enum;
+  /** optional callack after the value is set */
+  hio_var_notification_fn_t var_cb;
 } hio_var_t;
 
 typedef struct hio_var_array_t {
@@ -403,14 +422,15 @@ struct hio_context {
 
 #if HIO_MPI_HAVE(3)
   MPI_Comm           c_shared_comm;
-  int                c_shared_size;
-  int                c_shared_rank;
   int               *c_shared_ranks;
 
   MPI_Comm           c_node_leader_comm;
   int                c_node_count;
   int               *c_node_leaders;
 #endif
+
+  int                c_shared_size;
+  int                c_shared_rank;
 
   hio_list_t         c_ds_data;
 
@@ -419,6 +439,23 @@ struct hio_context {
 
   bool               c_enable_tracing;
   char              *c_trace_format;
+
+  /** timestamp from context creation */
+  uint64_t           c_start_time;
+
+  /** timestap for the end of the current job */
+  uint64_t           c_end_time;
+
+  /* failure configuration */
+
+  /** system interrupt rate */
+  uint64_t           c_job_sys_int_rate;
+  /** node interrupt rate */
+  uint64_t           c_job_node_int_rate;
+  /** software interrupt rate */
+  uint64_t           c_job_node_sw_rate;
+  /** warning time for SIGUSR1 in seconds */
+  uint64_t           c_job_sigusr1_warning_time;
 };
 
 struct hio_dataset_data_t {
@@ -431,8 +468,9 @@ struct hio_dataset_data_t {
   /** last complete dataset id */
   int64_t     dd_last_id;
 
-  /** last time a write completed */
-  time_t      dd_last_write_completion;
+  /** last time a read or write was completed with a member of this
+   * dataset */
+  time_t      dd_last_completion;
 
   /** weighted average write time for a member of this dataset */
   uint64_t    dd_average_write_time;
@@ -445,9 +483,14 @@ struct hio_dataset_data_t {
 typedef struct hio_dataset_data_t hio_dataset_data_t;
 
 struct hio_dataset_backend_data_t {
+  /** backend data is stored in a list */
   hio_list_t  dbd_list;
 
+  /** name of backend */
   const char *dbd_backend_name;
+
+  /** optional release function */
+  void (*dbd_release_fn) (struct hio_dataset_backend_data_t *);
 };
 typedef struct hio_dataset_backend_data_t hio_dataset_backend_data_t;
 
@@ -464,6 +507,15 @@ enum {
   HIO_FS_TYPE_GPFS,
   HIO_FS_TYPE_DATAWARP,
   HIO_FS_TYPE_MAX,
+};
+
+enum {
+  /** use filesystem's default locking */
+  HIO_FS_LOCK_DEFAULT,
+  /** use group locking (lustre) */
+  HIO_FS_LOCK_GROUP,
+  /** disable locking entirely */
+  HIO_FS_LOCK_DISABLE,
 };
 
 struct hio_fs_attr_t {
@@ -497,7 +549,7 @@ struct hio_fs_attr_t {
   hio_fs_open_fn_t fs_open;
 
   /** use lustre group locking feature if available */
-  bool fs_use_group_locking;
+  int32_t fs_lock_strategy;
 };
 typedef struct hio_fs_attr_t hio_fs_attr_t;
 
@@ -505,10 +557,13 @@ typedef struct hio_fs_attr_t hio_fs_attr_t;
  * hio buffer descriptor
  */
 typedef struct hio_buffer_t {
+  /** list of internal requests associated with this buffer */
   hio_list_t b_reqlist;
-  int        b_reqcount;
+  /** base of buffer region */
   void      *b_base;
+  /** size of buffer */
   size_t     b_size;
+  /** number of bytes remaining in the buffer */
   size_t     b_remaining;
 } hio_buffer_t;
 
@@ -647,6 +702,17 @@ struct hio_request {
   int               req_status;
 };
 
+typedef struct hio_iovec_t {
+  /** base address of memory region */
+  intptr_t base;
+  /** number of items */
+  size_t count;
+  /** size of each item */
+  size_t size;
+  /** stride between items */
+  size_t stride;
+} hio_iovec_t;
+
 typedef enum hio_request_type_t {
   HIO_REQUEST_TYPE_READ,
   HIO_REQUEST_TYPE_WRITE,
@@ -656,13 +722,7 @@ typedef struct hio_internal_request_t {
   hio_list_t    ir_list;
   hio_element_t ir_element;
   uint64_t      ir_offset;
-  union {
-    void *r;
-    const void *w;
-  } ir_data;
-  size_t        ir_count;
-  size_t        ir_size;
-  size_t        ir_stride;
+  hio_iovec_t   ir_vec;
   size_t        ir_transferred;
   int           ir_status;
   hio_request_type_t ir_type;
@@ -712,19 +772,21 @@ struct hio_element {
   /** function to complete pending element reads */
   hio_element_complete_fn_t e_complete;
 
-  /** function to close the element */
+  /** function to close the element (optional. may be NULL) */
   hio_element_close_fn_t e_close;
 };
 
 struct hio_dataset_header_t {
+  /** associated module */
+  struct hio_module_t *module;
+  /** dataset name */
+  char     ds_name[HIO_DATASET_NAME_MAX];
   /** dataset identifier */
   int64_t  ds_id;
   /** dataset modification time */
   time_t   ds_mtime;
   /** dataset mode (unique, shared) */
   int      ds_mode;
-  /** dataset file mode (optimized, basic) */
-  int      ds_fmode;
   /** dataset status (set at close time) */
   int      ds_status;
 };

@@ -20,6 +20,8 @@ AC_DEFUN([HIO_CHECK_CVERSION],[
         AC_PROG_CC_C99
     fi
 
+    AM_PROG_CC_C_O
+
     AC_MSG_CHECKING([for C11 atomics])
     hio_check_cversion_c11_atomics=0
     hio_check_cversion_sync_atomics=0

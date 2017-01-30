@@ -44,7 +44,8 @@ int hioi_var_lookup (hio_var_array_t *var_array, const char *name);
  * @param[in] flags       variable flags
  */
 int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, const char *name,
-		     hio_config_type_t type, hio_var_enum_t *var_enum, const char *description, int flags);
+                     hio_var_notification_fn_t notify_cb, hio_config_type_t type, hio_var_enum_t *var_enum,
+                     const char *description, int flags);
 
 int hioi_config_parse (hio_context_t context, const char *config_file, const char *prefix);
 

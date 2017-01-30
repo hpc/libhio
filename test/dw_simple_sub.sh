@@ -1,7 +1,7 @@
 #! /bin/bash
 # -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*- */
 #
-# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+# Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -111,19 +111,11 @@ errx() {
   exit 12
 }
 
-find_scratch () {
-  if [[ -z $DW_SIMPLE_SCR ]]; then
-    if [[ -e $1 ]]; then
-      export DW_SIMPLE_SCR=$1
-    fi
-  fi
-}
-
 #-----------------------------------------------------------------------------
 # Start up
 #-----------------------------------------------------------------------------
 pkg="dw_simple"
-ver="20160524"
+ver="20170130"
 dashes="---------------------------------------------------------------------"
 
 dw_cache=0
@@ -149,16 +141,26 @@ msg "$pkg version $ver starting ($mode)"
 # Find a usable scratch directory
 #-----------------------------------------------------------------------------
 msg "Finding scratch directory"
-find_scratch /scratch1/users/$LOGNAME
-find_scratch /lustre/scratch4/$LOGNAME
-find_scratch /lustre/scratch5/$LOGNAME
-find_scratch /lscratch1/$LOGNAME
-find_scratch ~/scratch-tmp
 
-# Add additional find_scratch calls (above) as needed for various systems
+# If a scratch directory is not found here, then either set the SCRATCHPATH
+# environment variable or add additional default directories below.
+# SCRATCHPATH is a colon (:) delimited list of directories
+where=$(($LINENO+1))
+default="/scratch1/users/$LOGNAME"
+default="$default:/lustre/ttscratch1/$LOGNAME"
+default="$default:/lustre/tr2scratch1/$LOGNAME"
+default="$default:/lustre/trscratch1/$LOGNAME"
+default="$default:/lustre/trscratch2/$LOGNAME"
+
+SCRATCHPATH=${SCRATCHPATH-$default}
+for scratchdir in ${SCRATCHPATH//":"/" "}; do
+  if [[ -z $DW_SIMPLE_SCR && -e $scratchdir ]]; then
+    export DW_SIMPLE_SCR=$scratchdir
+  fi
+done
 
 if [[ -z $DW_SIMPLE_SCR ]]; then
-  errx "Unable to find scratch directory; add a directory near $0 line $(($LINENO-5))"
+  errx "Unable to find scratch directory; set SCRATCHPATH or add a directory near $0 line $where"
 fi
 msg "Scratch directory is $DW_SIMPLE_SCR"
 
@@ -261,6 +263,7 @@ if [[ $dw_cache -eq 0 ]]; then
 else
   msg "     diff -r $dir_si $dir_ex"
 fi
+msg "There should be no differences listed"
 msg "$dashes"
 msg "$pkg version $ver done"
 if [[ $test_mode -eq 1 ]]; then cat $job_file; fi

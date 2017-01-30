@@ -37,6 +37,15 @@ typedef  int32_t I32;
   #define MIN(a,b) ( (a) < (b) ? (a) : (b) )
 #endif
 
+// Hang for gdb attach
+#define HANG_ME  {                                            \
+    volatile int hang = 1;                                    \
+    printf("PID %d ready for attach: set {int}%p = 0\n",      \
+            getpid(), (void *)&hang);                         \
+    fflush(stdout);                                           \
+    while (hang) sleep(1);                                    \
+  }
+
 //----------------------------------------------------------------------------
 // Message control macros and functions
 //----------------------------------------------------------------------------

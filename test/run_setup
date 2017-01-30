@@ -1,6 +1,6 @@
 # -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
 #
-# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+# Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -283,7 +283,6 @@ clean_roots() {
 
 # function to invoke mpi on various platforms - sets max_rc
 myrun() {
-  if [[ $tpp -ne 1 ]]; then mympicmd="$mympicmd -j $tpp"; fi
   #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
   #cmd "$mympicmd -n $ranks echo \"LD_LIBRARY_PATH=\$LD_LIBRARY_PATH\""
   #cmd "$mympicmd -n $ranks ls -l \${LD_LIBRARY_PATH%%:*}"
@@ -292,13 +291,38 @@ myrun() {
   #cmd "$mympicmd -n $ranks ls -l $1"
   #export LD_DEBUG=all
   #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
-  cmd "$uber_cmd $mympicmd -n $ranks -N $ppn $*"
+
+  case $mympicmd in
+    aprun)  pernode="-N $((ppn * tpp))"
+            percore="-j $tpp";;
+    mpirun) pernode="--map-by ppr:$ppn:node"
+            percore="";;
+  esac         
+
+  cmd "$uber_cmd $mympicmd -n $ranks $pernode $percore $*"
   rc=$?
   #unset LD_DEBUG
   #unset LD_DEBUG_OUTPUT
   max_rc=$((rc > max_rc ? rc : max_rc))
   return $rc
 }
+
+# Run a command on a single rank per node
+myrun1ppn() {
+  case $mympicmd in
+    aprun)  pernode="-N 1";;
+    mpirun) pernode="--map-by node";;
+  esac         
+
+  cmd "$mympicmd -n $nodes $pernode $*"
+}
+
+# Run a command on a single rank
+myrun1() {
+  cmd "$mympicmd -n 1 $*"
+}
+
+
 
 #----------------------------------------------------------------------------
 # Parse arguments and other common setup
@@ -319,6 +343,7 @@ dw_alloc_pct=100
 proc_type=""
 uber_cmd=""
 query_size=0
+TMPDIR=/tmp
 
 size="s"
 job_dir=""
@@ -498,7 +523,7 @@ if [[ $batch -eq 0 ]]; then
   if [[ -n $DW_JOB_STRIPED ]]; then
     # awk program to parse a few things out of dwstat output
     c='
-      BEGIN       {st='0'; frags=""; nodelist=""}
+      BEGIN       {st="0"; frags=""; nodelist=""}
       /^ *sess /  {st="s"; sesshdr = $0}
       /^ *inst /  {st="i"; insthdr = $0}
       /^ *conf /  {st="c"; confhdr = $0}
@@ -557,15 +582,15 @@ if [[ $batch -eq 0 ]]; then
     cmd "dwstat all | awk \"\$c\""
   fi
   if [[ -n $SLURM_JOB_ID ]]; then
-    set | egrep "^SLURM|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
+    set | egrep "^SLURM|^MOAB|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
     job_dir="/$SLURM_JOB_ID"
   fi
   if [[ ${OSTYPE:0:6} != "darwin" ]]; then
     # Running on a cluster - record some physical node information
-    cmd "$mympicmd -n $PBS_NUM_NODES -N 1 bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c"
+    myrun1ppn bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c
     # lstopo having problems, skip for now
-    #(export TERM=dumb; cmd "$mympicmd -n 1 lstopo --of ascii -p")
-    #cmd "$mympicmd -n 1 lstopo --of console -p"
+    #(export TERM=dumb; myrun1 lstopo --of ascii -p)
+    #cmd "myrun1 lstopo --of console -p"
   fi
   # Add .lib dir to library path
   build=${BUILD_TREE:=$PWD/..}
@@ -581,13 +606,6 @@ if [[ $batch -eq 0 ]]; then
 
   export HIO_TEST_MI_SHIFT=$((ppn * tpp))
   export HIO_TEST_XEXEC=${HIO_TEST_XEXEC="./xexec/.libs/xexec.x"}
-
-  addifd() {
-    if [[ $root_count -lt 2 && -d $1 ]]; then
-      HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$1/hio_test$job_dir"
-      root_count=$(($root_count + 1))
-    fi
-  }
 
   # If HIO_TEST_ROOTS not set, set up default
   if [[ -z $HIO_TEST_ROOTS ]]; then
@@ -617,22 +635,33 @@ if [[ $batch -eq 0 ]]; then
     fi
 
     if [[ $dw_alloc_mode -le 2 ]]; then
-      addifd "/lus/snx11004/$LOGNAME"
-      addifd "/lscratch1/$LOGNAME"
-      addifd "/lscratch2/$LOGNAME"
-      addifd "/lscratch3/$LOGNAME"
-      addifd "/lscratch4/$LOGNAME"
-      addifd "/lustre/scratch3/$LOGNAME"
-      addifd "/lustre/scratch4/$LOGNAME"
-      addifd "/lustre/scratch5/$LOGNAME"
-      addifd "/lustre/tr2scratch1/$LOGNAME"
-      addifd "/lustre/trscratch1/$LOGNAME"
-      addifd "/lustre/trscratch2/$LOGNAME"
-      addifd "/lustre/ttscratch1/$LOGNAME"
-      addifd "/scratch1/$LOGNAME"
-      addifd "/scratch1/users/$LOGNAME"
-      addifd "/lustre/scratch1/yellow/$LOGNAME"
-      addifd "$HOME/scratch-tmp"
+      # If a scratch directory is not found here, then either set the SCRATCHPATH
+      # environment variable or add additional default directories below.
+      # SCRATCHPATH is a colon (:) delimited list of directories
+      where=$(($LINENO+1))
+      default="/scratch1/users/$LOGNAME"
+      default="$default:/lustre/ttscratch1/$LOGNAME"
+      default="$default:/lustre/tr2scratch1/$LOGNAME"
+      default="$default:/lustre/trscratch1/$LOGNAME"
+      default="$default:/lustre/trscratch2/$LOGNAME"
+      default="$default:/lustre/scratch1/yellow/$LOGNAME"
+      default="$default:/lustre/scratch2/yellow/$LOGNAME"
+      default="$default:/lustre/scratch3/$LOGNAME"
+      default="$default:/lustre/scratch4/$LOGNAME"
+
+      SCRATCHPATH=${SCRATCHPATH-$default}
+      start_count=$root_count
+      for scratchdir in ${SCRATCHPATH//":"/" "}; do
+        if [[ $root_count -lt 2 && -d $scratchdir ]]; then
+          HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$scratchdir/hio_test$job_dir"
+          root_count=$(($root_count + 1))
+        fi
+      done
+
+      if [[ $root_count -le $start_count ]]; then
+        errx "Unable to find scratch directory; set SCRATCHPATH or add a directory near run_setup line $where"
+      fi
+
     fi
     if [[ ${HIO_TEST_ROOTS:0:1} == "," ]]; then HIO_TEST_ROOTS=${HIO_TEST_ROOTS:1}; fi
   fi
@@ -640,12 +669,6 @@ if [[ $batch -eq 0 ]]; then
   if [[ -z $HIO_TEST_ROOTS ]] ; then
     export HIO_TEST_ROOTS="posix:/tmp/hio_test"
     msg "Warning: HIO_TEST_ROOTS defaulted to $HIO_TEST_ROOTS"
-  fi
-
-  # Special hack for buffy - since no PFS, inhibit staging for sizes larger than tiny
-  if [[ $hostpre == "bu-" && $size != "t" ]]; then
-    msg "Buffy with size > tiny, disabling datawarp staging"
-    export HIO_datawarp_stage_mode="disable"
   fi
 
   if [[ $query_size -eq 0 ]]; then
@@ -668,6 +691,5 @@ if [[ $batch -eq 0 ]]; then
 
   fi
 fi
-
 
 # --- end of run_setup ---

@@ -49,14 +49,8 @@ int hio_element_read_strided_nb (hio_element_t element, hio_request_t *request, 
 
   (void) atomic_fetch_add (&dataset->ds_stat.s_rcount, 1);
 
-  req.ir_element = element;
-  req.ir_offset = offset;
-  req.ir_data.r = ptr;
-  req.ir_count = count;
-  req.ir_size = size;
-  req.ir_stride = stride;
-  req.ir_type = HIO_REQUEST_TYPE_READ;
-  req.ir_urequest = request;
+  hioi_internal_request_init (&req, element, offset, ptr, count, size, stride,
+                              HIO_REQUEST_TYPE_READ, request);
 
   return dataset->ds_process_reqs (dataset, (hio_internal_request_t **) &reqs, 1);
 }

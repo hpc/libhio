@@ -425,6 +425,13 @@ typedef struct hio_object *hio_object_t;
 
 /**
  * @ingroup API
+ * @bried Maximum length of a dataset name including the
+ *        terminator.
+ */
+#define HIO_DATASET_NAME_MAX 256
+
+/**
+ * @ingroup API
  * @brief Maximum length of an element name not including the
  *        terminator.
  */
@@ -1220,9 +1227,12 @@ hio_return_t hio_request_wait (hio_request_t *requests, int nrequests, ssize_t *
  *
  * This function attempts to determine if now is an optimal time to write an
  * instance of a dataset. This function will take into account the currently
- * active data root, prior dataset instance sizes, and the system status.
- * It may query the runtime, system configuration, or more to calculate the
- * recommendation. See @ref hio_recommendation_t for valid return codes.
+ * active data root, prior dataset instance sizes, and the system status. It
+ * may query the runtime, system configuration, or more to calculate the
+ * recommendation. See @ref hio_recommendation_t for valid return codes. In
+ * order to return a consistent result this call is collective and must be
+ * called by all ranks in the communicator associated with the context if
+ * using MPI.
  */
 hio_recommendation_t hio_dataset_should_checkpoint (hio_context_t context, const char *name);
 

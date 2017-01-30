@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -77,6 +77,10 @@ typedef int
 (*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name,
                                  struct hio_dataset_header_t **headers, int *count);
 
+typedef int
+(*hio_module_dataset_dump_fn_t) (struct hio_module_t *module, const char *name, int64_t id,
+                                 uint32_t dump_flags, int rank, FILE *fh);
+
 /**
  * Finalize a module and release all resources.
  *
@@ -97,6 +101,9 @@ typedef struct hio_module_t {
   /** list all available datasets in this module's data root */
   hio_module_dataset_list_fn_t    dataset_list;
 
+  /** dumps dataset metadata in YAML */
+  hio_module_dataset_dump_fn_t    dataset_dump;
+
   /** function to finalize this module */
   hio_module_fini_fn_t            fini;
 
@@ -108,6 +115,9 @@ typedef struct hio_module_t {
 
   /** minimum size needed for a dataset object */
   size_t                          ds_object_size;
+
+  /** module versioning */
+  int                             version;
 } hio_module_t;
 
 /**
@@ -163,7 +173,13 @@ typedef struct hio_component_t {
 
   /** relative priority 0-100 (0 - lowest, 100 - highest) */
   int                     priority;
+
+  /** component version */
+  int                     version;
 } hio_component_t;
+
+#define HIO_COMPONENT_VERSION_1 1
+#define HIO_MODULE_VERSION_1    1
 
 /**
  * Initialize the hio component system

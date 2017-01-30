@@ -1,0 +1,31 @@
+.\" -*- nroff -*-
+.\" Copyright 2016-2017 Los Alamos National Security, LLC. All rights
+.\" reserved.
+.\" $COPYRIGHT$
+.TH hio_dump 1 "January 2017" libhio "User Manuals"
+.SH NAME
+hio_dump \- dump hio dataset metadata
+.SH SYNOPSIS
+\fBhio_ds_info [--all] [--elements] [--rank <rank>] [--config]
+[--perform] <data root> <context name> [dataset name [dataset id]]\fP
+.SH DESCRIPTION
+\fBhio_ds_info\fP dumps the metadata from the specified dataset(s) in
+a human-readable format.
+.SH OPTIONS
+.IP --all | -a
+Dump all the metadata from dataset(s). This option is the equivalent
+of using --elements --config --perform.
+.IP --elements | -e
+Dump element metadata from dataset(s).
+.IP --rank | -r
+Dump metadata associated with a specific rank (unique offset mode
+only).
+.IP --config | -c
+Dump the configuration used the last time the dataset(s) were
+modified.
+.IP --perform | -p
+Dump the dataset(s) performance variables. This data includes write
+statistics across every time the dataset has been modified.
+.SH AUTHOR
+Nathan Hjelm <hjelmn at lanl dot gov>
+\fB

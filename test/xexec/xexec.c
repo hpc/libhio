@@ -770,19 +770,20 @@ ACTION_RUN(le_run) {
 // ifr, eif action handler
 //----------------------------------------------------------------------------
 int ifr_depth = 0;
-int ife_num;
+int ifr_num;
 
 ACTION_CHECK(ifr_check) {
   if (ifr_depth > 0) 
     ERRX("%s: nested ifr", A.desc);
   ifr_depth++; 
+  ifr_num = A.actn;
 }
 
 ACTION_CHECK(eif_check) {
   if (ifr_depth != 1) 
     ERRX("%s: ife without preceeding ifr", A.desc);
   ifr_depth--;
-  ife_num = A.actn - 1;
+  S.actv[ifr_num].ife_num = A.actn;
 }
 
 ACTION_RUN(ifr_run) {
@@ -799,7 +800,7 @@ ACTION_RUN(ifr_run) {
     cond = true;
   }
   
-  if (!cond) S.act_cur = ife_num;
+  if (!cond) S.act_cur = A.ife_num - 1;
 
   DBG4("ifr done req_rank: %d cond: %d act_cur: %d", req_rank, cond, S.act_cur);
 }
@@ -810,9 +811,9 @@ ACTION_RUN(eif_run) {
 
 // Special action runner for printing out /@@ comments
 ACTION_RUN(cmsg_run) {
-  R0_OR_VERB_START
+  // R0_OR_VERB_START
     VERB1("%s", V0.s);
-  R0_OR_VERB_END
+  // R0_OR_VERB_END
 }
 #undef S
 
@@ -950,6 +951,7 @@ void cvt_param(GLOBAL * gptr, char * token, enum ptype type, PVAL * val, char * 
 void parse_action(GLOBAL * gptr, CTRL * state) {
   int t = -1, j;
   ACTION nact;
+  memset(&nact, 0, sizeof(nact));
 
   msg_context_set_verbose(MY_MSG_CTX, 0);
   msg_context_set_debug(MY_MSG_CTX, 0);
@@ -974,7 +976,7 @@ void parse_action(GLOBAL * gptr, CTRL * state) {
         nact.tokn = t;
         nact.actn = S.actN;
         nact.action = S.tokv[t];
-        nact.desc = ALLOC_PRINTF("action %d: /@@ %s", S.actN+1, comment_msg);
+        nact.desc = ALLOC_PRINTF("action %d: /@@ %s", S.actN, comment_msg);
         nact.runner = cmsg_run;
         nact.v[0].s = comment_msg;
         add2actv(&G, &S, &nact);
@@ -1007,6 +1009,7 @@ void parse_action(GLOBAL * gptr, CTRL * state) {
         nact.state = act_desc->state;
         add2actv(&G, &S, &nact);
         DBG2("Checking %s action.actn: %d", nact.desc, nact.actn);
+        memset(&nact, 0, sizeof(nact));
         S.tokn = t;  // next token after current action
         if (act_desc->checker) act_desc->checker(&G, &S.actv[S.actN-1]);
       } else {
@@ -1019,6 +1022,11 @@ void parse_action(GLOBAL * gptr, CTRL * state) {
   if (comment_depth > 0) ERRX("Unterminated comment - more comment starts than comment ends");
   IFDBG4( for (int a=0; a<S.actN; a++) DBG0("S.actv[%d].desc: %s", a, S.actv[a].desc) );
   DBG1("Parse complete S.actN: %d", S.actN);
+
+  IFDBG4( for (int i = 0; i< S.actN; ++i) { DBG4("ife_num: %d  %s", S.actv[i].ife_num, S.actv[i].desc); } )
+
+
+
 }
 
 //----------------------------------------------------------------------------

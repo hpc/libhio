@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -13,179 +13,72 @@
 
 #include <stdlib.h>
 
-struct hio_dataset_item_t {
-  hio_dataset_header_t header;
-  hio_module_t        *module;
-  int                  ordering;
-};
-typedef struct hio_dataset_item_t hio_dataset_item_t;
-
-static void hio_dataset_item_swap (hio_dataset_item_t *itema, hio_dataset_item_t *itemb) {
-  hio_dataset_item_t tmp = *itema;
-  *itema = *itemb;
-  *itemb = tmp;
-}
-
-static int hioi_dataset_header_highest_setid (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
-  if (ha->ds_id > hb->ds_id) {
-    return 1;
-  }
-  if (ha->ds_id == hb->ds_id) {
-    return 0;
-  }
-  return -1;
-}
-
-static int hioi_dataset_header_newest (hio_dataset_header_t *ha, hio_dataset_header_t *hb) {
-  if (ha->ds_mtime > hb->ds_mtime) {
-    return 1;
-  }
-  if (ha->ds_mtime == hb->ds_mtime) {
-    return 0;
-  }
-  return -1;
-}
-
-/**
- * Insert a potential set_id/module combination into the priority queue
- *
- * @param[in]     items      priority queue of set_id/module pairs
- * @param[in,out] item_count number of items in the queue
- * @param[in]     set_id     identifier of dataset to insert
- * @param[in]     module     module associated with this dataset idenfier
- */
-static void hio_dataset_item_insert (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header,
-                                     hio_module_t *module, int ordering, hioi_dataset_header_compare_t compare) {
-  int item_index = *item_count;
-  int ret;
-
-  items[item_index].header = *header;
-  items[item_index].module = module;
-  items[item_index].ordering = ordering;
-
-  ++*item_count;
-
-  while (item_index) {
-    int parent = (item_index - 1) >> 1;
-
-    ret = compare (&items[parent].header, &items[item_index].header);
-    if (1 == ret || (0 == ret && items[parent].ordering <= items[item_index].ordering)) {
-      break;
-    }
-
-    /* the new item has a larger set id. swap with parent */
-    hio_dataset_item_swap (items + parent, items + item_index);
-    item_index = parent;
-  }
-}
-
-/**
- * Remove the highest set_id/module combination from the priority queue
- *
- * @param[in]     items      priority queue of set_id/module pairs
- * @param[in,out] item_count number of items in the queue
- * @param[out]    set_id     highest dataset identifier
- * @param[out]    module     module associated with the highest set_id
- *
- * @returns HIO_SUCCESS on success
- * @returns HIO_ERR_NOT_FOUND on failure (empty queue)
- */
-static int hio_dataset_item_pop (hio_dataset_item_t *items, int *item_count, hio_dataset_header_t *header,
-                                 hio_module_t **module, hioi_dataset_header_compare_t compare) {
-  int item_index = 0;
-  int ret;
-
-  if (0 == *item_count) {
-    return HIO_ERR_NOT_FOUND;
-  }
-
-  *header = items[0].header;
-  *module = items[0].module;
-
-  hio_dataset_item_swap (items, items + *item_count - 1);
-
-  --*item_count;
-  while (item_index < *item_count - 1) {
-    int left = (item_index << 1) | 1, right = left + 1, child = left;
-
-    if (right < *item_count && compare (&items[right].header, &items[left].header)) {
-      child = right;
-    }
-
-    ret = compare (&items[item_index].header, &items[child].header);
-    if (1 == ret || (0 == ret && items[item_index].ordering <= items[child].ordering)) {
-      break;
-    }
-
-    /* swap this item with the larger child */
-    hio_dataset_item_swap (items + item_index, items + child);
-    item_index = child;
-  }
-
-  return HIO_SUCCESS;
-}
-
-static int hio_dataset_open_last (hio_dataset_t dataset, hioi_dataset_header_compare_t compare) {
+static int hioi_dataset_open_last (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context ((hio_object_t) dataset);
-  int item_count = 0, rc, count;
-  hio_dataset_item_t *items = NULL;
-  hio_dataset_header_t *headers, header;
+  hio_dataset_header_t *headers = NULL;
+  int64_t id = dataset->ds_id;
   hio_module_t *module;
-  void *tmp;
+  int rc, count = 0;
 
   for (int i = 0 ; i < context->c_mcount ; ++i) {
     module = context->c_modules[i];
 
     rc = module->dataset_list (module, hioi_object_identifier (dataset), &headers, &count);
-    if (!(HIO_SUCCESS == rc && count)) {
-      continue;
+    if (HIO_SUCCESS != rc) {
+      hioi_err_push (rc, &dataset->ds_object, "dataset_open: error listing datasets on data root %s",
+                     module->data_root);
     }
-
-    tmp = realloc ((void *) items, (item_count + count) * sizeof (*items));
-    if (NULL == tmp) {
-      free (items);
-      free (headers);
-      return HIO_ERR_OUT_OF_RESOURCE;
-    }
-
-    items = (hio_dataset_item_t *) tmp;
-
-    for (int j = 0 ; j < count ; ++j) {
-      /* insert this set_id/module combination into the priority queue */
-      hio_dataset_item_insert (items, &item_count, headers + j, module, i, compare);
-    }
-
-    free (headers);
   }
 
-  if (0 == item_count) {
-    if (items) {
-      free (items);
-    }
-
+  if (0 == count) {
+    free (headers);
     return HIO_ERR_NOT_FOUND;
   }
 
-  while (HIO_SUCCESS == (rc = hio_dataset_item_pop (items, &item_count, &header, &module, compare))) {
+  hioi_dataset_headers_sort (headers, count, id);
+
+  /* debug output */
+  if (0 == context->c_rank && HIO_VERBOSE_DEBUG_MED <= context->c_verbose) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "found %d dataset ids accross all data roots:", count);
+
+    for (int i = 0 ; i < count ; ++i) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "dataset %s::%" PRId64 ": mtime = %ld, status = %d, "
+                "data_root = %s", hioi_object_identifier (&dataset->ds_object), headers[i].ds_id,
+                headers[i].ds_mtime, headers[i].ds_status, headers[i].module->data_root);
+    }
+  }
+
+  for (int i = count - 1 ; i >= 0 ; --i) {
+    module = headers[i].module;
+
+    if (0 != headers[i].ds_status) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "skipping dataset with non-zero status: %s::%" PRId64
+                ". status = %d", hioi_object_identifier (&dataset->ds_object), headers[i].ds_id,
+                headers[i].ds_status);
+      continue;
+    }
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "attempting to open dataset %s::%" PRId64 " on data root "
+              "%s (module: %p). index %d", hioi_object_identifier (&dataset->ds_object),
+              headers[i].ds_id, module->data_root, module, i);
+
     /* set the current dataset id to the one we are attempting to open */
-    dataset->ds_id = header.ds_id;
+    dataset->ds_id = headers[i].ds_id;
     rc = hioi_dataset_open_internal (module, dataset);
     if (HIO_SUCCESS == rc) {
       break;
     }
 
-    if (HIO_SUCCESS != rc) {
-      /* reset the id to the id originally requested */
-      dataset->ds_id = dataset->ds_id_requested;
-    }
+    /* reset the id to the id originally requested */
+    dataset->ds_id = id;
   }
 
-  free (items);
+  free (headers);
 
   return rc;
 }
 
-static int hio_dataset_open_specific (hio_context_t context, hio_dataset_t dataset) {
+static int hioi_dataset_open_specific (hio_context_t context, hio_dataset_t dataset) {
   int rc = HIO_ERR_NOT_FOUND;
 
   for (int i = 0 ; i <= context->c_mcount ; ++i) {
@@ -220,11 +113,9 @@ int hio_dataset_open (hio_dataset_t dataset) {
 
   context = hioi_object_context ((hio_object_t) dataset);
 
-  if (HIO_DATASET_ID_HIGHEST == dataset->ds_id) {
-    return hio_dataset_open_last (dataset, hioi_dataset_header_highest_setid);
-  } else if (HIO_DATASET_ID_NEWEST == dataset->ds_id) {
-    return hio_dataset_open_last (dataset, hioi_dataset_header_newest);
+  if (HIO_DATASET_ID_HIGHEST == dataset->ds_id || HIO_DATASET_ID_NEWEST == dataset->ds_id) {
+    return hioi_dataset_open_last (dataset);
   }
 
-  return hio_dataset_open_specific (context, dataset);
+  return hioi_dataset_open_specific (context, dataset);
 }

@@ -78,6 +78,8 @@ static char * help =
   "  dwss <path> <size> <width> Issue dw_set_stripe_configuration; if file exists, must be\n"
   "                             empty, if not exist, file created, if directory exists, striping set\n"
   "  dwgs <path>   Issue dw_get_stripe_configuration, display results\n"
+  "  dwmp <dw_root> <ppn> Issue dw_get_mds_path wuth <dw_root> int(rank/<ppn>).  Set env var\n"
+  "                HIO_datawarp_root from result.\n"   
   #if DW_PH_2
   "  dwws <file>   Issue dw_wait_sync_complete\n"
   #endif // DW_PH_2
@@ -849,11 +851,13 @@ hio_return_t get_perf_type(GLOBAL * gptr, hio_object_t obj, char * name, hio_con
   char * vname;
   hio_config_type_t vtype;
 
-  hrc = hio_perf_get_count(obj, &count);  
+  hrc = hio_perf_get_count(obj, &count); 
+  DBG4("hio_perf_get_count count:%d rc:%d", count, hrc); 
   HRC_TEST("hio_perf_get_count");
   if (HIO_SUCCESS == hrc) {
   for (i=0; i<count; ++i) {
       hrc = hio_perf_get_info(obj, i, &vname, &vtype);
+      DBG4("hio_perf_get_info i: %d name: %s type: %s rc: %d", i, vname, enum_name(MY_MSG_CTX, &etab_hcfg, vtype), hrc); 
       HRC_TEST("hio_perf_get_info");
       if (HIO_SUCCESS == hrc && !strcmp(vname, name)) {
         *type = vtype;
@@ -865,7 +869,7 @@ hio_return_t get_perf_type(GLOBAL * gptr, hio_object_t obj, char * name, hio_con
 }    
     
 ACTION_CHECK(hvaif_check) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   if ( HVAT_cc == type || HVAT_cd == type || HVAT_ce == type ) {
     ERRX("%s: Configuration variable is not comparable with integer or float", A.desc);
   }
@@ -873,9 +877,9 @@ ACTION_CHECK(hvaif_check) {
 
 
 ACTION_RUN(hvai_run) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   char * name = V1.s;
-  enum hva_op op = V2.i;
+  enum hva_op op = (enum hva_op)V2.i;
   I64 val = V3.u;
   hio_return_t hrc = HIO_SUCCESS;
   hio_object_t obj = NULL;
@@ -889,7 +893,9 @@ ACTION_RUN(hvai_run) {
        if (HVAT_pc == type) obj = (hio_object_t) S.context;
   else if (HVAT_pd == type) obj = (hio_object_t) S.dataset;
   else if (HVAT_pe == type) obj = (hio_object_t) S.element;
-  else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+  else ERRX("%s: internal error: invalid type %d", A.desc, type);
+
+  if (!obj) ERRX("%s: object not valid (type: %s)", A.desc, enum_name(MY_MSG_CTX, &etab_hvat, type));
  
   hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
   HRC_TEST("get_perf_type");
@@ -941,9 +947,9 @@ ACTION_RUN(hvai_run) {
 }
 
 ACTION_RUN(hvaf_run) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   char * name = V1.s;
-  enum hva_op op = V2.i;
+  enum hva_op op = (enum hva_op)V2.i;
   double val = V3.d;
   hio_return_t hrc = HIO_SUCCESS;
   hio_object_t obj = NULL;
@@ -958,6 +964,8 @@ ACTION_RUN(hvaf_run) {
   else if (HVAT_pd == type) obj = (hio_object_t) S.dataset;
   else if (HVAT_pe == type) obj = (hio_object_t) S.element;
   else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+
+  if (!obj) ERRX("%s: object not valid (type: %s)", A.desc, enum_name(MY_MSG_CTX, &etab_hvat, type));
  
   hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
   HRC_TEST("get_perf_type");
@@ -1003,9 +1011,9 @@ ACTION_RUN(hvaf_run) {
 }
 
 ACTION_RUN(hvas_run) {
-  enum hva_type type = V0.i;
+  enum hva_type type = (enum hva_type)V0.i;
   char * name = V1.s;
-  enum hva_op op = V2.i;
+  enum hva_op op = (enum hva_op)V2.i;
   char * val = V3.s;
   hio_return_t hrc = HIO_SUCCESS;
   hio_object_t obj = NULL;
@@ -1020,6 +1028,8 @@ ACTION_RUN(hvas_run) {
   else if (HVAT_pd == type || HVAT_cd == type) obj = (hio_object_t) S.dataset;
   else if (HVAT_pe == type || HVAT_ce == type) obj = (hio_object_t) S.element;
   else ERRX("%s: internal error: invalid type %d", A.desc, type); 
+
+  if (!obj) ERRX("%s: object not valid (type: %s)", A.desc, enum_name(MY_MSG_CTX, &etab_hvat, type));
  
   if (HVAT_pc == type || HVAT_pd == type || HVAT_pe == type) {
     hrc = get_perf_type(gptr, obj, name, &vtype, actionp);
@@ -1070,7 +1080,7 @@ ACTION_RUN(hvas_run) {
 }
 
 //----------------------------------------------------------------------------
-// hdsc - hio_dataset_shoud_checkpoint action handler
+// hdsc - hio_dataset_should_checkpoint action handler
 //----------------------------------------------------------------------------
 ACTION_RUN(hdsc_run) {
   // char * name = V0.s;
@@ -1228,6 +1238,20 @@ ACTION_RUN(dwgs_run) {
   if (quit) G.local_fails++;
 }
 
+ACTION_RUN(dwmp_run) {
+  char * dw_root = V0.s;
+  U64 ppn = V1.u;
+  char * prefix;
+
+  U64 key = G.myrank/ppn;
+  ERRX("dwmp not yet supported"); 
+  //prefix = dw_get_mds_path(dw_root, key);
+  prefix="";
+  VERB1("dw_get_mds_path(\"%s\", %lld) returns \"%s\"", dw_root, key, prefix);
+  int rc = setenv("HIO_datawarp_root", prefix, 1);
+  if (rc) ERRX("setenv(%s, %s) rc: %d errno: %d(%s)", "HIO_datawarp_root", prefix, rc, errno, strerror(errno));
+}
+
 
 #if DW_PH_2
 ACTION_RUN(dwws_run) {
@@ -1302,6 +1326,7 @@ MODULE_INSTALL(xexec_hio_install) {
     {"dwds",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwds_run    },
     {"dwss",  {STR,  UINT, UINT, NONE, NONE}, NULL,          dwss_run    },
     {"dwgs",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwgs_run    },
+    {"dwmp",  {STR,  UINT, NONE, NONE, NONE}, NULL,          dwmp_run    },
     #if DW_PH_2
     {"dwws",  {STR,  NONE, NONE, NONE, NONE}, NULL,          dwws_run    },
     #endif  // DW_PH_2
