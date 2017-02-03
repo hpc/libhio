@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -17,15 +17,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pthread.h>
-#ifdef HIO
-#include "hio.h"
-#include "hio_config.h"
-#if HIO_USE_DATAWARP
-#include <datawarp.h>
-#ifndef DW_PH_2
-  #define DW_PH_2 0  // Phase 2 APIs not yet available
-#endif // DW_PH_2
-#endif // HIO_USE_DATAWARP
+#ifdef HIO // #endif at bottom of this file
 
 //----------------------------------------------------------------------------
 // xexec hio module - drive libHIO functions and DataWarp functions

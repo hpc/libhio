@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -206,7 +206,7 @@ void lfsr_22_byte_init_p(void) {
   lfsr_22_byte(t, sizeof(t));
 }
 
-# if 1
+# if 0
 void lfsr_test(GLOBAL * gptr) {
   // A few tests for lfsr properties
   U64 size = 8 * 1024 * 1024;
@@ -811,9 +811,9 @@ ACTION_RUN(eif_run) {
 
 // Special action runner for printing out /@@ comments
 ACTION_RUN(cmsg_run) {
-  // R0_OR_VERB_START
+  R0_OR_VERB_START
     VERB1("%s", V0.s);
-  // R0_OR_VERB_END
+  R0_OR_VERB_END
 }
 #undef S
 
@@ -877,11 +877,15 @@ int parse_comp(const void * p1, const void * p2) {
 
 // hio related enums defined in xexec_hio.c
 extern ENUM_TABLE etab_hflg, etab_hdsm, etab_herr, etab_hulm, etab_hdsi, etab_hcpr, etab_hvat, etab_hvao;
+#if HIO_USE_DATAWARP
+  extern ENUM_TABLE etab_dwst;
+#endif
 
 // Convert one parameter token to its value based on type
 void cvt_param(GLOBAL * gptr, char * token, enum ptype type, PVAL * val, char * desc) {
   char buf[256];
   int rc;
+
   switch (type) {
     case SINT:
     case UINT:

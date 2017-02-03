@@ -1,7 +1,7 @@
 
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -29,6 +29,17 @@
   #define DBGMAXLEV 4
 #endif
 #include "cw_misc.h"
+
+#ifdef HIO
+#include "hio.h"
+#include "hio_config.h"
+#if HIO_USE_DATAWARP
+#include <datawarp.h>
+#ifndef DW_PH_2
+  #define DW_PH_2 0  // Phase 2 APIs not yet available
+#endif // DW_PH_2
+#endif // HIO_USE_DATAWARP
+#endif // HIO
 
 //----------------------------------------------------------------------------
 // xexec global

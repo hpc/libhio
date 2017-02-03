@@ -182,9 +182,10 @@ batch_sub() {
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
 
     mcmd="msub"
-    IFS=","; hiovars="${!HIO_*},${!XEXEC_*}"; unset IFS
-    hiovars=${hiovars#,}  # Remove any leading, trailing commas 
+    IFS=","; hiovars="${!HIO_*},${!XEXEC_*},${!SCRATCHPATH*}"; unset IFS
+    hiovars=${hiovars#,}  # Remove any leading, trailing, double commas 
     hiovars=${hiovars%,}
+    hiovars=${hiovars/,,/,}
     if [[ -n $hiovars ]]; then mcmd="$mcmd -v $hiovars"; fi
     if [[ -n $msub_arg ]]; then mcmd="$mcmd $msub_arg"; fi
     if [[ $chain -ne 0 ]]; then
@@ -654,6 +655,7 @@ if [[ $batch -eq 0 ]]; then
       for scratchdir in ${SCRATCHPATH//":"/" "}; do
         if [[ $root_count -lt 2 && -d $scratchdir ]]; then
           HIO_TEST_ROOTS="$HIO_TEST_ROOTS,posix:$scratchdir/hio_test$job_dir"
+          export HIO_TEST_SCRATCH="$scratchdir/hio_test$job_dir"
           root_count=$(($root_count + 1))
         fi
       done
