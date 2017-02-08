@@ -12,7 +12,7 @@
 Notes on using DataWarp on LANL Cray systems
 ============================================
 
-Last Update 11 Jan 2017
+Last Update 8 Feb 2017
 Cornell Wright
 
 DataWarp is a Cray product that provides a high speed storage device based on
@@ -48,6 +48,7 @@ Examples of those directives:
 	#DW stage_in destination=$DW_JOB_STRIPED/<dir> source=<pfs_dir> type=directory
 	#DW stage_out source=$DW_JOB_STRIPED/<dir> destination=<pfs_dir> type=directory
 
+See note under known problems about #DW directives.  
 
 DataWarp Usage
 --------------
@@ -138,13 +139,55 @@ As of the writing of this document, actual peak speeds are running
 at about 90% of theoretical for N-N and at about 75% for N-1.
 
 
-Known Problems:
---------------
+Known Problems and Gotchas:
+---------------------------
+
+1) Proxy Environment Variables
+------------------------------
 
 Proxy environment variables, e.g., HTTP_PROXY, HTTPS_PROXY, can cause problems
 with job submission because they interfere with some of Moab and/or DataWarp's 
 communications.  If you use these settings, unset them before submitting a 
 DataWarp job.  This should be corrected soon.
+
+2) SSH Communications Problems
+------------------------------
+
+Sometimes there is an ssh based communication problem between the msub command
+and the DataWarp service.  Cray has plans to move that interface to a “restful
+interface”, but for the moment it’s operating over ssh.  Sometimes if keys
+have changed, the underlying ssh fails. The (rather generic) symptom is an
+error message from msub:
+
+  DataWarp commands in job script failed validation
+
+To diagnose the problem, look in ~/ac_datawarp.log, the last 4 lines will be
+something like:
+
+2017-02-07 17:15:50,617 pid:45756       ac_dw_submitfilter      common.py:run_cmd:178   DEBUG   Executing Popen with args: ["/opt/cray/elogin/eswrap/default/bin/dw_wlm_cli", "-f", "job_process", "--job", "/users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170206.094549.724988764.sh"]
+2017-02-07 17:16:25,902 pid:45756       ac_dw_submitfilter      dw_cli_commands.py:dw_job_process:304   ERROR   DW dw_job_process command failed with rc = 1
+2017-02-07 17:16:25,902 pid:45756       ac_dw_submitfilter      ac_dw_submitfilter:main:664     ERROR   DataWarp commands in job script failed validation in DW API job_process method
+2017-02-07 17:16:25,903 pid:45756       ac_dw_submitfilter      ac_dw_submitfilter:main:666     INFO    END, rc = 0
+
+The popen command on the first line may be the source of the problem.
+Removing the python Popen parameter escapes, it converts to:
+
+/opt/cray/elogin/eswrap/default/bin/dw_wlm_cli -f job_process —job /users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170206.094549.724988764.sh
+
+Perform the equivalent conversion on the command from your ~/ac_datawarp.log
+file and run the command by hand and see if there are any SSH related errors.
+If it is a key problem, it can be corrected by by removing the incorrect
+entry in ~/.ssh/known_hosts file.
+
+3) $DW_JOB_STRIPED string in #DW stage_in and stage_out
+-------------------------------------------------------
+
+The string $DW_JOB_STRIPED in the #DW stage_in and stage_out directives is 
+a required string. It is not a shell variable. All of the #DW directives are
+processed during the msub command and shell variables will not be expanded.
+I speculate that the $DW_JOB_STRIPED string is a placeholder for a future 
+capability, but for now, it must be coded exactly as shown in the DataWarp
+User Guide. 
 
 --- end of README.datawarp ---
 
