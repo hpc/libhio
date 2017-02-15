@@ -1,0 +1,254 @@
+# -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
+#
+# Copyright (c) 2017 Los Alamos National Security, LLC.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+cantest README
+==============
+
+Last updated 2017-02-15
+
+
+Description
+-----------
+
+cantest.py is a program which tests the effects of cancelling various 
+Moab/DataWarp sub-jobs at various points in the execution of the overall job.
+
+cantest is designed to use the existing hio tests (i.e., run02, run03, etc.)
+to submit DataWarp test jobs.  It has some dependencies on the content of
+job startup messages and result checking messages in those tests.
+
+Current Status
+--------------
+
+cantest is currently fully functional, but only has a limited number of
+test cases defined.  These tests are sufficient to find multiple problems.
+As those problems are corrected, we will add additional test cases.
+
+cantest is able to run multiple tests in parallel. That, of course,
+complicates problem diagnosis. Currently, all but a single test case
+is commented out.  This makes cantest easier to run and understand its
+messages and results.  Ultimately, all tests should be uncommented, run
+in parallel and additionally, repetitive running with randomization of 
+sequence and parameters should be added. 
+
+
+Cantest Operation
+-----------------
+
+Cantest will:
+
+ 1) Start a status thread which periodically:
+    a) Monitors job status by issuing mdiag -j
+    b) The status of every job ID in the tjob dict is extracted from the XML
+       returned by mdiag and placed in the gstat dict.
+    c) Checks for the existence of cantest.quit file and sets the quit flag
+ 
+ 2) Start a number of threads, each of which:
+    a) Launches an hio/DataWarp test case which submits a job
+    b) Adds the job's job IDs to the tjob array
+    c) Periodically checks job status in gstat until a target status is reached
+    d) Issues an mjobctl -c command for one of the sub-jobs
+    e) Waits until all subjobs are complete or the quit flag is set
+    f) Checks the results of the job
+	
+ The 4 sub-jobs that comprise a DataWarp job are referred to as a "job group".  	
+ The status of the job group is described by 4 letters, one for each of the  	
+ stage-in, tracking, compute and stage-out sub-jobs.  Each letter is the 	
+ first  letter of the QueueStatus returned by mdiag (active, eligible, blocked).
+	
+ Job groups are designated by the job ID of the compute job.  This is used as	
+ key for the tjob and gstat dictionaries and is displayed as "{jobid}" at the
+ start of messages whenever possible.
+	
+ Locking - since dictionary updates are atomic, locking is only needed to	
+ prevent the addition or deletion of dictionary entries while the dictionary
+ is being iterated by another thread.  This is achieved by a global lock that
+ is held by addjob() when adding entries to tjob and gstat and by bldstat()
+ when iterating over those dictionaries.
+
+
+Usage
+-----
+
+Steps to use cantest:
+
+1) Build and install the HIO library on a system with DataWarp and Moab.
+
+2) cd to libhio-x.y.x/test
+
+3) Edit the main() procedure at the bottom of cantest.py to include
+   the desired testcases with appropriate parameters.
+
+4) Invoke via:
+
+     python cantest.py 2>&1 | tee cantest.out
+
+5) cantest will submit one or more jobs and remain active monitoring the
+   state of those jobs, issuing a cancel command when the target state is
+   reached. It will then wait for completion of the job and check the job's
+   output file for the expected result.
+
+6) Often (at the moment anyway) one or more of the jobs being run will 
+   not complete, so cantest will appear to hang.  After waiting long enough
+   and looking at the output from showq, you will conclude that no further
+   progress will occur.  At this point, you should tell cantest to quit 
+   by creating a file in the current directory.  From a different window,
+   in the same working directory, issue:
+
+     touch cantest.quit
+
+7) cantest will stop waiting for job completion and will check the results
+   of any jobs that were active.
+
+8) Check for test case results by searching the cantest's output for the
+   string "cantest result" via a command like:
+
+     grep -i "Cantest result" cantest.out
+
+
+Sample Session
+--------------
+
+This shows a sample session on gadget, first the actual output, then some of
+the output is repeated with commentary.  Only a single test case is run.
+
+<<< In the main window >>>
+
+cornell@ga-fe1: ~/pgm/hio/ga-gnu/libhio-1.4.0/test
+-->python cantest.py 
+2017-02-15 09:31:52  --> ./run02 -n 1 -s s -w 2 -b
+2017-02-15 09:31:59 2017-02-15 09:31:52 ga-fe1 run_setup: DataWarp Capacity: 2GiB
+2017-02-15 09:31:52 ga-fe1 run_setup: Job 20170215.093152.831386373 Args: ./run02 -n 1 -s s -w 2 -b
+2017-02-15 09:31:52 ga-fe1 run_setup: ---> msub /users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170215.093152.831386373.sh
+2017-02-15 09:31:59 ga-fe1 run_setup: Job 20170215.093152.831386373 ID: 46721.datawarp-stagein 46722 46721.datawarp-stageout submitted
+2017-02-15 09:31:59 {46722} Job IDs: ITCO 46721.datawarp-stagein 46721 46722 46721.datawarp-stageout
+2017-02-15 09:31:59 {46722} ./run02 -n 1 -s s -w 2 -b / abbb / 2
+2017-02-15 09:32:00 {46722} status changed; ITCO was: ----  now: ebbb
+2017-02-15 09:32:06 {46722} status changed; ITCO was: ebbb  now: abbb
+2017-02-15 09:32:06 {46722} target status met: ITCO now: abbb
+2017-02-15 09:32:06 {46722} --> mjobctl -c 46722
+2017-02-15 09:32:06 {46722} job '46722' cancelled
+2017-02-15 09:32:07 {46722} status changed; ITCO was: abbb  now: a--b
+2017-02-15 09:32:30 {46722} status changed; ITCO was: a--b  now: ---b
+
+<<< In a second window >>>
+
+cornell@ga-fe1: ~/pgm/hio/ga-gnu/libhio-1.4.0/test
+-->showq
+
+active jobs------------------------
+JOBID              USERNAME      STATE PROCS   REMAINING            STARTTIME
+
+
+0 active jobs            0 of 3600 processors in use by local jobs (0.00%)
+                           0 of 43 nodes active      (0.00%)
+
+eligible jobs----------------------
+JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
+
+
+0 eligible jobs   
+
+blocked jobs-----------------------
+JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
+
+46721.datawarp-sta  cornell  BatchHold     1     3:00:00  Wed Feb 15 09:31:59
+
+1 blocked job    
+
+Total job:  1
+
+cornell@ga-fe1: ~/pgm/hio/ga-gnu/libhio-1.4.0/test
+-->dwstat most
+    pool units quantity     free  gran 
+wlm_pool bytes  14.5TiB 14.38TiB 32GiB 
+
+sess state token     creator owner             created expiration nodes 
+2701 CA--- 46722 MOAB-TORQUE  4611 2017-02-15T09:32:12      never     0 
+
+inst state sess bytes nodes             created expiration intact   label public confs 
+2701 CA--- 2701 32GiB     1 2017-02-15T09:32:12      never   true I2701-0  false     1 
+
+conf state inst    type activs 
+2700 CA--- 2701 scratch      0 
+
+did not find any cache configurations, swap configurations, registrations, activations
+
+<<< The job is no longer making progress, so quit. >>>
+
+cornell@ga-fe1: ~/pgm/hio/ga-gnu/libhio-1.4.0/test
+-->touch cantest.quit
+
+<<< back to the main window, more messages from cantest >>>
+
+2017-02-15 09:58:04 {46722} quitting
+2017-02-15 09:58:04 {46722} Checking /users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170215.093152.831386373.out
+2017-02-15 09:58:04 {46722} Expected: N
+2017-02-15 09:58:04 {46722} Cantest results: Test Failed; result actual: Nq expected: N
+2017-02-15 09:58:04 {46722} done
+
+Some Explanations
+-----------------
+
+Here are all the messages from cantest, with some explanation in [brackets].
+
+-->python cantest.py 
+
+[ Following is the test job launch command followed by 4 lines of output from the test ]
+
+2017-02-15 09:31:52  --> ./run02 -n 1 -s s -w 2 -b  
+2017-02-15 09:31:59 2017-02-15 09:31:52 ga-fe1 run_setup: DataWarp Capacity: 2GiB
+2017-02-15 09:31:52 ga-fe1 run_setup: Job 20170215.093152.831386373 Args: ./run02 -n 1 -s s -w 2 -b
+2017-02-15 09:31:52 ga-fe1 run_setup: ---> msub /users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170215.093152.831386373.sh
+2017-02-15 09:31:59 ga-fe1 run_setup: Job 20170215.093152.831386373 ID: 46721.datawarp-stagein 46722 46721.datawarp-stageout submitted
+
+[ cantest displays the job IDs returned by msub and repeats the test command    ]
+[ along with the target status (abbb) and the sub-job to cancel (2)             ] 
+[ Note that from here on, all messages are prefixed with {46722}.  This is      ]
+[ the job ID of the compute job and is used as a key by cantest to track the    ]
+[ status and results of all 4 sub-jobs.                                         ]
+
+2017-02-15 09:31:59 {46722} Job IDs: ITCO 46721.datawarp-stagein 46721 46722 46721.datawarp-stageout
+2017-02-15 09:31:59 {46722} ./run02 -n 1 -s s -w 2 -b / abbb / 2
+
+[ job status is shown as 4 letters (e.g.: ebbb) which indicate the status returned ]
+[ by mdiag for each of the 4 sub-jobs.  The legend ITCO is a reminder of the       ]
+[ order in which the status is displayed.  Each letter indicates eligible, active, ]
+[ blocked or not found (-).                                                        ]
+
+2017-02-15 09:32:00 {46722} status changed; ITCO was: ----  now: ebbb
+2017-02-15 09:32:06 {46722} status changed; ITCO was: ebbb  now: abbb
+
+[ When the target status of abbb is met, cantest cancels job 2 which is the compute ]
+[ sub-job                                                                           ]
+
+2017-02-15 09:32:06 {46722} target status met: ITCO now: abbb
+2017-02-15 09:32:06 {46722} --> mjobctl -c 46722
+2017-02-15 09:32:06 {46722} job '46722' cancelled
+2017-02-15 09:32:07 {46722} status changed; ITCO was: abbb  now: a--b
+2017-02-15 09:32:30 {46722} status changed; ITCO was: a--b  now: ---b
+
+[ After a couple of additional status changes, the job stop progressing.  Note the ]
+[ long delay before the next message.  At this point, the quit file was touched.   ]
+
+2017-02-15 09:58:04 {46722} quitting
+
+[ cantest stops waiting for the job to complete and checks results.  The test case ]
+[ expects no output file without needing to quit (result code "N").  The actual    ]
+[ result was no output but the test was forced to quit (result code "Nq").  They   ]
+[ differ, so the test case fails.                                                  ]
+
+2017-02-15 09:58:04 {46722} Checking /users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170215.093152.831386373.out
+2017-02-15 09:58:04 {46722} Expected: N
+2017-02-15 09:58:04 {46722} Cantest results: Test Failed; result actual: Nq expected: N
+2017-02-15 09:58:04 {46722} done
+
+--- end of README.cantest ---
