@@ -12,7 +12,7 @@
 cantest README
 ==============
 
-Last updated 2017-02-15
+Last updated 2017-02-16
 
 
 Description
@@ -33,11 +33,13 @@ test cases defined.  These tests are sufficient to find multiple problems.
 As those problems are corrected, we will add additional test cases.
 
 cantest is able to run multiple tests in parallel. That, of course,
-complicates problem diagnosis. Currently, all but a single test case
-is commented out.  This makes cantest easier to run and understand its
-messages and results.  Ultimately, all tests should be uncommented, run
-in parallel and additionally, repetitive running with randomization of 
-sequence and parameters should be added. 
+complicates problem diagnosis. For debugging individual test failures, it
+may be helpful to comment out all but a single test case.  An initial set
+of tests for various job group phases is defined.  It likely needs extension
+and updating of the expected results.    
+
+Additionally, repetitive running with randomization of sequence and parameters
+should be added in the future.
 
 
 Cantest Operation

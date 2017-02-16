@@ -261,8 +261,8 @@ def check_job(tag, fn, quit, expect):
   else:
     so = runcmd(tag, 'egrep "RESULT:|failed|signal|killed" ' + fn, shell=True, echo=True, rcok=True)
     msg(tag, so)
-    if 0 >= so.find('RESULT: FAILURE'): res = 'F'
-    elif 0 >= so.find('RESULT: SUCCESS'): res = 'S'
+    if so.find('RESULT: FAILURE') >= 0: res = 'F'
+    elif so.find('RESULT: SUCCESS') >= 0: res = 'S'
     else: res = 'P'
     if so.find('failed') >= 0 or so.find('signal') >= 0 or so.find('killed') >= 0:
       res = res + 'k'
@@ -331,15 +331,16 @@ def main():
   #-----------------------------------------------------------------------------
 
   # Initial test - cancel compute job when stage-in becomes active
-  st_job('./run02 -n 1 -s s -w 2 -b', 'abbb', (2,), 'N' )
+  #st_job('./run02 -n 1 -s s -w 2 -b', 'abbb', (2,), 'N' )
 
-  # Additional tests for later -- need to have expected results updated
-  #st_job('./run02 -n 1 -s s -w 2 -b', 'ebbb', (0, 1, 2, 3), 'S' )
-  #st_job('./run02 -n 1 -s s -w 2 -b', 'abbb', (0, 1, 2, 3), 'N' )
-  #st_job('./run02 -n 1 -s s -w 2 -b', '-aeb', (1, 2, 3),    'S' )
-  #st_job('./run02 -n 1 -s s -w 2 -b', '-aab', (1, 2, 3),    'S' )
-  #st_job('./run02 -n 1 -s s -w 2 -b', '-a-b', (1, 3),       'S' )
-  #st_job('./run02 -n 1 -s s -w 2 -b', '---a', (3,),         'S' )
+  # Tests for all phases of job group progress -- not certain the expected 
+  # result are correct.
+  st_job('./run02 -n 1 -s s -w 2 -b', 'ebbb', (0, 1, 2, 3), ('N',) )
+  st_job('./run02 -n 1 -s s -w 2 -b', 'abbb', (0, 1, 2, 3), ('N',) )
+  st_job('./run02 -n 1 -s s -w 2 -b', '-aeb', (1, 2, 3),    ('S', 'P') )
+  st_job('./run02 -n 1 -s s -w 2 -b', '-aab', (1, 2, 3),    ('S', 'P') )
+  st_job('./run02 -n 1 -s s -w 2 -b', '-a-b', (1, 3),       ('S', 'P') )
+  st_job('./run02 -n 1 -s s -w 2 -b', '---a', (3,),         ('S', 'Sk') )
 
 main()
 
