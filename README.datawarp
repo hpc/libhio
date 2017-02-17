@@ -189,6 +189,23 @@ I speculate that the $DW_JOB_STRIPED string is a placeholder for a future
 capability, but for now, it must be coded exactly as shown in the DataWarp
 User Guide. 
 
+4) JSON Error - eswrap module
+-----------------------------
+
+One user had added a "module load eswrap" to their .bashrc file.  This caused
+the following error messaage:
+
+ERROR:  Error encountered: No JSON object could be decoded DataWarp request
+recognized, but errors were encountered processing DW directives.
+
+There were also other eswrap related error messages when the dwstat command
+was used. Removing the module load corrected the problem.
+
+This is due to the fact that the DataWarp msub filter uses the eswrap
+communications mechanism and other paths that are similar to what is used by
+the dwstat command.  So, a good debugging step is to make sure the dwstat
+command is working correctly before submitting a DataWarp job with msub.
+
 --- end of README.datawarp ---
 
 
