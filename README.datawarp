@@ -21,8 +21,8 @@ HPC system than a traditional parallel file system (PFS).
 
 A full description of DataWarp is available in the documents:
 
-XC™ Series DataWarp™ User Guide (CLE 6.0.UP02) S-2558 (CLE 6.0.UP02.) and
-XC™ Series DataWarp™ Installation and Administration Guide (CLE 6.0.UP02) S-2564 (CLE 6.0.UP02.)
+XC(TM) Series DataWarp(TM) User Guide (CLE 6.0.UP02) S-2558 (CLE 6.0.UP02.) and
+XC(TM) Series DataWarp(TM) Installation and Administration Guide (CLE 6.0.UP02) S-2564 (CLE 6.0.UP02.)
 
 both of which are available on the web site: https://pubs.cray.com.
 
@@ -73,8 +73,8 @@ Like this:
 	msub /lustre/ttscratch1/cornell/run_dw_simple_20170111.130847/dw_simple_job.sh
 	55983.datawarp-stagein 55984 55983.datawarp-stageout
 
-The additional jobs are submitted by a Moab function, the DataWarp filter.  It
-logs its actions to the file ac_datawarp.log in the user's home directory.
+The additional jobs are submitted by a Moab function, the msub DataWarp filter.
+It logs its actions to the file ~/ac_datawarp.log in the user's home directory.
 
 The state of DataWarp and all of a user's allocations can be displayed by
 the dwstat command (documented in the User Guide.)  An example:
@@ -142,6 +142,20 @@ at about 90% of theoretical for N-N and at about 75% for N-1.
 Known Problems and Gotchas:
 ---------------------------
 
+Many of the problems seen by DataWarp users are related to the msub DataWarp
+filter.  This is a program that runs during the execution of the msub command.
+The msub DataWarp filter is responsible for recognizing #DW directives in the
+job script and using their information to launch the 3 auxiliary DataWarp
+jobs that manage DataWarp allocation, deallocation, stage-in and stage-out.
+The difficulties arise due to the fact that the msub DataWarp filter runs
+in the user's context and can be sensitive to user specific factors such
+as the environment and SSH configuration.  
+
+The msub DataWarp filter logs to a file in each user's home directory named
+~/ac_datawarp.log.  This log is a good starting point for debugging msub
+related DataWarp problems.  It can also be deleted when not needed to free
+up disk space.
+
 1) Proxy Environment Variables
 ------------------------------
 
@@ -193,7 +207,7 @@ User Guide.
 -----------------------------
 
 One user had added a "module load eswrap" to their .bashrc file.  This caused
-the following error messaage:
+the following error message from msub:
 
 ERROR:  Error encountered: No JSON object could be decoded DataWarp request
 recognized, but errors were encountered processing DW directives.
@@ -201,10 +215,24 @@ recognized, but errors were encountered processing DW directives.
 There were also other eswrap related error messages when the dwstat command
 was used. Removing the module load corrected the problem.
 
-This is due to the fact that the DataWarp msub filter uses the eswrap
-communications mechanism and other paths that are similar to what is used by
-the dwstat command.  So, a good debugging step is to make sure the dwstat
-command is working correctly before submitting a DataWarp job with msub.
+This is due to the fact that the msub DataWarp filter uses the eswrap
+communications mechanism and other paths that are similar to what is used
+by the dwstat command.  So, a good debugging step is to make sure the
+dwstat command is working correctly before submitting a DataWarp job with
+msub.
+
+5) Finding Python
+-----------------
+
+The msub DataWarp filter is written in Python 2 and runs in the user's context
+while the msub command is running.  Normally, msub is configured to invoke
+the system Python interpreter via a fully qualified path name, typically
+/usr/bin/python.  There have been instances when instead it was configured to
+run just the unqualified executable named python.  In that case, changing the
+default to Python 3, possibly via a "module load python" command will cause
+problems. Additionally, having a file or directory named "python" on the
+current PATH (particularly if the PATH contains ".") will also cause problems.  
+
 
 --- end of README.datawarp ---
 
