@@ -74,8 +74,9 @@ synexit() {
   echo "    -w <dw_alloc>     DataWarp allocation policy 0=never, 1=static, 2=Moab"
   echo "                      3=DataWarp only (via Moab)" 
   echo "    -x <dw_alloc_pct> Multiply any requested allocation by this percentage."
-  echo "       n<dw_nodes>    Or, if it starts with \"n\" request enough to allocate"
+  echo "       n<dw_nodes>    If starting with \"n\" request enough to allocate"
   echo "                      on that many DataWarp nodes based on granularity"
+  echo "       =<capacity>    If starting with \"=\", request exactly what follows." 
   echo "    -k knl|haswell    Adds :<type> to msub -l option, influences -p default"
   echo "    -m <msub_args>    Additional arguments for msub (use with -b)"
   echo "    -u <uber command and args>  Use to invoke a debugger (not to call a taxi)"
@@ -487,7 +488,7 @@ nblk=$(($totsz / $blksz))
 nblkpseg=$(($totsz / $nseg / $blksz))
 segsz=$(($blksz * $nblkpseg))
 
-if [[ ${dw_alloc_pct:0:1} -eq "n" ]]; then
+if [[ ${dw_alloc_pct:0:1} == "n" ]]; then
   . $MODULESHOME/init/bash
   module load dws
   out=($(dwstat -b))
@@ -499,6 +500,9 @@ if [[ ${dw_alloc_pct:0:1} -eq "n" ]]; then
     msg "dw_gran: $((dw_gran/$cons_gi)) GiB  dw_nodes: $dw_nodes  dw_cap_override: $dw_cap_override GiB"
   fi
   # treat like -x 100 from here on
+  dw_alloc_pct="100"
+elif [[ ${dw_alloc_pct:0:1} == "=" ]]; then
+  dw_cap_override=${dw_alloc_pct:1}
   dw_alloc_pct="100"
 fi
 
