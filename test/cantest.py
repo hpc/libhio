@@ -15,7 +15,7 @@
 # See README.cantest for additional description and usage information.
 #-----------------------------------------------------------------------------
 import xml.etree.ElementTree as ET
-import os, re, subprocess, sys, threading, time
+import copy, inspect, os, random, re, subprocess, sys, threading, time
 
 #-----------------------------------------------------------------------------
 # multi_join - return a string constructed by concatenating the contents of
@@ -78,6 +78,17 @@ class MessageWriter(object):
           else: lf = ''
           self.writer.write(''.join([ts, caller, text, lf]))
 
+#------------------------------------------------------------------------------
+# db - print an expression and its value for debugging.  Input is a string
+# containing an expression.
+#------------------------------------------------------------------------------
+def db(expr_str):
+  frame = inspect.stack()[1]
+  locals = frame[0].f_locals
+  globals = frame[0].f_globals
+  value = eval('str(' + expr_str + ')', globals, locals)
+  msg(expr_str + ': ' + value, caller=True, timestamp=False, callerDepth=2)
+
 #-----------------------------------------------------------------------------
 # runcmd - run external command with optional echo and checking rc and stderr
 #-----------------------------------------------------------------------------
@@ -130,7 +141,7 @@ def addjob(idstr):
   jobids = (s[0], s[0].split('.')[0], s[1], s[2])
   name = s[1]
   biglock.acquire()
-  tjob[name] = [jobids, True]
+  tjob[name] = [jobids, True, None, False]
   gstat[name] = '----' 
   biglock.release()
   msg('{' + name + '} Job IDs:', jglegend, jobids)
@@ -148,7 +159,14 @@ def bldstat():
   global quitflag
   #cmd = ('cat', 'run_combo.xml')
   cmd = ('mdiag', '--xml', '-j')
-  root = ET.fromstring(runcmd('', cmd, echo=False))
+
+  try:
+    root = ET.fromstring(runcmd('', cmd, echo=False))
+  except subprocess.CalledProcessError as e:
+    msg('runcmd failed, cmd:', e.cmd, 'rc:', e.rc)
+    msg('stderr:', e.output)
+    return
+
   jobs = {}
   for child in root:
     jobid = child.get("JobID")
@@ -204,7 +222,7 @@ def th_job(cmd, regex, idx, expect):
   if s2 < 0 or e2 < 0:
     msg('Error: job file name not found in command output')
 
-  msg(idt,  cmd, '/', regex, '/', idx) 
+  msg(idt,  cmd, '/', regex, '/', idx, '/', expect) 
  
   # Wait for test to start
   while gstat[id] == '----' and not quitflag:
@@ -216,26 +234,25 @@ def th_job(cmd, regex, idx, expect):
     time.sleep(1)
     stat = gstat[id]
 
-  msg(idt, 'target status met:', jglegend, 'now:', stat)
   if stat != '----' and not quitflag:
-    jid = tjob[id][0][idx]
+    msg(idt, 'target status met:', jglegend, 'now:', stat, 'cancel:', idx )
+    jid = tjob[id][0][jglegend.find(idx)]
     so = runcmd(idt, ('mjobctl', '-c', jid), rcok=True, stderrok=True) 
     if len(so) > 0: msg(idt, so.strip('\r\n'))
     cancelflag = True
+    # Wait until job ended
+    while gstat[id] != '----' and not quitflag:
+      time.sleep(1)
   else:
+    msg(idt, 'target status not met:', jglegend, 'now:', stat)
     cancelflag = False
 
-  # Wait until job ended
-  while gstat[id] != '----' and not quitflag:
-    time.sleep(1)
-
   if quitflag:
-    msg(idt, 'status', jglegend, 'now:', gstat[id])
-    msg(idt, 'quitting')
+    msg(idt, 'quitting; status', jglegend, 'now:', gstat[id])
 
-  check_job(idt, outfn, quitflag, expect if cancelflag else ('P',))
+  check_job(id, outfn, quitflag, expect if cancelflag else ('P',))
 
-  msg(idt, 'done')
+  msg(idt, 'job thread done')
  
 #-----------------------------------------------------------------------------
 # check_job - examine the output file and categorize results:
@@ -252,7 +269,8 @@ def th_job(cmd, regex, idx, expect):
 #
 # If the result is one of the expect codes, then the test passes, else fails 
 #-----------------------------------------------------------------------------
-def check_job(tag, fn, quit, expect):
+def check_job(id, fn, quit, expect):
+  tag = '{' + id + '}'
   msg(tag, 'Checking', fn)
   msg(tag, 'Expected:', expect)
   
@@ -270,11 +288,14 @@ def check_job(tag, fn, quit, expect):
   if quit: res = res + 'q'
   
   if res in expect:
-    word = 'Passed;'
+    result = 'Passed;'
+    tjob[id][3] = True
   else:
-    word = 'Failed;'
+    result = 'Failed;'
 
-  msg(tag, 'Cantest result: Test', word, 'result actual:', res, 'expected:', expect)  
+  m = tag + ' Cantest result: Test ' + result + ' result actual: ' + res + ' expected: ' + multi_join(expect)  
+  msg(m)
+  tjob[id][2] = m
 
 #-----------------------------------------------------------------------------
 # st_job - launches some job threads
@@ -294,7 +315,42 @@ def st_job(cmd, regex, idxl, expect):
   for idx in idxl:
     jt = threading.Thread(target=th_job, args=(cmd, regex, idx, expect) )
     jt.start()
+    threads.append(jt)
 
+# sa_job - save job definition for later start.  Same parms as st_job.
+def sa_job(cmd, regex, idxl, expect):
+  for idx in idxl:
+    if jglegend.find(idx) < 0:
+      msg('Error: bad cancel index', idx, 'must be one of', jglegend)
+      quit(99)
+    jobdef.append( (cmd, regex, idx, expect) )
+
+# Select saved job definitions and launch them.  Parameters are:
+# random - pick tests at random, count - number of tests to launch
+def st_all(rand, count):
+  msg('Starting', count, 'job threads')
+  for i in range(0, count):
+    if rand:
+      n = random.randint(0, len(jobdef)-1)
+    else:
+      n = i%len(jobdef);
+    j = jobdef[n]
+    #db('n')
+    st_job( j[0], j[1], (j[2],), j[3] )
+
+# Wait for all job threads, then print results summary
+def job_wait():
+    msg('Waiting for job thread completion')
+    n = len(threads)
+    s = 0
+    for t in threads:
+      t.join();
+    msg('All job threads complete.  Results:')
+
+    for jg in sorted(list(tjob.keys())):
+      if tjob[jg][3]: s += 1
+      msg(tjob[jg][2])
+    msg('Jobs run:', n, 'Passed:', s, 'Failed:', n-s)
 
 #-----------------------------------------------------------------------------
 # Globals
@@ -305,14 +361,17 @@ mw = MessageWriter(timestamp=True, caller=False)
 msg = mw.write
 
 # tjob - dictionary of tracked job ID's.  Key is compute job, entry is
-# list containing 0) a tuple of all 4 job IDs (stagein, tracking, compute, stageout)
-# 1) job active flag, 2) time of last status change
+# list containing 0) a list of all 4 job IDs (stagein, tracking, compute, stageout)
+# 1) job active flag 2) Job result message or None 3) True if job passed
 tjob = {}
 jglegend = 'ITCO'  # Add status legend to messages
 
-# gstat - dictionary of job group status.  Key is tracking job, entry is
+# gstat - dictionary of job group status.  Key is compute job, entry is
 # first letter of QueueStatus for each job in tjob or '-'.
 gstat = {}
+
+jobdef = []
+threads = []
 
 biglock = threading.Lock()
 quitflag=False
@@ -323,7 +382,7 @@ def main():
   # Start status thread
   #-----------------------------------------------------------------------------
   st = threading.Thread(target=th_stat)
-  st.daemon = True # daemon meand terminate when all other threads are done
+  st.daemon = True # daemon means terminate when all other threads are done
   st.start()
 
   #-----------------------------------------------------------------------------
@@ -331,17 +390,26 @@ def main():
   #-----------------------------------------------------------------------------
 
   # Initial test - cancel compute job when stage-in becomes active
-  #st_job('./run02 -n 1 -s s -w 2 -b', 'abbb', (2,), 'N' )
+  #sa_job('./run02 -n 1 -s s -w 2 -b', 'abbb', 'C', 'N' )
+  #sa_job('./run02 -n 1 -s s -w 2 -b -m "-h"', '....', 'I', 'N' )
+  #sa_job('./run02 -n 1 -s s -w 2 -b', 'eeee', 'I', 'N' )
 
   # Tests for all phases of job group progress -- not certain the expected 
   # result are correct.
-  st_job('./run02 -n 1 -s s -w 2 -b', 'ebbb', (0, 1, 2, 3), ('N',) )
-  st_job('./run02 -n 1 -s s -w 2 -b', 'abbb', (0, 1, 2, 3), ('N',) )
-  st_job('./run02 -n 1 -s s -w 2 -b', '-aeb', (1, 2, 3),    ('S', 'P') )
-  st_job('./run02 -n 1 -s s -w 2 -b', '-aab', (1, 2, 3),    ('S', 'P') )
-  st_job('./run02 -n 1 -s s -w 2 -b', '-a-b', (1, 3),       ('S', 'P') )
-  st_job('./run02 -n 1 -s s -w 2 -b', '---a', (3,),         ('S', 'Sk') )
 
+  #                                    ITCO
+  sa_job('./run02 -n 1 -s s -w 2 -b', 'ebbb', 'ITCO', ('N',) )
+  sa_job('./run02 -n 1 -s s -w 2 -b', 'abbb', 'ITCO', ('N',) )
+  sa_job('./run02 -n 1 -s s -w 2 -b', '-aeb', 'TCO',  ('S', 'P') )
+  sa_job('./run02 -n 1 -s s -w 2 -b', '-aab', 'TCO',  ('S', 'P') )
+  sa_job('./run02 -n 1 -s s -w 2 -b', '-a-b', 'TO',   ('S', 'P') )
+  sa_job('./run02 -n 1 -s s -w 2 -b', '---a', 'O',    ('S', 'Sk') )
+
+  st_all(True, 100)
+  job_wait()
+  msg('cantest done')  
+
+  
 main()
 
 # --- end of cantest.py ---

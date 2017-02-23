@@ -14,9 +14,10 @@ AM_CPPFLAGS = -I$(top_srcdir)/src/include
 ED1 = run_setup run_combo run01 run02 run03 run04 run05 run07 run08 run09
 ED2 = run10 run12 run20 run21 run22
 ED3 = run80 run81 run82 run83 run84 run85 run90 run91 
-ED4 = dw_simple_sub.sh hio_example.sh check_test dw_rm_all_sess 
+ED4 = dw_simple_sub.sh hio_example.sh check_test dw_rm_all_sess
+ED5 = cantest.py README.cantest
 
-EXTRA_DIST = ${ED1} ${ED2} ${ED3} ${ED4}
+EXTRA_DIST = ${ED1} ${ED2} ${ED3} ${ED4} ${ED5}
 
 SUBDIRS = xexec
 

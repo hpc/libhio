@@ -12,7 +12,7 @@
 cantest README
 ==============
 
-Last updated 2017-02-16
+Last updated 2017-02-23
 
 
 Description
@@ -32,14 +32,11 @@ cantest is currently fully functional, but only has a limited number of
 test cases defined.  These tests are sufficient to find multiple problems.
 As those problems are corrected, we will add additional test cases.
 
-cantest is able to run multiple tests in parallel. That, of course,
-complicates problem diagnosis. For debugging individual test failures, it
-may be helpful to comment out all but a single test case.  An initial set
-of tests for various job group phases is defined.  It likely needs extension
-and updating of the expected results.    
-
-Additionally, repetitive running with randomization of sequence and parameters
-should be added in the future.
+cantest is able to run multiple tests in parallel, either in a fixed sequence
+or a random sequence. That, of course, complicates problem diagnosis. For
+debugging individual test failures, it may be helpful to comment out all but
+a single test case.  An initial set of tests for various job group phases is
+defined.  It likely needs extension and updating of the expected results.    
 
 
 Cantest Operation
@@ -60,6 +57,8 @@ Cantest will:
     d) Issues an mjobctl -c command for one of the sub-jobs
     e) Waits until all subjobs are complete or the quit flag is set
     f) Checks the results of the job
+
+ 3) Wait for all job threads to complete and summarize the results. 
 	
  The 4 sub-jobs that comprise a DataWarp job are referred to as a "job group".  	
  The status of the job group is described by 4 letters, one for each of the  	
@@ -121,6 +120,7 @@ Sample Session
 
 This shows a sample session on gadget, first the actual output, then some of
 the output is repeated with commentary.  Only a single test case is run.
+The actual messages are a little out of date relative to the current version.
 
 <<< In the main window >>>
 
