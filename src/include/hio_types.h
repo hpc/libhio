@@ -724,7 +724,7 @@ typedef struct hio_internal_request_t {
   uint64_t      ir_offset;
   hio_iovec_t   ir_vec;
   size_t        ir_transferred;
-  int           ir_status;
+  ssize_t       ir_status;
   hio_request_type_t ir_type;
   hio_request_t *ir_urequest;
 } hio_internal_request_t;
