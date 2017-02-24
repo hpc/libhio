@@ -12,7 +12,7 @@
 Notes on using DataWarp on LANL Cray systems
 ============================================
 
-Last Update 8 Feb 2017
+Last Update 23 Feb 2017
 Cornell Wright
 
 DataWarp is a Cray product that provides a high speed storage device based on
@@ -30,15 +30,15 @@ both of which are available on the web site: https://pubs.cray.com.
 A Brief Description
 -------------------
 
-DataWarp is implemented as a set of service nodes, each of which has about 6 TiB 
-of SSD installed.  When requested by a directive in a job script, a DataWarp
-filesystem is initialized on some or all of the DataWarp nodes and made available
-to the job's compute nodes via a mount on each compute node.  The DataWarp
-filesysem can operate in a variety of modes, including both scratch and cache;
-this document will focus only on "striped scratch" mode which is suitable for
-checkpoints.
+DataWarp is implemented as a set of service nodes, each of which has about 6
+TiB of SSD installed.  When requested by a directive in a job script, a
+DataWarp filesystem is initialized on some or all of the DataWarp nodes and
+made available to the job's compute nodes via a mount on each compute node.
+The DataWarp filesysem can operate in a variety of modes, including both
+scratch and cache; this document will focus only on "striped scratch" mode
+which is suitable for checkpoints.
 
-In addition to the job script directive allocating the DataWarp filesystem, 
+In addition to the job script directive allocating the DataWarp filesystem,
 additional directives are supported to cause pre-job stage-in of files or
 post-job stage-out of files between DataWarp and the PFS.
 
@@ -53,20 +53,25 @@ See note under known problems about #DW directives.
 DataWarp Usage
 --------------
 
-When a DataWarp filesystem has been allocated, its mount point can be located 
-via environment variable DW_JOB_STRIPED.  This variable is set both on the 
+When a DataWarp filesystem has been allocated, its mount point can be located
+via environment variable DW_JOB_STRIPED.  This variable is set both on the
 internal login node and on all the compute nodes.  DataWarp itself is only
-accessible from the compute nodes.  The compute nodes see DataWarp as a normal
-POSIX compatible filesystem.  In addition to the POSIX functionality, files
-and directories can be transferred between DataWarp and the PFS independent
-of the compute nodes.  These transfers can be invoked as mentioned above by
-job script directives or by DataWarp API calls made by the application.  They
-are documented in the User Guide. 
+accessible from the compute nodes. All access to DataWarp must be from a
+compute node.  If a job script needs to access DataWarp, it needs to use aprun.
+For example, to make a directory in DataWarp, issue the command:
+
+  aprun -n 1 $DW_JOB_STRIPED/subdir
+
+The compute nodes see DataWarp as a normal POSIX compatible filesystem.  In
+addition to the POSIX functionality, files and directories can be transferred
+between DataWarp and the PFS independent of the compute nodes.  These transfers
+can be invoked as mentioned above by job script directives or by DataWarp API
+calls made by the application.  They are documented in the User Guide. 
 
 When a DataWarp job is submitted, 3 additional jobs are automatically submitted
-by Moab.  They are called: stage-in, stage-out and coordinating.  The message 
-printed to stdout by msub that normally contains the job ID, for a DataWarp
-job contains the stage-in, compute and stage-out job IDs in that order.  
+by Moab.  They are called: stage-in, stage-out and coordinating.  The message
+printed to stdout by msub that normally contains the job ID, for a DataWarp job
+contains the stage-in, compute and stage-out job IDs in that order.  
 
 Like this:
 
@@ -76,8 +81,8 @@ Like this:
 The additional jobs are submitted by a Moab function, the msub DataWarp filter.
 It logs its actions to the file ~/ac_datawarp.log in the user's home directory.
 
-The state of DataWarp and all of a user's allocations can be displayed by
-the dwstat command (documented in the User Guide.)  An example:
+The state of DataWarp and all of a user's allocations can be displayed by the
+dwstat command (documented in the User Guide.)  An example:
 
 	module load dws
 	dwstat most
@@ -97,12 +102,12 @@ the dwstat command (documented in the User Guide.)  An example:
 	  23 CA---   21 scratch      0 
 
 The libHIO package (described below) contains a script, dw_simple_sub.sh, which
-will submit a simple DataWarp test job.  This can be used to familiarize oneself
-with the process of creating and submitting a DataWarp job. 
+will submit a simple DataWarp test job.  This can be used to familiarize
+oneself with the process of creating and submitting a DataWarp job. 
 
 An application team could choose to use DataWarp directly by issuing POSIX IO
-calls and initiating stage-in and stage-out either via job script directives
-or via DataWarp API calls. Alternatively, the LANL developed, open source package
+calls and initiating stage-in and stage-out either via job script directives or
+via DataWarp API calls. Alternatively, the LANL developed, open source package
 libHIO could be used.  See below for more information on libHIO.
 
 
@@ -145,16 +150,16 @@ Known Problems and Gotchas:
 Many of the problems seen by DataWarp users are related to the msub DataWarp
 filter.  This is a program that runs during the execution of the msub command.
 The msub DataWarp filter is responsible for recognizing #DW directives in the
-job script and using their information to launch the 3 auxiliary DataWarp
-jobs that manage DataWarp allocation, deallocation, stage-in and stage-out.
-The difficulties arise due to the fact that the msub DataWarp filter runs
-in the user's context and can be sensitive to user specific factors such
-as the environment and SSH configuration.  
+job script and using their information to launch the 3 auxiliary DataWarp jobs
+that manage DataWarp allocation, deallocation, stage-in and stage-out.  The
+difficulties arise due to the fact that the msub DataWarp filter runs in the
+user's context and can be sensitive to user specific factors such as the
+environment and SSH configuration.  
 
 The msub DataWarp filter logs to a file in each user's home directory named
 ~/ac_datawarp.log.  This log is a good starting point for debugging msub
-related DataWarp problems.  It can also be deleted when not needed to free
-up disk space.
+related DataWarp problems.  It can also be deleted when not needed to free up
+disk space.
 
 1) Proxy Environment Variables
 ------------------------------
@@ -190,18 +195,18 @@ Removing the python Popen parameter escapes, it converts to:
 
 Perform the equivalent conversion on the command from your ~/ac_datawarp.log
 file and run the command by hand and see if there are any SSH related errors.
-If it is a key problem, it can be corrected by by removing the incorrect
-entry in ~/.ssh/known_hosts file.
+If it is a key problem, it can be corrected by by removing the incorrect entry
+in ~/.ssh/known_hosts file.
 
 3) $DW_JOB_STRIPED string in #DW stage_in and stage_out
 -------------------------------------------------------
 
-The string $DW_JOB_STRIPED in the #DW stage_in and stage_out directives is 
-a required string. It is not a shell variable. All of the #DW directives are
-processed during the msub command and shell variables will not be expanded.
-I speculate that the $DW_JOB_STRIPED string is a placeholder for a future 
-capability, but for now, it must be coded exactly as shown in the DataWarp
-User Guide. 
+The string $DW_JOB_STRIPED in the #DW stage_in and stage_out directives is a
+required string. It is not a shell variable. All of the #DW directives are
+processed during the msub command and shell variables will not be expanded.  I
+speculate that the $DW_JOB_STRIPED string is a placeholder for a future
+capability, but for now, it must be coded exactly as shown in the DataWarp User
+Guide. 
 
 4) JSON Error - eswrap module
 -----------------------------
@@ -212,21 +217,20 @@ the following error message from msub:
 ERROR:  Error encountered: No JSON object could be decoded DataWarp request
 recognized, but errors were encountered processing DW directives.
 
-There were also other eswrap related error messages when the dwstat command
-was used. Removing the module load corrected the problem.
+There were also other eswrap related error messages when the dwstat command was
+used. Removing the module load corrected the problem.
 
 This is due to the fact that the msub DataWarp filter uses the eswrap
-communications mechanism and other paths that are similar to what is used
-by the dwstat command.  So, a good debugging step is to make sure the
-dwstat command is working correctly before submitting a DataWarp job with
-msub.
+communications mechanism and other paths that are similar to what is used by
+the dwstat command.  So, a good debugging step is to make sure the dwstat
+command is working correctly before submitting a DataWarp job with msub.
 
 5) Finding Python
 -----------------
 
 The msub DataWarp filter is written in Python 2 and runs in the user's context
-while the msub command is running.  Normally, msub is configured to invoke
-the system Python interpreter via a fully qualified path name, typically
+while the msub command is running.  Normally, msub is configured to invoke the
+system Python interpreter via a fully qualified path name, typically
 /usr/bin/python.  There have been instances when instead it was configured to
 run just the unqualified executable named python.  In that case, changing the
 default to Python 3, possibly via a "module load python" command will cause
