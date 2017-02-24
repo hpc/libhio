@@ -12,7 +12,7 @@
 Notes on using DataWarp on LANL Cray systems
 ============================================
 
-Last Update 23 Feb 2017
+Last Update 24 Feb 2017
 Cornell Wright
 
 DataWarp is a Cray product that provides a high speed storage device based on
@@ -60,7 +60,7 @@ accessible from the compute nodes. All access to DataWarp must be from a
 compute node.  If a job script needs to access DataWarp, it needs to use aprun.
 For example, to make a directory in DataWarp, issue the command:
 
-  aprun -n 1 $DW_JOB_STRIPED/subdir
+  aprun -n 1 mkdir $DW_JOB_STRIPED/subdir
 
 The compute nodes see DataWarp as a normal POSIX compatible filesystem.  In
 addition to the POSIX functionality, files and directories can be transferred
