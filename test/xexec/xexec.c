@@ -89,6 +89,7 @@ ENUM_NAMP(OPT_, PERFXCHK)
 ENUM_NAMP(OPT_, SMSGV1)
 ENUM_NAMP(OPT_, PAVM)
 ENUM_NAMP(OPT_, SIGHAND)
+ENUM_NAMP(OPT_, FAILDLY)
 ENUM_END(etab_opt, 1, "+")
 
 static const char * options_init = "-ROF+RCHK+XPERF-PERFXCHK-SMSGV1-PAVM+SIGHAND"; 
@@ -1219,6 +1220,11 @@ int main(int argc, char * * argv) {
   }
 
   rc = (G.local_fails + G.global_fails) ? EXIT_FAILURE : EXIT_SUCCESS;
+
+  if (rc != EXIT_SUCCESS && (G.options & OPT_FAILDLY) ) {
+    VERB0("60 second sleep due to opt +FAILDLY");
+    sleep(60);
+  }
 
   #ifdef MPI
   if (rc != EXIT_SUCCESS && mpi_active()) {

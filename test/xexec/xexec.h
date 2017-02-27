@@ -45,13 +45,14 @@
 // xexec global
 //----------------------------------------------------------------------------
 enum options {
-  OPT_ROF      =  1,  // Run on Failure
-  OPT_RCHK     =  2,  // Read Data Check
-  OPT_XPERF    =  4,  // Extended Performance Messages
-  OPT_PERFXCHK =  8,  // Exclude check time from Performance messages
-  OPT_SMSGV1   = 16,  // Print success message v 1 so it can be suppressed with v 0 
-  OPT_PAVM     = 32,  // Pavilion Messages
-  OPT_SIGHAND  = 64   // Install informational signal handler
+  OPT_ROF      =   1, // Run on Failure
+  OPT_RCHK     =   2, // Read Data Check
+  OPT_XPERF    =   4, // Extended Performance Messages
+  OPT_PERFXCHK =   8, // Exclude check time from Performance messages
+  OPT_SMSGV1   =  16, // Print success message v 1 so it can be suppressed with v 0 
+  OPT_PAVM     =  32, // Pavilion Messages
+  OPT_SIGHAND  =  64, // Install informational signal handler
+  OPT_FAILDLY  = 128  // Delay after failure to give other rank's messages a chance
 };
 
 #define XEXEC_VERSION "1.1.1"
