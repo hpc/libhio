@@ -148,11 +148,36 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bwritten, "bytes_written",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
 
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_wtime, "write_time_usec",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio read callc in this dataset instance", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rtime, "read_time_usec",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio write calls in this dataset instance", 0);
+
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rcount, "read_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to read APIs in this dataset instance", 0);
 
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_wcount, "write_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset instance", 0);
+
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_abread, "aggregate_bytes_read",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_abwritten, "aggregate_bytes_written",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_awtime, "aggregate_write_time_usec",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio read callc in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_artime, "aggregate_read_time_usec",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio write calls in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_arcount, "aggregate_read_count",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to read APIs in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_awcount, "aggregate_write_count",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset", 0);
 
   hioi_list_init (new_dataset->ds_elist);
 

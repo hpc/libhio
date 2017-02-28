@@ -646,6 +646,21 @@ struct hio_dataset {
     atomic_ulong        s_wcount;
     /** total number of read operations */
     atomic_ulong        s_rcount;
+
+    /** aggregate number of bytes read */
+    uint64_t            s_abread;
+    /** aggregate read time */
+    uint64_t            s_artime;
+
+    /** aggregate number of bytes written */
+    uint64_t            s_abwritten;
+    /** aggregate write time */
+    uint64_t            s_awtime;
+
+    /** total number of write operations */
+    uint64_t            s_awcount;
+    /** total number of read operations */
+    uint64_t            s_arcount;
   } ds_stat;
 
   /** data associated with this dataset */

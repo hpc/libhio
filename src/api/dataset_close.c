@@ -71,6 +71,14 @@ int hio_dataset_close (hio_dataset_t dataset) {
   }
 #endif
 
+  /* store global statistics */
+  dataset->ds_stat.s_abread = tmp[0];
+  dataset->ds_stat.s_abwritten = tmp[1];
+  dataset->ds_stat.s_artime = tmp[2];
+  dataset->ds_stat.s_awtime = tmp[3];
+  dataset->ds_stat.s_arcount = tmp[4];
+  dataset->ds_stat.s_awcount = tmp[5];
+
   if (0 == context->c_rank && context->c_print_stats) {
     printf ("hio.dataset.stat %s.%s.%" PRIu64 " RW_Bytes %" PRIu64 " B %" PRIu64 " B, RW_Ops %" PRIu64 " ops %" PRIu64 " ops, "
             "RW_API_Time %" PRIu64 " us %" PRIu64 " us, Walltime %" PRIu64 " us\n", hioi_object_identifier (&context->c_object),
