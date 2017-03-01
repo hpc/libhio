@@ -161,6 +161,7 @@ The msub DataWarp filter logs to a file in each user's home directory named
 related DataWarp problems.  It can also be deleted when not needed to free up
 disk space.
 
+
 1) Proxy Environment Variables
 ------------------------------
 
@@ -168,6 +169,7 @@ Proxy environment variables, e.g., HTTP_PROXY, HTTPS_PROXY, can cause problems
 with job submission because they interfere with some of Moab and/or DataWarp's 
 communications.  If you use these settings, unset them before submitting a 
 DataWarp job.  This should be corrected soon.
+
 
 2) SSH Communications Problems
 ------------------------------
@@ -198,6 +200,7 @@ file and run the command by hand and see if there are any SSH related errors.
 If it is a key problem, it can be corrected by by removing the incorrect entry
 in ~/.ssh/known_hosts file.
 
+
 3) $DW_JOB_STRIPED string in #DW stage_in and stage_out
 -------------------------------------------------------
 
@@ -208,7 +211,74 @@ speculate that the $DW_JOB_STRIPED string is a placeholder for a future
 capability, but for now, it must be coded exactly as shown in the DataWarp User
 Guide. 
 
-4) JSON Error - eswrap module
+
+4) #DW stage_in type=file destination
+-------------------------------------
+
+The "#DW stage_in type=file" directive has a required destination argument.  As
+in the type=dir format of the directive, the destination must start with the
+literal string "$DW_JOB_STRIPED".  It must be followed by a file name or a
+subdirectory and file name.  Examples:
+
+#DW stage_in type=file source=<pfs path> destination=$DW_JOB_STRIPED/foo
+
+will copy the specified source file into file name "foo" in the root of
+the DataWarp allocation.
+
+#DW stage_in type=file source=<pfs path> destination=$DW_JOB_STRIPED/sub/foo
+
+will create subdirectory "sub" in the root of the DataWarp allocation and 
+will copy the specified source file into file name "foo" in that 
+subdirectory.
+
+
+5) #DW stage_in type=list list file format
+------------------------------------------
+
+The list file specified on a "#DW stage_in type=list" directive contains
+source and destination on each line.  Similar to the format of the
+destination argument of the type=file stage_in directive described above,
+destination must start with the literal string "$DW_JOB_STRIPED".  It must
+be followed by a file name or a subdirectory and file name. Examples list
+file lines:
+
+<pfs path> $DW_JOB_STRIPED/foo
+
+will copy the specified source file into file name "foo" in the root of
+the DataWarp allocation.
+
+<pfs path> $DW_JOB_STRIPED/sub/foo
+
+will create subdirectory "sub" in the root of the DataWarp allocation and 
+will copy the specified source file into file name "foo" in that 
+subdirectory.
+
+
+6) Stage_in errors poorly messaged
+----------------------------------
+
+When there is an error processing a stage_in directive, there is no indication
+given in the job's output log.  The datawarp-stagein job will run, the other 
+3 sub-jobs will be cancelled and there will be no job output file.  From a
+user's perspective, the job will have disappeared without producing an output
+file.  A generic indication of the failure is available from the checkjob -v
+command.  Example:
+
+-->msub ga_home_1.sh 
+
+53044.datawarp-stagein 53045 53044.datawarp-stageout
+
+-->checkjob -v 53045   
+job 53045
+
+. . . .
+
+Message[0] Scheduling DataWarp Storage
+Message[1] DW Staging running
+Message[2] DataWarp StageIn failed
+
+
+7) JSON Error - eswrap module
 -----------------------------
 
 One user had added a "module load eswrap" to their .bashrc file.  This caused
@@ -225,7 +295,8 @@ communications mechanism and other paths that are similar to what is used by
 the dwstat command.  So, a good debugging step is to make sure the dwstat
 command is working correctly before submitting a DataWarp job with msub.
 
-5) Finding Python
+
+8) Finding Python
 -----------------
 
 The msub DataWarp filter is written in Python 2 and runs in the user's context
