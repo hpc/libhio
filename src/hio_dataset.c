@@ -251,6 +251,14 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
 
   dataset->ds_rotime = rotime;
 
+  /* reset session statistics that were loaded from the manifest */
+  dataset->ds_stat.s_bread = 0;
+  dataset->ds_stat.s_bwritten = 0;
+  dataset->ds_stat.s_rtime = 0;
+  dataset->ds_stat.s_wtime = 0;
+  atomic_init (&dataset->ds_stat.s_rcount, 0);
+  atomic_init (&dataset->ds_stat.s_wcount, 0);
+
   return HIO_SUCCESS;
 }
 
