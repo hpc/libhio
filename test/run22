@@ -1,0 +1,56 @@
+#! /bin/bash
+# -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
+#
+# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+. ./run_setup
+
+# Write N-N test case for data staging experiments
+
+batch_sub $(( $ranks * $blksz * $nblk ))
+
+cmdw="
+  name run22w v $verbose_lev d $debug_lev mi 0
+  /@@ Write N-N test case @/
+  dbuf RAND22 20Mi
+  hi MYCTX $HIO_TEST_ROOTS
+  hda NTNDS 97 WRITE,CREAT UNIQUE hdo
+  heo MYEL WRITE,CREAT,TRUNC
+  hvp c. .
+  lc $nblk
+    hew 0 $blksz
+  le
+  hec hdc hdf hf mgf mf
+"
+
+cmdds="
+  name run22d v $verbose_lev d $debug_lev 
+  /@@ Write N-N test case @/
+  dbuf RAND22 20Mi
+  v 2
+  dsdo ${DW_JOB_STRIPED}MYCTX.hio/NTNDS/97 $HIO_TEST_SCRATCH JOB_END
+"
+
+clean_roots $HIO_TEST_ROOTS
+
+export HIO_datawarp_stage_mode=disable
+
+myrun $HIO_TEST_XEXEC $cmdw
+
+myrun1 mkdir $HIO_TEST_SCRATCH
+
+myrun1 $HIO_TEST_XEXEC $cmdds
+
+myrun1 find $DW_JOB_STRIPED -ls
+myrun1 find $HIO_TEST_SCRATCH -ls
+ 	 
+check_rc
+if [[ $max_rc -eq 0 && $after -gt 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi
+exit $max_rc
