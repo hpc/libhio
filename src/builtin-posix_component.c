@@ -1589,11 +1589,12 @@ static void builtin_posix_stripe_unlock (hio_element_t element, int stripe_id) {
 static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t *posix_module, hio_element_t element,
                                                          uint64_t offset, hio_iovec_t *iovec, int count, bool reading) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
-  size_t bytes_transferred = 0, ret, total = 0, iov_index, iov_count, remaining, current;
+  size_t bytes_transferred = 0, total = 0, iov_index, iov_count, remaining, current;
   hio_dataset_t dataset = &posix_dataset->base;
   uint64_t stop, start, data;
   int rc, locked_stripe_id = -1;
   hio_file_t *file;
+  ssize_t ret;
 
   assert ((!reading && dataset->ds_flags & HIO_FLAG_WRITE) || (reading && dataset->ds_flags & HIO_FLAG_READ));
 
