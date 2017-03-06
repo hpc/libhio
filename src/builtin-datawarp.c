@@ -289,7 +289,7 @@ static void builtin_datawarp_cleanup (hio_dataset_t dataset, builtin_datawarp_da
       break;
     }
 
-    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%lu from datawarp", hioi_object_identifier (dataset),
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%"PRIi64" from datawarp", hioi_object_identifier (dataset),
               ds_id);
 
     builtin_datawarp_module_dataset_unlink (module, hioi_object_identifier (dataset), ds_id);
@@ -481,7 +481,7 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
     if (num_resident > be_data->keep_last) {
       builtin_datawarp_resident_id_t *rid = (builtin_datawarp_resident_id_t *) be_data->resident_ids.next;
 
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: removing resident dataset with id %ld",
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: removing resident dataset with id %"PRIi64,
                 rid->dwrid_id);
 
       rc = builtin_datawarp_module_dataset_unlink (&posix_module->base, hioi_object_identifier (&dataset->ds_object),
@@ -598,7 +598,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
       int complete = 0, pending = 0, deferred = 0, failed = 0, stage_mode = HIO_DATAWARP_STAGE_MODE_DISABLE;
       char *ds_path;
 
-      rc = asprintf (&ds_path, "%s/%s/%ld", context_path, context_entry.d_name, headers[i].ds_id);
+      rc = asprintf (&ds_path, "%s/%s/%"PRIi64, context_path, context_entry.d_name, headers[i].ds_id);
       if (0 > rc) {
         free (headers);
         free (context_path);
@@ -614,7 +614,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
         stage_mode = (deferred > 0) ? DW_STAGE_AT_JOB_END : DW_STAGE_IMMEDIATE;
       }
 
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%lu with status "
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%"PRIi64" with status "
                 "%d. stage mode %d", context_entry.d_name, headers[i].ds_id, headers[i].ds_status, stage_mode);
 
       builtin_datawarp_add_resident (be_data, headers[i].ds_id, stage_mode, true);
