@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -274,6 +274,12 @@
  *   Available modes: disable (do not stage), auto (stage most recent id at end of job), end_of_job
  *   (stage at end of job), immediate (stage when the dataset is closed). Note: @b datawarp_stage_mode 
  *   is only valid for datasets opened for writing.
+ *
+ * - @b datawarp_keep_last - Number of unique dataset ids to keep on datawarp. If the limit is reached then
+ *   existing dataset ids are destaged (if marked as end_of_job) or libhio will block until immediate staging
+ *   is complete. The datasets are then removed from datawarp. The  calculated count includes dataset ids
+ *   resident on datawarp before hio_init()/hio_init_mpi(). The default is 1. This value can be set on any
+ *   dataset instance and will affect all datasets with the same name.
  *
  * - @b dataset_file_mode - File mode to use when writing files on POSIX-like file systems. When set to
  *   basic either a single file (@ref HIO_SET_ELEMENT_SHARED) or a file per rank (@ref HIO_SET_ELEMENT_UNIQUE)
@@ -613,7 +619,8 @@ hio_return_t hio_init_single (hio_context_t *new_context, const char *config_fil
  * processes that will perform IO in this context. The caller is free to use or free
  * {comm} after the call has returned. Processes outside {comm} should not attempt
  * to modify any datasets open within this context. If {comm} is NULL then hio will
- * attempt to use MPI_COMM_WORLD.
+ * attempt to use MPI_COMM_WORLD. All processes in {comm} MUST specify the same
+ * context name.
  *
  * When initializing a context a configuration file can be specified. This file should
  * contain the configuration for the context and all datasets in the context. If NULL
@@ -754,7 +761,9 @@ hio_return_t hio_dataset_alloc (hio_context_t context, hio_dataset_t *set_out, c
  * @returns HIO_ERR_EXISTS if HIO_FLAG_CREAT is specified and the dataset id already
  *          exists in the current data root.
  *
- * This function attempts to open/create an hio dataset.
+ * This function attempts to open/create an hio dataset. This function is collective
+ * over all processes in the communicator used to create the associated hio context.
+ * All processes MUST specify a dataset object with the same name, set_id, and mode.
  */
 hio_return_t hio_dataset_open (hio_dataset_t dataset);
 
@@ -769,7 +778,8 @@ hio_return_t hio_dataset_open (hio_dataset_t dataset);
  * This function closes an hio dataset handle. The handle can continue to be used
  * with @ref performance calls until it is freed with hio_dataset_free(). It is
  * erroneous to call this function on a dataset while there are outstanding elements
- * open locally in the dataset.
+ * open locally in the dataset. This function is collective on the processes used
+ * to create the associated hio context.
  */
 hio_return_t hio_dataset_close (hio_dataset_t dataset);
 
