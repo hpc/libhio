@@ -27,7 +27,7 @@ static char * help =
   "  dbuf RAND22 | RAND22P | OFS20  <size>  Allocates and initializes data buffer\n"
   "                with pattern used for read data check.  Write and read patterns\n"
   "                must match.\n"
-  "  imd <path> <mode> Issue mkdir(path, mode)\n"
+  "  imd <path> <mode> Issue mkdir(path, mode). Hint: prefix mode with 0 for octal.\n"
   "  fo <file> <mode> Issue fopen for a file, %%r or %%p in path will be expanded to MPI\n"
   "                rank or PID. <mode> is fopen mode string.\n"
   "  fw <offset> <size>  Write relative to current file offset\n"

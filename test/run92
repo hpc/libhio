@@ -20,7 +20,7 @@ cmdw="
   name run92w v $verbose_lev d $debug_lev mi 0
   /@@ Read and write N-N test case with read data value checking @/
   dbuf RAND22P 20Mi
-  ifr 0 imd $HIO_TEST_SCRATCH/posix 511 eif
+  ifr 0 imd $HIO_TEST_SCRATCH/posix 0700 eif
   mb
   fo $HIO_TEST_SCRATCH/posix/df%r.dat wb
   lc $nblk

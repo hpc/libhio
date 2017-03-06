@@ -468,7 +468,12 @@ if [[ $size == [[:digit:]]* ]]; then
   szarr=(${size//,/ })
   if [[ -n ${szarr[3]} ]]; then errx "too many elements in size: \"$size\""; fi
   totsz=$(( $cons_mi * ${szarr[0]} ))
-  blksz=$(( $cons_ki * ${szarr[1]-1} ))
+  blksz=${szarr[1]-1}
+  if [[ ${blksz:0:1} == "b" ]]; then
+    blksz=${blksz:1}
+  else
+    blksz=$(( cons_ki * blksz ))
+  fi
   nseg=${szarr[2]-10}
   if [[ -n ${szarr[3]} ]]; then synexit "too many elements in size: \"$size\""; fi
 else
