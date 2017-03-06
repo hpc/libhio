@@ -1,0 +1,59 @@
+#! /bin/bash
+# -*- Mode: sh; sh-basic-offset:2 ; indent-tabs-mode:nil -*-
+#
+# Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+. ./run_setup
+
+# Posix Read and write N-N test case with read data value checking.
+
+batch_sub $(( $ranks * $blksz * $nblk ))
+
+cmdw="
+  name run92w v $verbose_lev d $debug_lev mi 0
+  /@@ Read and write N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
+  ifr 0 imd $HIO_TEST_SCRATCH/posix 511 eif
+  mb
+  fo $HIO_TEST_SCRATCH/posix/df%r.dat wb
+  lc $nblk
+    fw 0 $blksz
+  le
+  fc
+  mgf mf
+"
+
+cmdr="
+  name run92r v $verbose_lev d $debug_lev mi $HIO_TEST_MI_SHIFT
+  /@@ Read and write N-N test case with read data value checking @/
+  dbuf RAND22P 20Mi
+  fo $HIO_TEST_SCRATCH/posix/df%r.dat rb
+  lc $nblk
+    fr 0 $blksz
+  le
+  fc
+  mgf mf
+"
+
+clean_roots $HIO_TEST_ROOTS
+
+myrun $HIO_TEST_XEXEC $cmdw
+# Don't read if write failed
+if [[ max_rc -eq 0 ]]; then
+  myrun $HIO_TEST_XEXEC $cmdr
+  # If first read fails, try again to see if problem persists
+  if [[ max_rc -ne 0 ]]; then
+    myrun $HIO_TEST_XEXEC $cmdr
+  fi
+fi
+  
+check_rc
+if [[ $max_rc -eq 0 && $after -gt 0 ]]; then clean_roots $HIO_TEST_ROOTS; fi
+exit $max_rc
