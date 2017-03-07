@@ -148,6 +148,8 @@ int hioi_dataset_shared_fini (hio_dataset_t dataset) {
     }
 
     MPI_Win_free (&dataset->ds_shared_win);
+    /* reset the buffer pointer to NULL so it isn't freed again */
+    dataset->ds_buffer.b_base = NULL;
   }
 
   return HIO_SUCCESS;

@@ -249,6 +249,14 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
     return rc;
   }
 
+  if (NULL == dataset->ds_buffer.b_base) {
+    (void) posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
+    if (NULL != dataset->ds_buffer.b_base) {
+      dataset->ds_buffer.b_size = dataset->ds_buffer_size;
+      dataset->ds_buffer.b_remaining = dataset->ds_buffer.b_size;
+    }
+  }
+
   dataset->ds_rotime = rotime;
 
   /* reset session statistics that were loaded from the manifest */
@@ -279,6 +287,9 @@ int hioi_dataset_close_internal (hio_dataset_t dataset) {
   }
 
   rc = dataset->ds_close (dataset);
+
+  free (dataset->ds_buffer.b_base);
+  dataset->ds_buffer.b_base = NULL;
 
   return rc;
 }
