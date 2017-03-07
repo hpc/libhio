@@ -15,7 +15,7 @@ int hio_dataset_unlink (hio_context_t ctx, const char *name, int64_t set_id, hio
   hio_module_t *module;
   int rc = HIO_ERR_NOT_FOUND;
 
-  if (NULL == ctx || NULL == name || 0 > set_id) {
+  if (NULL == ctx || NULL == name || '\0' == name[0] || 0 > set_id) {
     return HIO_ERR_BAD_PARAM;
   }
 

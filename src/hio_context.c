@@ -416,6 +416,11 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
   hio_context_t context;
   int rc;
 
+  if (!context_name || '\0' == context_name[0]) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL or zero length");
+    return HIO_ERR_BAD_PARAM;
+  }
+
   context = hio_context_alloc (context_name);
   if (NULL == context) {
     hioi_err_push (HIO_ERR_OUT_OF_RESOURCE, NULL, "Could not allocate space for new hio context");
@@ -487,6 +492,11 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
   if (flag) {
     hioi_err_push (HIO_ERROR, NULL, "Attempted to initialize hio after MPI was finalized");
     return HIO_ERROR;
+  }
+
+  if (!context_name || '\0' == context_name[0]) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL or zero length");
+    return HIO_ERR_BAD_PARAM;
   }
 
   context = hio_context_alloc (context_name);

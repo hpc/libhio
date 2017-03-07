@@ -43,6 +43,8 @@ char * help_post =
   "Notes:\n"
   " Numbers can be specified with suffixes %s\n"
   "\n"
+  " Strings can be specified as %%NULL (null pointer) or %%0 (zero length string)\n"
+  "\n"
   " Comments are delimited with /@, /@@ and @/, however those must stand alone in the \n"
   " actions as separate tokens.  Also, /@ is only recognized if it is the first\n"
   " token of an action. Comments starting with /@@ are printed. Comments may be nested.\n"
@@ -899,7 +901,12 @@ void cvt_param(GLOBAL * gptr, char * token, enum ptype type, PVAL * val, char * 
       if (rc) ERRX("%s ...; %s", desc, buf);
       break;
     case STR:
-      val->s = token;
+      if (0 == strcmp(token, "%NULL"))
+        val->s = NULL;
+      else if (0 == strcmp(token, "%0"))
+        val->s = "";
+      else
+        val->s = token;
       break;
     case REGX:
       val->rxp = MALLOCX(sizeof(regex_t));

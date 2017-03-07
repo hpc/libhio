@@ -15,7 +15,7 @@ int hio_element_open (hio_dataset_t dataset, hio_element_t *element_out, const c
                       int flags) {
   hio_context_t context;
 
-  if (NULL == dataset || NULL == element_out || NULL == element_name) {
+  if (NULL == dataset || NULL == element_out || NULL == element_name || '\0' == element_name[0] ) {
     return HIO_ERR_BAD_PARAM;
   }
 
