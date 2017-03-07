@@ -43,16 +43,12 @@ static hio_var_enum_t hioi_dataset_lock_strategies = {
   },
 };
 
-enum {
-  BUILTIN_POSIX_API_POSIX,
-  BUILTIN_POSIX_API_STDIO,
-};
-
 static hio_var_enum_t builtin_posix_apis = {
-  .count = 2,
+  .count = 3,
   .values = (hio_var_enum_value_t []){
-    {.string_value = "posix", .value = BUILTIN_POSIX_API_POSIX},
-    {.string_value = "stdio", .value = BUILTIN_POSIX_API_STDIO},
+    {.string_value = "posix", .value = HIO_FAPI_POSIX},
+    {.string_value = "stdio", .value = HIO_FAPI_STDIO},
+    {.string_value = "pposix", .value = HIO_FAPI_PPOSIX},
   },
 };
 
@@ -886,14 +882,17 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   /* NTH: need to dig a little deeper into this but stdio gives better performance when used
    * with datawarp. In all other cases the POSIX read/write calls appear to be faster. */
   if (HIO_FS_TYPE_DATAWARP == dataset->ds_fsattr.fs_type) {
-    posix_dataset->ds_file_api = BUILTIN_POSIX_API_STDIO;
+    posix_dataset->ds_file_api = HIO_FAPI_STDIO;
   } else {
-    posix_dataset->ds_file_api = BUILTIN_POSIX_API_POSIX;
+    posix_dataset->ds_file_api = HIO_FAPI_POSIX;
   }
 
   hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_file_api,
                    "posix_file_api", NULL, HIO_CONFIG_TYPE_INT32, &builtin_posix_apis,
-                   "API set to use for reading/writing files. Valid values: (0: posix, 1: stdio) (default: posix)", 0);
+                   "API set to use for reading/writing files. This variable allows the user "
+                   " to specify which API to use. Currently supported API are 0: posix (read/write)"
+                   ", 1: stdio (fread/fwrite), or 2: pposix (pread/pwrite). The default is to use "
+                   "posix", 0);
 
   if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     posix_dataset->ds_use_bzip = true;
@@ -1114,7 +1113,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
 
   builtin_posix_trace (posix_dataset, "close", 0, 0, start, stop);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: successfully closed posix dataset "
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_close: successfully closed posix dataset "
             "%s:%" PRIu64 " on data root %s. close time %" PRIu64 " usec", hioi_object_identifier(dataset),
             dataset->ds_id, module->data_root, stop - start);
 
@@ -1230,49 +1229,23 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
                                     char *path, hio_file_t *file) {
   hio_object_t hio_object = &posix_dataset->base.ds_object;
-  int open_flags = 0, fd;
-  char *file_mode;
+  int open_flags = 0, rc;
 
   /* determine the fopen file mode to use */
   if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
     open_flags |= O_CREAT | O_WRONLY;
   }
+
   if (HIO_FLAG_READ & posix_dataset->base.ds_flags) {
     open_flags |= O_RDONLY;
   }
 
-  /* it is not possible to get open with create without truncation using fopen so use a
-   * combination of open and fdopen to get the desired effect */
-  //hioi_log (context, HIO_VERBOSE_DEBUG_HIGH, "posix: calling open; path: %s open_flags: %i", path, open_flags);
-  fd = open (path, open_flags, posix_module->access_mode);
-  if (fd < 0) {
-    hioi_err_push (fd, hio_object, "posix: error opening element path %s. "
-                  "errno: %d", path, errno);
-    return fd;
+  rc = hioi_file_open (file, path, open_flags, posix_dataset->ds_file_api, posix_module->access_mode);
+  if (HIO_SUCCESS != rc) {
+    hioi_err_push (rc, hio_object, "posix: error opening path %s. errno: %d", path, errno);
   }
 
-  if (BUILTIN_POSIX_API_STDIO == posix_dataset->ds_file_api) {
-    if (HIO_FLAG_WRITE & posix_dataset->base.ds_flags) {
-      file_mode = "w";
-    } else {
-      file_mode = "r";
-    }
-
-    file->f_hndl = fdopen (fd, file_mode);
-    if (NULL == file->f_hndl) {
-      int hrc = hioi_err_errno (errno);
-      hioi_err_push (hrc, hio_object, "posix: error opening element file %s. "
-                     "errno: %d", path, errno);
-      return hrc;
-    }
-  } else {
-    file->f_fd = fd;
-    file->f_hndl = NULL;
-  }
-
-  file->f_offset = 0;
-
-  return HIO_SUCCESS;
+  return rc;
 }
 
 static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
@@ -1315,14 +1288,7 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
     return rc;
   }
 
-  if (element->e_file.f_hndl) {
-    fseek (element->e_file.f_hndl, 0, SEEK_END);
-    element->e_size = ftell (element->e_file.f_hndl);
-    fseek (element->e_file.f_hndl, 0, SEEK_SET);
-  } else {
-    element->e_size = lseek (element->e_file.f_fd, 0, SEEK_END);
-    lseek (element->e_file.f_fd, 0, SEEK_SET);
-  }
+  element->e_size = element->e_file.f_size;
 
   return HIO_SUCCESS;
 }

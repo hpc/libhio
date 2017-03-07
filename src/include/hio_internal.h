@@ -478,6 +478,17 @@ static inline bool hioi_dataset_doing_io (hio_dataset_t dataset) {
 }
 
 /**
+ * Helper function to open an hio backing file
+ *
+ * @param[in] file        HIO file structure to fill
+ * @param[in] filename    file to open
+ * @param[in] flags       flags to pass to open()
+ * @param[in] api         api to use
+ * @param[in] access_mode UNIX permissions
+ */
+int hioi_file_open (hio_file_t *file, const char *filename, int flags, hio_file_api_t api, int access_mode);
+
+/**
  * Helper function to close an hio backing file
  *
  * @param[in] file

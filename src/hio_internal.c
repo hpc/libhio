@@ -15,6 +15,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #include <assert.h>
 
@@ -523,6 +524,10 @@ int hioi_string_scatter (hio_context_t context, char **string) {
 int hioi_file_close (hio_file_t *file) {
   int rc = 0;
 
+  if (!file->f_is_open) {
+    return HIO_ERR_BAD_PARAM;
+  }
+
   if (file->f_hndl) {
     rc = fclose (file->f_hndl);
   } else if (-1 != file->f_fd) {
@@ -535,6 +540,7 @@ int hioi_file_close (hio_file_t *file) {
 
   file->f_fd = -1;
   file->f_hndl = NULL;
+  file->f_is_open = false;
 
   return rc;
 }
@@ -544,11 +550,20 @@ int64_t hioi_file_seek (hio_file_t *file, int64_t offset, int whence) {
     return file->f_offset;
   }
 
-  if (-1 != file->f_fd) {
+  switch (file->f_api) {
+  case HIO_FAPI_POSIX:
     file->f_offset = lseek (file->f_fd, offset, whence);
-  } else {
+    break;
+  case HIO_FAPI_STDIO:
     (void) fseek (file->f_hndl, offset, whence);
     file->f_offset = ftell (file->f_hndl);
+  case HIO_FAPI_PPOSIX:
+    if (SEEK_SET == whence) {
+      file->f_offset = offset;
+    } else if (SEEK_END) {
+      file->f_offset = file->f_size - file->f_offset;
+    }
+    break;
   }
 
   return file->f_offset;
@@ -558,10 +573,16 @@ ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
   ssize_t actual, total = 0;
 
   do {
-    if (-1 != file->f_fd) {
+    switch (file->f_api) {
+    case HIO_FAPI_POSIX:
       actual = write (file->f_fd, ptr, count);
-    } else {
+      break;
+    case HIO_FAPI_STDIO:
       actual = fwrite (ptr, 1, count, file->f_hndl);
+      break;
+    case HIO_FAPI_PPOSIX:
+      actual = pwrite (file->f_fd, ptr, count, file->f_offset);
+      break;
     }
 
     if (actual > 0) {
@@ -569,6 +590,9 @@ ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
       count -= actual;
       file->f_offset += total;
       ptr = (void *) ((intptr_t) ptr + actual);
+      if (file->f_offset > file->f_size) {
+        file->f_size = file->f_offset;
+      }
     }
   } while (count > 0 && (actual > 0 || (-1 == actual && EINTR == errno)) );
 
@@ -579,10 +603,16 @@ ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
   ssize_t actual, total = 0;
 
   do {
-    if (-1 != file->f_fd) {
+    switch (file->f_api) {
+    case HIO_FAPI_POSIX:
       actual = read (file->f_fd, ptr, count);
-    } else {
+      break;
+    case HIO_FAPI_STDIO:
       actual = fread (ptr, 1, count, file->f_hndl);
+      break;
+    case HIO_FAPI_PPOSIX:
+      actual = pread (file->f_fd, ptr, count, file->f_offset);
+      break;
     }
 
     if (actual > 0) {
@@ -600,12 +630,60 @@ ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
 }
 
 void hioi_file_flush (hio_file_t *file) {
-  if (-1 != file->f_fd) {
+  if (!file->f_is_open) {
+    return;
+  }
+
+  switch (file->f_api) {
+  case HIO_FAPI_POSIX:
+  case HIO_FAPI_PPOSIX:
     fsync (file->f_fd);
-  } else if (NULL != file->f_hndl) {
+    break;
+  case HIO_FAPI_STDIO:
+    assert (NULL != file->f_hndl);
     fflush (file->f_hndl);
     fsync (fileno (file->f_hndl));
+    break;
   }
+}
+
+int hioi_file_open (hio_file_t *file, const char *filename, int flags, hio_file_api_t api, int access_mode)
+{
+  char *file_mode;
+  int fd;
+
+  /* it is not possible to get open with create without truncation using fopen so use a
+   * combination of open and fdopen to get the desired effect */
+  fd = open (filename, flags, access_mode);
+  if (fd < 0) {
+    return hioi_err_errno (errno);
+  }
+
+  file->f_api = api;
+  file->f_hndl = NULL;
+  file->f_fd = -1;
+  file->f_offset = 0;
+  file->f_size = lseek (fd, 0, SEEK_END);
+  file->f_is_open = true;
+
+  (void) lseek (fd, 0, SEEK_SET);
+
+  if (HIO_FAPI_STDIO == api) {
+    if (O_WRONLY & flags) {
+      file_mode = "w";
+    } else {
+      file_mode = "r";
+    }
+
+    file->f_hndl = fdopen (fd, file_mode);
+    if (NULL == file->f_hndl) {
+      return hioi_err_errno (errno);
+    }
+  } else {
+    file->f_fd = fd;
+  }
+
+  return HIO_SUCCESS;
 }
 
 static bool hioi_iov_can_merge (hio_iovec_t *ioveca, hio_iovec_t *iovecb) {

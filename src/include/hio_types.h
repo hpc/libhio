@@ -694,7 +694,17 @@ struct hio_dataset {
   hio_dataset_process_requests_fn_t ds_process_reqs;
 };
 
+typedef enum {
+  HIO_FAPI_POSIX,
+  HIO_FAPI_STDIO,
+  HIO_FAPI_PPOSIX,
+} hio_file_api_t;
+
 typedef struct hio_file_t {
+  /** file api to use */
+  hio_file_api_t f_api;
+  /** is this file handle in use */
+  bool      f_is_open;
   /** POSIX file handle */
   FILE     *f_hndl;
   /** file descriptor */
@@ -703,6 +713,8 @@ typedef struct hio_file_t {
   int       f_bid;
   /** current offset in the file */
   uint64_t  f_offset;
+  /** current file size */
+  uint64_t  f_size;
   /** element associated with the file (if any) */
   hio_element_t f_element;
 } hio_file_t;
