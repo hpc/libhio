@@ -195,46 +195,48 @@ rm -fR $tdir
 for v in $vers; do
   vs=$v$dir_suffix
   case $v in
-    local     ) build_l -n $vs;;
+    local       ) build_l -n $vs;;
 
-    gr-gnu    ) build_r none    gr-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
-    gr-intel  ) build_r none    gr-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+    gr-gnu      ) build_r none    gr-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    gr-intel    ) build_r none    gr-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
-    ml-gnu    ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
-    ml-intel  ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+    ml-gnu      ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    ml-intel    ) build_r none    ml-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
-    sn-gnu    ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
-    sn-intel  ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+    sn-gnu      ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    sn-intel    ) build_r none    sn-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
-    wf-gnu    ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
-    wf-intel  ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
+    wf-gnu      ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
+    wf-intel    ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
-    ga-gnu    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    ga-gnuk   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;
-    ga-cray   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
-    ga-crayk  ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-cray ;;
-    ga-intel  ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs                              ;;
-    ga-intelk ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
-    ga-pgi    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
+    ga-gnu      ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    ga-gnuk     ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;
+    ga-cray     ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
+    ga-crayk    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-cray ;;
+    ga-intel    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    ga-intel17  ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs -l friendly-testing -s PrgEnv-intel,PrgEnv-intel/17.0.1      ;;
+    ga-intelk   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
+    ga-intel17k ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
+    ga-pgi      ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
-    t2-gnuk   ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu -l craype-mic-knl  ;;
-    t2-intelk ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs   ;;
+    t2-gnuk     ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    t2-intelk   ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs   ;;
 
-    tt-gnu    ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tt-gnuk   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tt-cray   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
-    tt-crayk  ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-cray ;;
-    tt-intel  ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs                              ;;
-    tt-intelk ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
-    tt-pgi    ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
+    tt-gnu      ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tt-gnuk     ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tt-cray     ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
+    tt-crayk    ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-cray ;;
+    tt-intel    ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    tt-intelk   ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
+    tt-pgi      ) build_r none    tt-fey     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
-    tr-gnu    ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    tr-intel  ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    tr-gnu      ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    tr-intel    ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
 
-    bu-gnu    ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-cray,PrgEnv-gnu  -l craype-sandybridge ;;
-    bu-cray   ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs                             -l craype-sandybridge ;;
+    bu-gnu      ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-cray,PrgEnv-gnu  -l craype-sandybridge ;;
+    bu-cray     ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs                             -l craype-sandybridge ;;
 
-    *         ) msg "Error: version \"$v\" not recognized"
+    *           ) msg "Error: version \"$v\" not recognized"
   esac
 done
 
