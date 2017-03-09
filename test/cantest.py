@@ -115,7 +115,7 @@ def runcmd(tag, cmd, echo=True, shell=False, rcok=False, stderrok=False ):
     if len(se) != 0:
       msg(tag, cmd_0, 'stderr:', se.strip('\r\n'))
     if (len(se) > 0 and not stderrok) or (rc != 0 and not rcok):
-      raise subprocess.CalledProcessError(rc, cmd=cmd_s, output=se)
+      raise subprocess.CalledProcessError(returncode=rc, cmd=cmd_s, output=se)
   return so
 
 #-----------------------------------------------------------------------------
@@ -163,7 +163,7 @@ def bldstat():
   try:
     root = ET.fromstring(runcmd('', cmd, echo=False))
   except subprocess.CalledProcessError as e:
-    msg('runcmd failed, cmd:', e.cmd, 'rc:', e.rc)
+    msg('runcmd failed, cmd:', e.cmd, 'rc:', e.returncode)
     msg('stderr:', e.output)
     return
 
@@ -202,7 +202,15 @@ def th_stat():
 #-----------------------------------------------------------------------------
 def th_job(cmd, regex, idx, expect):
   rec = re.compile(regex)
-  so = runcmd('', cmd, shell=True, echo=True)
+
+  try:
+    so = runcmd('', cmd, shell=True, echo=True)
+  except subprocess.CalledProcessError as e:
+    msg('runcmd failed, cmd:', e.cmd, 'rc:', e.returncode)
+    msg('stdout:', so)
+    msg('stderr:', e.output)
+    return
+
   msg(so)
 
   s1 = so.find('ID: ')
@@ -250,7 +258,7 @@ def th_job(cmd, regex, idx, expect):
   if quitflag:
     msg(idt, 'quitting; status', jglegend, 'now:', gstat[id])
 
-  check_job(id, outfn, quitflag, expect if cancelflag else ('P',))
+  check_job(id, regex + " " + idx, outfn, quitflag, expect if cancelflag else ('S',))
 
   msg(idt, 'job thread done')
  
@@ -258,7 +266,7 @@ def th_job(cmd, regex, idx, expect):
 # check_job - examine the output file and categorize results:
 #
 # N - no output
-# P - some output but no completion message
+# P - some output but no completion message (i.e., Partial)
 # S - job reaches completion with "RESULT: SUCCESS" message 
 # F - job reaches completion with "RESULT: FAILURE" message
 # k - an optional modifier, indicates failed, signal or killed message
@@ -269,7 +277,7 @@ def th_job(cmd, regex, idx, expect):
 #
 # If the result is one of the expect codes, then the test passes, else fails 
 #-----------------------------------------------------------------------------
-def check_job(id, fn, quit, expect):
+def check_job(id, desc, fn, quit, expect):
   tag = '{' + id + '}'
   msg(tag, 'Checking', fn)
   msg(tag, 'Expected:', expect)
@@ -293,7 +301,7 @@ def check_job(id, fn, quit, expect):
   else:
     result = 'Failed;'
 
-  m = tag + ' Cantest result: Test ' + result + ' result actual: ' + res + ' expected: ' + multi_join(expect)  
+  m = tag + ' Cantest result: Test [' + desc + '] ' + result + ' result actual: ' + res + ' expected: ' + multi_join(expect)  
   msg(m)
   tjob[id][2] = m
 
@@ -349,8 +357,14 @@ def job_wait():
 
     for jg in sorted(list(tjob.keys())):
       if tjob[jg][3]: s += 1
-      msg(tjob[jg][2])
+      msg('saved', tjob[jg][2])
     msg('Jobs run:', n, 'Passed:', s, 'Failed:', n-s)
+
+    so = runcmd('-', 'dwstat most', shell=True)
+    print so
+
+    so = runcmd('-', 'showq -v -u $LOGNAME', shell=True)
+    print so
 
 #-----------------------------------------------------------------------------
 # Globals
@@ -398,14 +412,18 @@ def main():
   # result are correct.
 
   #                                    ITCO
-  sa_job('./run02 -n 1 -s s -w 2 -b', 'ebbb', 'ITCO', ('N',) )
-  sa_job('./run02 -n 1 -s s -w 2 -b', 'abbb', 'ITCO', ('N',) )
-  sa_job('./run02 -n 1 -s s -w 2 -b', '-aeb', 'TCO',  ('S', 'P') )
+  sa_job('./run02 -n 1 -s s -w 2 -b', 'ebbb', 'ICO',  ('N',) )
+  sa_job('./run02 -n 1 -s s -w 2 -b', 'ebbb', 'T',    ('S',) )      # can't cancel T, so expect S
+  sa_job('./run02 -n 1 -s s -w 2 -b', 'abbb', 'ICO',  ('N',) )
+  sa_job('./run02 -n 1 -s s -w 2 -b', 'abbb', 'T',    ('S',) )      # can't cancel T, so expect S
+  sa_job('./run02 -n 1 -s s -w 2 -b', '-aeb', 'TO',   ('S', 'P', 'Pk') )
+  sa_job('./run02 -n 1 -s s -w 2 -b', '-aeb', 'C',    ('S', 'P', 'Pk', 'N') )
   sa_job('./run02 -n 1 -s s -w 2 -b', '-aab', 'TCO',  ('S', 'P') )
   sa_job('./run02 -n 1 -s s -w 2 -b', '-a-b', 'TO',   ('S', 'P') )
   sa_job('./run02 -n 1 -s s -w 2 -b', '---a', 'O',    ('S', 'Sk') )
 
-  st_all(True, 100)
+  #st_all(True, 100)       # Extensive random
+  st_all(False, 17)        # One pass sequential
   job_wait()
   msg('cantest done')  
 
