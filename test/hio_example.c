@@ -80,7 +80,8 @@ void checkpoint (void *data, size_t count, size_t stride, int timestep) {
   hrc = hio_config_set_value ((hio_object_t)hio_set, "datawarp_stage_mode", "lazy");
   IF_PRT_X( HIO_SUCCESS != hrc, "hio_config_set_value datawarp_stage_mode rc: %d", hrc);
 
-  hrc = hio_config_set_value ((hio_object_t)hio_set, "stripe_width", "4096");
+  hrc = hio_config_set_value ((hio_object_t)hio_set, "stripe_width",
+                              "4096");
   IF_PRT_X( HIO_SUCCESS != hrc, "hio_config_set_value stripe_width rc: %d", hrc);
 
   hrc = hio_dataset_open(hio_set);
@@ -88,6 +89,11 @@ void checkpoint (void *data, size_t count, size_t stride, int timestep) {
 
   hrc = hio_element_open (hio_set, &hio_element, "data", HIO_FLAG_CREAT | HIO_FLAG_WRITE);
   IF_PRT_X( HIO_SUCCESS != hrc, "hio_element_open rc: %d", hrc);
+
+  /* Print all HIO config and performance variables to stdout */
+  hrc = hio_print_vars ((hio_object_t)hio_element, ".", ".",
+                         stdout, "print_vars:");
+  IF_PRT_X( HIO_SUCCESS != hrc, "hio_print_vars rc: %d", hrc);
 
   off_t offset = 0; /* Offset for next write */
   ssize_t bw;       /* bytes written */
@@ -100,8 +106,9 @@ void checkpoint (void *data, size_t count, size_t stride, int timestep) {
   IF_PRT_X( bw < 0, "hio_element_write_strided bw: %zd", bw);
   offset += bw;
 
-  bw = hio_element_write_strided (hio_element, offset, 0, (void *)((intptr_t) data + sizeof (float)),
-                                  count, sizeof (int), stride);
+  bw = hio_element_write_strided (hio_element, offset, 0,
+             (void *)((intptr_t) data + sizeof (float)),
+              count, sizeof (int), stride);
   IF_PRT_X( bw < 0, "hio_element_write_strided bw: %zd", bw);
   offset += bw;
 
@@ -145,8 +152,8 @@ void checkpoint (void *data, size_t count, size_t stride, int timestep) {
   IF_PRT_X( HIO_SUCCESS != hrc, "hio_element_write_strided_nb rc: %d", hrc);
 
   offset = nranks * (sizeof (size_t) + count * sizeof (float)) + my_rank * count * sizeof (int);
-  hrc = hio_element_write_strided_nb (hio_element, hio_requests + 2, offset, 0, (void *)((intptr_t) data +
-                              sizeof (float)), count, sizeof (int), stride);
+  hrc = hio_element_write_strided_nb (hio_element, hio_requests + 2, offset, 0,
+           (void *)((intptr_t) data + sizeof (float)), count, sizeof (int), stride);
   IF_PRT_X( HIO_SUCCESS != hrc, "hio_element_write_strided_nb rc: %d", hrc);
 
   hrc = hio_request_wait (hio_requests, 3, bytes_transferred);
