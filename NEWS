@@ -1,7 +1,14 @@
 HIO NEWS
 ========
 
-Last updated 2017-03-01
+Last updated 2017-03-09
+
+Release hio.1.4.0.0-rc3
+
+Support for pwrite and pread added.  API hio_print_vars added. basic file mode
+now enables small write buffering.  Miscellaneous testing and documentation
+enhancements.  This is expected to be the last rc before 1.4.0.0.
+
 
 Release hio.1.4.0.0-rc2
 
