@@ -16,12 +16,15 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdarg.h>
 
 #include <string.h>
 #include <inttypes.h>
 
 #include <errno.h>
 #include <sys/stat.h>
+
+#include <regex.h>
 
 static const char *hio_config_env_prefix = "HIO_";
 
@@ -891,3 +894,186 @@ int hioi_perf_set_value (hio_object_t object, const char *variable, const char *
 
   return rc;
 }
+
+/* 
+ * hio_print_vars() and local suppport functions
+ */
+
+
+static char * cvt_config_type(enum hio_config_type_t type) {
+  char * ret;
+  switch (type) {
+    case HIO_CONFIG_TYPE_BOOL:   ret = "BOOL";   break;
+    case HIO_CONFIG_TYPE_STRING: ret = "STRING"; break;
+    case HIO_CONFIG_TYPE_INT32:  ret = "INT32";  break;
+    case HIO_CONFIG_TYPE_UINT32: ret = "UINT32"; break;
+    case HIO_CONFIG_TYPE_INT64:  ret = "INT64";  break;
+    case HIO_CONFIG_TYPE_UINT64: ret = "UINT64"; break;
+    case HIO_CONFIG_TYPE_FLOAT:  ret = "FLOAT";  break;
+    case HIO_CONFIG_TYPE_DOUBLE: ret = "DOUBLE"; break;
+    default: ret = "UNKNOWN";
+  }
+  return ret;
+}
+
+static hio_return_t pr_cfg(hio_object_t object, regex_t * nprx, char * ctxt, char * otype, FILE * output) {
+  hio_return_t hrc = HIO_SUCCESS;
+  int count;
+
+  if (NULL == object) return HIO_SUCCESS;  // handle null element or dataset
+
+  hrc = hio_config_get_count((hio_object_t) object, &count);
+  if (HIO_SUCCESS != hrc) return hrc;
+
+  for (int i = 0; i< count; i++) {
+    char * name;
+    hio_config_type_t type;
+    bool ro;
+    char * value = NULL;
+
+    hrc = hio_config_get_info((hio_object_t) object, i, &name, &type, &ro);
+    if (HIO_SUCCESS != hrc) return hrc;
+    if (!regexec(nprx, name, 0, NULL, 0)) {
+      hrc = hio_config_get_value((hio_object_t) object, name, &value);
+      if (HIO_SUCCESS != hrc) return hrc;
+      if (HIO_SUCCESS == hrc) {
+        fprintf(output,"%s %s Config (%6s, %s) %30s = %s\n", ctxt, otype,
+              cvt_config_type(type), ro ? "RO": "RW", name, value);
+      }
+      free(value);
+    }
+  }
+  return hrc;
+}
+
+static hio_return_t pr_perf(hio_object_t object, regex_t * nprx, char * ctxt, char * otype, FILE * output) {
+  hio_return_t hrc = HIO_SUCCESS;
+  int count;
+
+  if (NULL == object) return HIO_SUCCESS;  // handle null element or dataset
+
+  hrc = hio_perf_get_count((hio_object_t) object, &count);
+  if (HIO_SUCCESS != hrc) return hrc;
+
+  for (int i = 0; i< count; i++) {
+    char * name;
+    union {   // Union member names match hio_config_type_t names
+      bool     BOOL;
+      char     STRING[512];
+      int32_t  INT32;
+      uint32_t UINT32;
+      int64_t  INT64;
+      uint64_t UINT64;
+      float    FLOAT;
+      double   DOUBLE;
+    } value;
+
+    hio_config_type_t type;
+
+    hrc = hio_perf_get_info((hio_object_t) object, i, &name, &type);
+    if (HIO_SUCCESS != hrc) return hrc;
+
+    if (!regexec(nprx, name, 0, NULL, 0)) {
+      hrc = hio_perf_get_value((hio_object_t) object, name, &value, sizeof(value));
+      if (HIO_SUCCESS != hrc) return hrc;
+      #define PM2(FMT, VAR)                                           \
+        fprintf(output, "%s %s Perf   (%6s) %34s = %" FMT "\n",       \
+                ctxt, otype, cvt_config_type(type), name, VAR);
+
+      switch (type) {
+        case HIO_CONFIG_TYPE_BOOL:   PM2("d",    value.BOOL  ); break;
+        case HIO_CONFIG_TYPE_STRING: PM2("s",    value.STRING); break;
+        case HIO_CONFIG_TYPE_INT32:  PM2(PRIi32, value.INT32 ); break;
+        case HIO_CONFIG_TYPE_UINT32: PM2(PRIu32, value.UINT32); break;
+        case HIO_CONFIG_TYPE_INT64:  PM2(PRIi64, value.INT64 ); break;
+        case HIO_CONFIG_TYPE_UINT64: PM2(PRIu64, value.UINT64); break;
+        case HIO_CONFIG_TYPE_FLOAT:  PM2("f",    value.FLOAT) ; break;
+        case HIO_CONFIG_TYPE_DOUBLE: PM2("f",    value.DOUBLE); break;
+        default: 
+          hioi_err_push (HIO_ERROR, object, "hio_print_vars invalid hio_config_type %d", type);
+      }
+    }
+  }
+  return hrc;
+}
+
+hio_return_t hio_print_vars (hio_object_t object, char * type_rx, char * name_rx,
+                             FILE *output, char *format, ...) {
+  int rc;
+  hio_return_t hrc = HIO_SUCCESS;
+  regex_t tprx, nprx;
+  hio_context_t context;
+  hio_dataset_t dataset;    
+  hio_element_t element;
+
+  if (NULL == object || NULL == type_rx || NULL == name_rx) {
+    hrc = HIO_ERR_BAD_PARAM;
+  }
+
+  if (HIO_SUCCESS == hrc && (rc = regcomp(&tprx, type_rx, REG_EXTENDED | REG_NOSUB))) {
+    char buf[512];
+    regerror(rc, &tprx, buf, sizeof(buf));
+    hioi_err_push (HIO_ERR_BAD_PARAM, object, "hio_print_vars type_rx error: %s", buf);
+    hrc = HIO_ERR_BAD_PARAM;
+  }
+
+  if (HIO_SUCCESS == hrc && (rc = regcomp(&nprx, name_rx, REG_EXTENDED | REG_NOSUB))) {
+    char buf[512];
+    regerror(rc, &nprx, buf, sizeof(buf));
+    hioi_err_push (HIO_ERR_BAD_PARAM, object, "hio_print_vars name_rx error: %s", buf);
+    hrc = HIO_ERR_BAD_PARAM;
+  }
+
+  if (HIO_OBJECT_TYPE_ELEMENT == object->type) {
+    element = (hio_element_t) object;
+    dataset = hioi_element_dataset( (hio_element_t) object);
+    context = hioi_object_context(object);
+  } else if (HIO_OBJECT_TYPE_DATASET == object->type) {
+    element = NULL;
+    dataset = (hio_dataset_t) object;
+    context = hioi_object_context(object); 
+  } else if (HIO_OBJECT_TYPE_CONTEXT == object->type) {
+    element = NULL;
+    dataset = NULL;
+    context = (hio_context_t) object;
+  } else {
+    hioi_err_push (HIO_ERR_BAD_PARAM, object, "invalid object type");
+    hrc = HIO_ERR_BAD_PARAM;
+  }
+ 
+  char * ctxt = NULL;
+  va_list args;
+
+  va_start(args, format);
+  rc = vasprintf(&ctxt, format, args);
+  if (rc < 0) hrc = HIO_ERR_OUT_OF_RESOURCE;
+
+  if (HIO_SUCCESS == hrc) {
+    fprintf(output, "%s HIO Vars; Context: %s%s%s%s%s Regex: %s %s\n", ctxt,
+            ((hio_object_t)context)->identifier, 
+            (dataset)?" Dataset: ":"", (dataset)?((hio_object_t)dataset)->identifier:"",
+            (element)?" Element: ":"", (element)?((hio_object_t)element)->identifier:"",
+            type_rx, name_rx);
+  }
+
+  if (HIO_SUCCESS == hrc && !regexec(&tprx, "cf", 0, NULL, 0)) 
+    hrc = pr_cfg((hio_object_t)context, &nprx, ctxt, "Context", output);
+  if (HIO_SUCCESS == hrc && !regexec(&tprx, "df", 0, NULL, 0)) 
+    hrc = pr_cfg((hio_object_t)dataset, &nprx, ctxt, "Dataset", output);
+  if (HIO_SUCCESS == hrc && !regexec(&tprx, "ef", 0, NULL, 0)) 
+    hrc = pr_cfg((hio_object_t)element, &nprx, ctxt, "Element", output);
+
+  if (HIO_SUCCESS == hrc && !regexec(&tprx, "cp", 0, NULL, 0)) 
+    hrc = pr_perf((hio_object_t)context, &nprx, ctxt, "Context", output);
+  if (HIO_SUCCESS == hrc && !regexec(&tprx, "dp", 0, NULL, 0)) 
+    hrc = pr_perf((hio_object_t)dataset, &nprx, ctxt, "Dataset", output);
+  if (HIO_SUCCESS == hrc && !regexec(&tprx, "ep", 0, NULL, 0)) 
+    hrc = pr_perf((hio_object_t)element, &nprx, ctxt, "Element", output);
+
+  free(ctxt);
+  regfree(&tprx);
+  regfree(&nprx);
+
+  return hrc;
+}
+

@@ -54,6 +54,11 @@ static char * help =
   "                where c|p is config or perf and c|d|e is context or dataset or element\n"
   "                \"hvp . .\" will print everything\n"
   "                \"hvp p total\" will print all perf vars containing \"total\" in the name\n"
+  "  hvp2 <type regex> <name regex> Issues hio_print_vars with the specified\n"
+  "                type and name regex's [1][2].  Types are two letter codes {c|d|e} {f|p}\n"
+  "                where c|d|e is context or dataset or element and f|p is config or perf\n"
+  "                \"hvp . .\" will print everything\n"
+  "                \"hvp p total\" will print all perf vars containing \"total\" in the name\n"
   "  hvsc <name> <value>  Set hio context variable\n"
   "  hvsd <name> <value>  Set hio dataset variable\n"
   "  hvse <name> <value>  Set hio element variable\n"
@@ -775,6 +780,30 @@ ACTION_RUN(hvp_run) {
   R0_OR_VERB_END
 }
 
+ACTION_RUN(hvp2_run) {
+  hio_return_t hrc;
+  char time_str[64];
+  time_t now;
+  char tmp_id[128];
+  hio_object_t obj;
+
+  now = time(0);
+  strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+  strncpy(tmp_id, G.id_string, sizeof(tmp_id) - 1);
+  tmp_id[sizeof(tmp_id)-1] = '\0';
+  tmp_id[strlen(tmp_id)-1] = '\0';
+
+       if (S.element) obj = (hio_object_t) S.element;
+  else if (S.dataset) obj = (hio_object_t) S.dataset;
+  else if (S.context) obj = (hio_object_t) S.context;
+  else ERRX("%s; hvp2 - HIO not ininitialized", A.desc);
+
+  hrc = hio_print_vars(obj, V0.s, V1.s, stdout, "%s %s", time_str, tmp_id);
+  HRC_TEST("hio_print_vars");
+  //hio_err_print_all(S.context, stdout, "hio_print_vars[hpa]");
+}
+
 ACTION_RUN(hvsc_run) {
   hio_return_t hrc;
   if (!S.context) ERRX("%s: hio context not established", A.desc);
@@ -1306,6 +1335,7 @@ MODULE_INSTALL(xexec_hio_install) {
     {"hxct",  {SINT, NONE, NONE, NONE, NONE}, hxct_check,    hxct_run    },
     {"hxdi",  {HDSI, NONE, NONE, NONE, NONE}, NULL,          hxdi_run    },
     {"hvp",   {REGX, REGX, NONE, NONE, NONE}, NULL,          hvp_run     },
+    {"hvp2",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvp2_run     },
     {"hvsc",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsc_run    },
     {"hvsd",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvsd_run    },
     {"hvse",  {STR,  STR,  NONE, NONE, NONE}, NULL,          hvse_run    },

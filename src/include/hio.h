@@ -1382,9 +1382,42 @@ hio_return_t hio_perf_get_info (hio_object_t object, int index, char **name, hio
  * This function gets the value of the given variable within the hio object specified
  * in {object}. {object} must be a context, dataset, or element. On success the value
  * of the performance variable is stored in the buffer specified in {value} according
- * to it's type.
+ * to its type.
  */
 hio_return_t hio_perf_get_value (hio_object_t object, char *variable, void *value, size_t value_len);
+
+/**
+ * @ingroup configuration
+ * @brief Print configuration and performance variables
+ *
+ * @param[in]  object  hio object to read the values from
+ * @param[in]  type_rx Variable type specifier regular expression
+ * @param[in]  name_rx Variable name specifier regular expression
+ * @param[in]  output  output file handle
+ * @param[in]  format  print format (see printf)
+ * @param[in]  ...     format values
+ *
+
+ * This function prints specified configuration and performance variables from
+ * the specified object and its parent objects.  Each line is preceded by the
+ * string specified by {format} and {...}. The variables printed will each 
+ * match the specified type and name regular expressions.  Type is a two
+ * letter code {c|d|e} {f|p} where c|d|e is context, dataset or element and f|p
+ * is configuration or performance.  Regular expressions are POSIX extended
+ * regular expressions as documented by "man 7 regex".
+ * 
+ * For example:
+ * 
+ * hio_print_vars((hio_object_t)element, ".", ".", stdout, "") will print all
+ * configuration and performance variables for the specified element and
+ * its parent dataset and context.
+ *    
+ * hio_print_vars((hio_object_t)dataset, "dp", "^agg", stdout, "") will
+ * print dataset performance variables whose names start with "agg".
+ */
+
+hio_return_t hio_print_vars (hio_object_t object, char * type_rx, char * name_rx,
+                             FILE *output, char *format, ...);
 
 /**
  * @ingroup API
