@@ -1600,7 +1600,7 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
     do {
       current = actual < remaining ? actual : remaining;
       hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
-                "posix: writing %lu bytes to file offset %" PRIu64, current, file->f_offset);
+                "posix: %s %lu bytes at file offset %" PRIu64, (reading)?"reading":"writing", current, file->f_offset);
 
       /* If we are writing to the file we get better performance by reducing the contention on the
        * filesystem by locking before the write. Since this operation may be a network operation
