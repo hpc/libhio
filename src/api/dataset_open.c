@@ -24,7 +24,7 @@ static int hioi_dataset_open_last (hio_dataset_t dataset) {
     module = context->c_modules[i];
 
     rc = module->dataset_list (module, hioi_object_identifier (dataset), &headers, &count);
-    if (HIO_SUCCESS != rc) {
+    if (HIO_SUCCESS != rc && HIO_ERR_NOT_FOUND != rc) {
       hioi_err_push (rc, &dataset->ds_object, "dataset_open: error listing datasets on data root %s",
                      module->data_root);
     }
