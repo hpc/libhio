@@ -572,17 +572,33 @@ int64_t hioi_file_seek (hio_file_t *file, int64_t offset, int whence) {
 ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
   ssize_t actual, total = 0;
 
+  if (HIO_FAPI_STDIO == file->f_api) {
+      actual = fwrite (ptr, 1, count, file->f_hndl);
+      if (actual < count) {
+        clearerr (file->f_hndl);
+
+        if (actual > 0) {
+          file->f_offset += actual;
+        }
+
+        /* seek to the expected offset for good measure */
+        (void) fseek (file->f_hndl, file->f_offset, SEEK_SET);
+      }
+
+      return actual;
+  }
+
   do {
     switch (file->f_api) {
     case HIO_FAPI_POSIX:
       actual = write (file->f_fd, ptr, count);
       break;
-    case HIO_FAPI_STDIO:
-      actual = fwrite (ptr, 1, count, file->f_hndl);
-      break;
     case HIO_FAPI_PPOSIX:
       actual = pwrite (file->f_fd, ptr, count, file->f_offset);
       break;
+    default:
+      /* internal error */
+      abort ();
     }
 
     if (actual > 0) {
@@ -602,17 +618,33 @@ ssize_t hioi_file_write (hio_file_t *file, const void *ptr, size_t count) {
 ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
   ssize_t actual, total = 0;
 
+  if (HIO_FAPI_STDIO == file->f_api) {
+      actual = fread (ptr, 1, count, file->f_hndl);
+      if (actual < count) {
+        clearerr (file->f_hndl);
+
+        if (actual > 0) {
+          file->f_offset += actual;
+        }
+
+        /* seek to the expected offset for good measure */
+        (void) fseek (file->f_hndl, file->f_offset, SEEK_SET);
+      }
+
+      return actual;
+  }
+
   do {
     switch (file->f_api) {
     case HIO_FAPI_POSIX:
       actual = read (file->f_fd, ptr, count);
       break;
-    case HIO_FAPI_STDIO:
-      actual = fread (ptr, 1, count, file->f_hndl);
-      break;
     case HIO_FAPI_PPOSIX:
       actual = pread (file->f_fd, ptr, count, file->f_offset);
       break;
+    default:
+      /* internal error */
+      abort ();
     }
 
     if (actual > 0) {
