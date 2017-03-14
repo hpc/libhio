@@ -539,7 +539,7 @@ ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count);
  *
  * @param[in] file hio file pointer
  */
-void hioi_file_flush (hio_file_t *file);
+int hioi_file_flush (hio_file_t *file);
 
 #if defined(DEBUG)
 #define hioi_timed_call(fn) {                   \

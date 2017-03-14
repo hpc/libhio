@@ -661,22 +661,28 @@ ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
   return (actual < 0) ? actual: total;
 }
 
-void hioi_file_flush (hio_file_t *file) {
+int hioi_file_flush (hio_file_t *file) {
+  int ret;
+
   if (!file->f_is_open) {
-    return;
+    return HIO_SUCCESS;
   }
 
   switch (file->f_api) {
   case HIO_FAPI_POSIX:
   case HIO_FAPI_PPOSIX:
-    fsync (file->f_fd);
+    ret = fsync (file->f_fd);
     break;
   case HIO_FAPI_STDIO:
     assert (NULL != file->f_hndl);
-    fflush (file->f_hndl);
-    fsync (fileno (file->f_hndl));
+    ret = fflush (file->f_hndl);
+    if (0 == ret) {
+      ret = fsync (fileno (file->f_hndl));
+    }
     break;
   }
+
+  return ret ? hioi_err_errno (errno) : HIO_SUCCESS;
 }
 
 int hioi_file_open (hio_file_t *file, const char *filename, int flags, hio_file_api_t api, int access_mode)

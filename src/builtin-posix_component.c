@@ -1791,13 +1791,16 @@ static int builtin_posix_module_element_flush (hio_element_t element, hio_flush_
 
   if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode) {
     for (int i = 0 ; i < HIO_POSIX_MAX_OPEN_FILES ; ++i) {
-      hioi_file_flush (posix_dataset->files + i);
+      int ret = hioi_file_flush (posix_dataset->files + i);
+      if (0 != ret) {
+        return ret;
+      }
     }
-  } else {
-    hioi_file_flush (&element->e_file);
+
+    return HIO_SUCCESS;
   }
 
-  return HIO_SUCCESS;
+  return hioi_file_flush (&element->e_file);
 }
 
 static int builtin_posix_module_element_complete (hio_element_t element) {
