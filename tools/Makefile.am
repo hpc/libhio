@@ -14,7 +14,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/src/include
 
 # install tool manual pages
 man1_MANS = man/hio_dump.1
-dist_man_MANS = man/hio_dump.1
 
 bin_PROGRAMS = hio_dump
 
