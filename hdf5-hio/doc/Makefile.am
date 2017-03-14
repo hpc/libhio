@@ -13,7 +13,7 @@ libhdf5hio_api.pdf:latex/refman.pdf
 latex/refman.pdf: latex
 	make -C latex
 
-latex: doxygen.conf template/header.tex ${top_srcdir}/hdf5-hio/src/H5FDhio.h
+latex: doxygen.conf template/header.tex template/footer.tex ${top_srcdir}/hdf5-hio/src/H5FDhio.h
 	doxygen doxygen.conf
 
 clean-local:
