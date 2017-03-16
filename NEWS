@@ -1,7 +1,13 @@
 HIO NEWS
 ========
 
-Last updated 2017-03-09
+Last updated 2017-03-16
+
+Release hio.1.4.0.0
+
+Fixes for error handling in buffered (stdio) paths. Fixes to a couple of
+high-verbosity debug messages. Build fixes.
+
 
 Release hio.1.4.0.0-rc3
 
