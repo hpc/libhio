@@ -26,6 +26,25 @@
 #include <sys/stat.h>
 #include <ctype.h>
 
+#if HAVE_AVAILABILTYMACROS_H
+#include <AvailabilityMacros.h>
+
+#if MAC_OS_X_VERSION_MIN_REQUIRED < 101200
+
+#define HIO_DISABLE_CLOCK_GETTIME 1
+
+#else /* MAC_OS_X_VERSION_MIN_REQUIRED < 101200 */
+
+#define HIO_DISABLE_CLOCK_GETTIME 0
+
+#endif /* MAC_OS_X_VERSION_MIN_REQUIRED < 101200 */
+
+#else /* HAVE_AVAILABILTYMACROS_H */
+
+#define HIO_DISABLE_CLOCK_GETTIME 0
+
+#endif
+
 typedef struct hio_error_stack_item_t {
   struct hio_error_stack_item_t *next;
   hio_object_t                   object;
@@ -392,9 +411,15 @@ int hio_err_print_all (hio_context_t ctx, FILE *output, char *format, ...)
 }
 
 uint64_t hioi_gettime (void) {
+#if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC) && !HIO_DISABLE_CLOCK_GETTIME
+  struct timespec ts;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  return 1000000 * ts.tv_sec + ts.tv_nsec / 1000;
+#else
   struct timeval tv;
   gettimeofday (&tv, NULL);
   return 1000000 * tv.tv_sec + tv.tv_usec;
+#endif
 }
 
 int hioi_mkpath (hio_context_t context, const char *path, mode_t access_mode) {

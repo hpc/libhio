@@ -92,9 +92,9 @@ AC_CHECK_PROG([HAVE_PDFLATEX], [pdflatex], [yes], [no])
 
 # Checks for header files.
 AC_CHECK_HEADERS_ONCE([strings.h sys/types.h sys/time.h pthread.h dlfcn.h sys/stat.h \
-                       sys/param.h sys/mount.h sys/vfs.h bzlib.h])
+                       sys/param.h sys/mount.h sys/vfs.h bzlib.h AvailabilityMacros.h])
 AC_CHECK_FUNCS_ONCE([access gettimeofday stat statfs MPI_Win_allocate_shared \
-                     MPI_Comm_split_type MPI_Win_flush])
+                     MPI_Comm_split_type MPI_Win_flush clock_gettime])
 AC_SEARCH_LIBS([dlopen],[dl],[hio_dynamic_component=1],[hio_dynamic_component=0])
 
 AX_PTHREAD([])
