@@ -322,15 +322,17 @@ int hioi_dataset_gather_manifest (hio_dataset_t dataset, hio_manifest_t *manifes
 int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifest_t *manifest_out, bool simple) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_manifest_t manifest;
-  int rc;
+  int rc, comm_rank;
+
+  MPI_Comm_rank (comm, &comm_rank);
 
   rc = hioi_manifest_generate (dataset, simple, &manifest);
   if (HIO_SUCCESS != rc) {
     return rc;
   }
 
-  rc = hioi_manifest_gather_comm (&manifest, context->c_comm);
-  if (HIO_SUCCESS != rc || 0 != context->c_rank) {
+  rc = hioi_manifest_gather_comm (&manifest, comm);
+  if (HIO_SUCCESS != rc || 0 != comm_rank) {
     hioi_manifest_release (manifest);
     manifest = NULL;
   }
