@@ -1236,6 +1236,8 @@ int main(int argc, char * * argv) {
   #ifdef MPI
   if (rc != EXIT_SUCCESS && mpi_active()) {
     VERB0("MPI_abort due to error exit from main with MPI active rc: %d", rc);
+    fflush(stdout);
+    fflush(stderr);
     MPI_CK(MPI_Abort(G.mpi_comm, rc));
   }
   #endif // MPI
