@@ -137,8 +137,21 @@ batch_sub() {
     echo $dw_cap
     exit 0
   fi
-  msg "DataWarp Capacity: $dw_cap"
+
+  msg "Required DataWarp Capacity: $dw_cap"
   if [[ $batch -gt 0 ]]; then
+    type msub > /dev/null 2>&1
+    if [[ $? -eq 0 ]]; then 
+      gotmsub=1
+    else
+      type sbatch > /dev/null 2>&1
+      if [[ $? -eq 0 ]]; then 
+        gotmsub=0   # use sbatch
+      else 
+        errx "Neither msub nor sbatch commands available"
+      fi
+    fi
+
     rundir="$PWD/run"
     if [[ $dirdate -eq 1 ]]; then rundir="$rundir-`date +%Y%m%d`"; fi
     if [[ ! -d $rundir ]]; then cmd "mkdir -p $rundir"; fi
@@ -157,17 +170,35 @@ batch_sub() {
     msg "Job $jobname Args: $args"
 
     echo "#! /bin/bash" > $jobsh
-    proc_parm=""
-    if [[ -n $proc_type ]]; then proc_parm=":$proc_type"; fi
-    echo "#MSUB -l nodes=$nodes$proc_parm:ppn=$ppn" >> $jobsh
     walltime="4:00:00"
     #walltime=$(($nodes*1800/256+1803))
-    echo "#MSUB -l walltime=$walltime" >> $jobsh
-    echo "#MSUB -o $jobout -joe" >> $jobsh
-    echo "#MSUB -d $PWD" >> $jobsh
+
+    IFS=","; hiovars="${!HIO_*},${!XEXEC_*},${!SCRATCHPATH*}"; unset IFS
+    hiovars=${hiovars/,,/,} # Remove any double, leading, or trailing commas 
+    hiovars=${hiovars#,} 
+    hiovars=${hiovars%,}
+
+    if [[ $gotmsub -eq 1 ]]; then
+      proc_parm=""
+      if [[ -n $proc_type ]]; then proc_parm=":$proc_type"; fi
+      echo "#MSUB -l nodes=$nodes$proc_parm:ppn=$ppn" >> $jobsh
+      echo "#MSUB -l walltime=$walltime" >> $jobsh
+      echo "#MSUB -o $jobout -joe" >> $jobsh
+      echo "#MSUB -d $PWD" >> $jobsh
+    else
+      echo "#SBATCH -p workq" >> $jobsh
+      echo "#SBATCH -N $nodes" >> $jobsh
+      echo "#SBATCH -n $((nodes * ppn * tpp))" >> $jobsh
+      echo "#SBATCH -t $walltime" >> $jobsh
+      echo "#SBATCH -o $jobout" >> $jobsh
+      echo "#SBATCH -D $PWD" >> $jobsh
+      #if [[ -n $hiovars ]]; then echo "#SBATCH --export $hiovars" >> $jobsh; fi
+    fi
+ 
     if [[ $dw_alloc_mode -ge 2 ]]; then
       echo "#DW jobdw access_mode=striped type=scratch capacity=$dw_cap" >> $jobsh
     fi
+
     echo "echo \"\`date \"$datefmt\"\` Job $jobname start\"" >> $jobsh
     echo "echo \"\"" >> $jobsh
     echo "echo \"$jobsh:\"" >> $jobsh
@@ -182,43 +213,68 @@ batch_sub() {
 
     echo "echo \"\`date \"$datefmt\"\` Job $jobname   end\"" >> $jobsh
 
-    mcmd="msub"
-    IFS=","; hiovars="${!HIO_*},${!XEXEC_*},${!SCRATCHPATH*}"; unset IFS
-    hiovars=${hiovars#,}  # Remove any leading, trailing, double commas 
-    hiovars=${hiovars%,}
-    hiovars=${hiovars/,,/,}
-    if [[ -n $hiovars ]]; then mcmd="$mcmd -v $hiovars"; fi
-    if [[ -n $msub_arg ]]; then mcmd="$mcmd $msub_arg"; fi
-    if [[ $chain -ne 0 ]]; then
-      if [[ -r $lastjob ]]; then
-        read lastjobid < $lastjob
-        # Create array, extract last element for multi-id DataWarp jobs
-        lastjobid=($lastjobid)
-        lastjobid=${lastjobid[ ${#lastjobid[*]}-1 ]}
-        mcmd="$mcmd -l depend=$lastjobid"
-      else
-        msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
-      fi
-    fi
     echo "----------------------------------------------------------------------" >> $msglog 
     echo "$host run_setup: $jobsh:" >> $msglog
     cat $jobsh >> $msglog
     echo "----------------------------------------------------------------------" >> $msglog 
 
-    mcmd="$mcmd $jobsh"
-    msg "---> $mcmd"
-    msub_msg=`$mcmd 2>&1`
+    if [[ $gotmsub -eq 1 ]]; then
+      mcmd="msub"
+      if [[ -n $hiovars ]]; then mcmd="$mcmd -v $hiovars"; fi
+      if [[ -n $msub_arg ]]; then mcmd="$mcmd $msub_arg"; fi
+      if [[ $chain -ne 0 ]]; then
+        if [[ -r $lastjob ]]; then
+          read lastjobid < $lastjob
+          # Create array, extract last element for multi-id DataWarp jobs
+          lastjobid=($lastjobid)
+          lastjobid=${lastjobid[ ${#lastjobid[*]}-1 ]}
+          mcmd="$mcmd -l depend=$lastjobid"
+        else
+          msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
+        fi
+      fi
+ 
+      mcmd="$mcmd $jobsh"
+      msg "---> $mcmd"
+      msub_msg=`$mcmd 2>&1`
 
-    shopt -s nocasematch
-    if [[ $msub_msg == *error* || $msub_msg == *warn* || $msub_msg = *fail* ]]; then
-      errx "msub error: $msub_msg"
+      shopt -s nocasematch
+      if [[ $msub_msg == *error* || $msub_msg == *warn* || $msub_msg = *fail* ]]; then
+        errx "msub error: $msub_msg"
+      else
+        jobid=${msub_msg#$'\n'}
+        echo "$jobid" > $lastjob
+        msg "Job $jobname ID: $jobid submitted"
+      fi
+      shopt -u nocasematch
+      msglog=""
     else
-      jobid=${msub_msg#$'\n'}
-      echo "$jobid" > $lastjob
-      msg "Job $jobname ID: $jobid submitted"
+      scmd="sbatch $jobsh"
+      if [[ -n $msub_arg ]]; then scmd="$scmd $msub_arg"; fi
+      if [[ $chain -ne 0 ]]; then
+        if [[ -r $lastjob ]]; then
+          read lastjobid < $lastjob
+          # Create array, extract last element for multi-id DataWarp jobs
+          scmd="$scmd -d $lastjobid"
+        else
+          msg "Last jobid file \"$lastjob\" not readable, ignoring chain option"
+        fi
+      fi
+      msg "---> $scmd"
+      sub_msg=`$scmd 2>&1`
+      msg "sbatch message: $sub_msg"
+      
+      shopt -s nocasematch
+      if [[ $sub_msg == *error* || $sub_msg == *warn* || $sub_msg = *fail* ]]; then
+        errx "sbatch error: $sub_msg"
+      else
+        jobid=${sub_msg##*job }
+        echo "$jobid" > $lastjob
+        msg "Job $jobname ID: $jobid submitted"
+      fi
+      shopt -u nocasematch
+      msglog=""
     fi
-    shopt -u nocasematch
-    msglog=""
     if [[ $batch -eq 1 ]]; then exit 0; fi
   fi
 }
@@ -263,8 +319,9 @@ clean_roots() {
       if [[ -n $HIO_datawarp_root ]]; then clean=$HIO_datawarp_root; fi
       if [[ -n $clean ]]; then
         msg "Cleaning: \"$r\""
-        msg "===> aprun bash -c \$clean_cmd $clean"
-        aprun -n 1 -b bash -c "$clean_cmd" $clean
+        myrun1 "/bin/bash -c \" \\\$clean_cmd \\$clean\""
+        #msg "===> aprun bash -c \$clean_cmd $clean"
+        #aprun -n 1 -b bash -c "$clean_cmd" $clean
       fi
     elif [[ ${r:0:6} == "posix:" ]]; then
       msg "Cleaning: \"$r\""
@@ -274,7 +331,7 @@ clean_roots() {
       if [[ $r == ${r/test} ]]; then
         msg "Warning: skipping clean of non-test directory \"$r\""
       else
-        bash -c "$clean_cmd" $r
+        /bin/bash -c "$clean_cmd" $r
       fi
     else
       errx "data root \"$r\" type not recognized."
@@ -285,24 +342,22 @@ clean_roots() {
 
 # function to invoke mpi on various platforms - sets max_rc
 myrun() {
-  #msg "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-  #cmd "$mympicmd -n $ranks echo \"LD_LIBRARY_PATH=\$LD_LIBRARY_PATH\""
-  #cmd "$mympicmd -n $ranks ls -l \${LD_LIBRARY_PATH%%:*}"
-  #msg "PWD=$PWD"
-  #cmd "ls -l $1"
-  #cmd "$mympicmd -n $ranks ls -l $1"
+
+  #msg "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+  #cmd "$mympicmd -n $ranks /bin/bash -c \"hostname; type bash\""
+  #cmd "$mympicmd -n $ranks /bin/bash -c \"echo $HOST PATH: \\\$PATH\""
+  #cmd "$mympicmd -n $ranks /bin/bash -c \"echo $HOST LD_LIBRARY_PATH: \\\$LD_LIBRARY_PATH\""
+  #cmd "$mympicmd -n $ranks /bin/bash -c \"hostname; ls -l \\\${LD_LIBRARY_PATH%%:*}\""
+  #msg "$HOST: PWD: $PWD"
+  #cmd "hostname; ls -l $1"
+  #cmd "$mympicmd -n $ranks /bin/bash -c \"hostname; ls -l $1\""
   #export LD_DEBUG=all
-  #export LD_DEBUG_OUTPUT=/lustre/scratch5/cornell/ld_debug/ldd.out
-
+  #export LD_DEBUG_OUTPUT=/users/cornell/ld_debug/ldd.out
   case $mympicmd in
-    aprun)  pernode="-N $((ppn * tpp))"
-            percore="-j $tpp";;
-    mpirun) pernode="--map-by ppr:$ppn:node"
-            percore="";;
+    aprun)  cmd "$uber_cmd aprun  -n $ranks -N $((ppn * tpp)) -j $tpp $*";;
+    srun)   cmd "$uber_cmd srun   -n $ranks -N $nodes $*";;
+    mpirun) cmd "$uber_cmd mpirun -n $ranks --map-by ppr:$ppn:node $*";;
   esac         
-
-  cmd "$uber_cmd $mympicmd -n $ranks $pernode $percore $*"
-  rc=$?
   #unset LD_DEBUG
   #unset LD_DEBUG_OUTPUT
   max_rc=$((rc > max_rc ? rc : max_rc))
@@ -312,18 +367,17 @@ myrun() {
 # Run a command on a single rank per node
 myrun1ppn() {
   case $mympicmd in
-    aprun)  pernode="-N 1";;
-    mpirun) pernode="--map-by node";;
+    aprun)  cmd "$uber_cmd aprun  -n $nodes -N 1 $*";;
+    srun)   cmd "$uber_cmd srun   -n $nodes -N $nodes $*";;
+    mpirun) cmd "$uber_cmd mpirun -n $nodes --map-by node $*";;
   esac         
-
-  cmd "$mympicmd -n $nodes $pernode $*"
+  rc=$?
 }
 
 # Run a command on a single rank
 myrun1() {
   cmd "$mympicmd -n 1 $*"
 }
-
 
 
 #----------------------------------------------------------------------------
@@ -360,8 +414,10 @@ else
     # aprun available - must be a Cray
     mympicmd="aprun"
     size="m"
+  elif [[ -n $SLURM_JOB_ID ]]; then 
+    mympicmd="srun"
   else
-    # aprun not available - use mpirun
+    # aprun, srun not available - use mpirun
     mympicmd="mpirun"
   fi
   if [[ $hostpre == "ga-" || $hostpre == "tt-" || $hostpre == "tr-" ]]; then
@@ -418,7 +474,7 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
   # Nodes only specified, determine ppn and iterate
   elif [[ -n $nodes ]]; then
     if   [[ -n $PBS_NUM_PPN ]]; then ppn=$PBS_NUM_PPN
-    elif [[ -n $SLURM_NTASKS_PER_NODE ]]; then ppn=$SLURM_NTASKS_PER_NODE
+    elif [[ -n $SLURM_TASKS_PER_NODE ]]; then ppn=${SLURM_TASKS_PER_NODE%(*}
     elif [[ ${OSTYPE:0:6} == "darwin" ]]; then ppn=2
     else                                       ppn=$ppn_def
     fi
@@ -446,7 +502,6 @@ until [[ -n $nodes && -n $ranks && -n $ppn ]]; do
 done
 
 if [[ $ranks -ne $((nodes * ppn * tpp)) ]]; then errx "ranks ($ranks) != nodes ($nodes) x ppn ($ppn) x tpp ($tpp)"; fi
-
 
 # set some convenient constants
 cons_ki=1024
@@ -522,15 +577,21 @@ esac
 
 # Following commands for actually running, i.e., not batch submission
 if [[ $batch -eq 0 ]]; then
+  set | egrep "^OSTYPE|^PATH|^LD_LIBRARY_PATH|^HOST|^PBS|^MOAB|^SLURM|^DW|^HIO|^SCRATCH|^XEXEC"
+  
   if [[ -n $PBS_JOBID ]]; then
-    set | egrep "^PBS|^MOAB|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
-    job_dir="/${PBS_JOBID%%.*}"
+    myjobid=${PBS_JOBID%%.*}
+    job_dir="/$myjobid"
+  elif [[ -n $SLURM_JOBID ]]; then
+    myjobid=$SLURM_JOBID
+    job_dir="/$myjobid"
   fi
+
   if [[ -n $PBS_NODEFILE ]]; then
     echo ""
     cmd "cat $PBS_NODEFILE | sort | uniq | pr -t --columns 8"
   fi
-  if [[ -n $DW_JOB_STRIPED ]]; then
+  if [[ -n $DW_JOB_STRIPED  && -z $SLURM_JOBID ]]; then
     # awk program to parse a few things out of dwstat output
     c='
       BEGIN       {st="0"; frags=""; nodelist=""}
@@ -544,7 +605,7 @@ if [[ $batch -eq 0 ]]; then
       {
          nl = "\n## "
         nl2 = "##\n## "
-        if (st == "s" && $3 == '$MOAB_JOBID') {
+        if (st == "s" && $3 == '$myjobid') {
           sess = $1
           token = $3
           sessln = $0
@@ -591,13 +652,9 @@ if [[ $batch -eq 0 ]]; then
     echo ""
     cmd "dwstat all | awk \"\$c\""
   fi
-  if [[ -n $SLURM_JOB_ID ]]; then
-    set | egrep "^SLURM|^MOAB|^DW|^HOST|^HIO|^OSTYPE|^LD_LIBRARY_PATH"
-    job_dir="/$SLURM_JOB_ID"
-  fi
   if [[ ${OSTYPE:0:6} != "darwin" ]]; then
     # Running on a cluster - record some physical node information
-    myrun1ppn bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c
+    myrun1ppn /bin/bash -c \"grep -i \\\"model name\\\" /proc/cpuinfo\" | sort | uniq -c
     # lstopo having problems, skip for now
     #(export TERM=dumb; myrun1 lstopo --of ascii -p)
     #cmd "myrun1 lstopo --of console -p"
@@ -696,7 +753,7 @@ if [[ $batch -eq 0 ]]; then
     msg "   verbose/debug/dw_alloc: $verbose_lev / $debug_lev / $dw_alloc_mode"
 
     # Pretty print all HIO_ variables
-    for var in ${!HIO_*} ${!XEXEC_*}; do
+    for var in ${!HIO_*} ${!XEXEC_*} ${!SCRATCHPATH*}; do
       msg "$(printf '%*s: "%s"' 25 $var ${!var})"
     done
 
