@@ -308,6 +308,26 @@ default to Python 3, possibly via a "module load python" command will cause
 problems. Additionally, having a file or directory named "python" on the
 current PATH (particularly if the PATH contains ".") will also cause problems.  
 
+9) Using dwcli to stage in or out from the job script
+
+The dwcli command line tool is the easiest way to stage data out during the
+job script (not during the main program). The path handling is a little
+tricky as you don't use real burst buffer paths. Rather you use relative
+paths that begin with slash. Here is an example of dwcli invocation that
+I think makes the entire concept clear
+
+dwsessid=$(dwcli ls session)
+dwconfid=$(dwcli ls configuration)
+mkdir -p /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
+aprun -n 1 mkdir -p $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
+< Write some data into $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat>
+
+dwcli stage out --session $dwsessid --configuration $dwconfid --backing-path /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat/ --dir /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
+
+Note that the backing path must end with a slash. Note that the --dir is 
+relative to $DW_JOB_STRIPED, and must start with a slash.  This is 
+non-intuitive, but does make some degree of sense. Stage in is similar.  
+You do not specify $DW_JOB_STRIPED for --dir, that part is implied.
 
 --- end of README.datawarp ---
 
