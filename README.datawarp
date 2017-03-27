@@ -322,12 +322,12 @@ mkdir -p /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
 aprun -n 1 mkdir -p $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
 < Write some data into $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat>
 
-dwcli stage out --session $dwsessid --configuration $dwconfid --backing-path /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat --dir /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
+dwcli stage out --session $dwsessid --configuration $dwconfid --backing-path /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat/ --dir /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
 
-Note that the --dir is relative to $DW_JOB_STRIPED, but must start with 
-a slash.  This is non-intuitive, but does make some degree of sense.
-Stage in is similar.  You do not specify $DW_JOB_STRIPED, that part is
-implied.
+Note that the backing path must end with a slash. Note that the --dir is 
+relative to $DW_JOB_STRIPED, and must start with a slash.  This is 
+non-intuitive, but does make some degree of sense. Stage in is similar.  
+You do not specify $DW_JOB_STRIPED for --dir, that part is implied.
 
 --- end of README.datawarp ---
 
