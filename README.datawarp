@@ -143,6 +143,45 @@ Trinitite		  6		  35 TiB	  32 GiB/S
 As of the writing of this document, actual peak speeds are running 
 at about 90% of theoretical for N-N and at about 75% for N-1.
 
+Using DWStat and DWCli:
+-----------------------
+The dwcli command line tool is the easiest way to stage data out during the
+job script (but not during the application). The path handling is a little
+tricky as you do not use real burst buffer paths. Rather you use relative
+paths that begin with slash. Here is an example of dwcli invocation that
+I think makes the entire concept clear:
+
+# Retrieve only your own session id and configuration id
+dwsessid=$(dwstat sessions |grep $((ACDW_JOBID+1)) |awk  '{print $1}')
+dwconfid=$(dwstat configurations |awk -v sess=$dwsessid '{if ($3 == sess) print $1}')
+
+# Create a stageout directory, bb directory, and write stuff
+mkdir -p /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
+aprun -n 1 mkdir -p $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir
+< Write some data into $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/*>
+
+dwcli stage out --session $dwsessid --configuration $dwconfid --backing-path /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat/ --dir /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir
+
+Note 1: The stage out is asynchronous.  To wait for the staging to complete
+        use a loop similar to this:
+
+status=""
+count=0
+while [ "-" != "$status" -a $count < 100 ]; do
+  sleep 30
+  dwcli stage query --session $dwsessid --configuration $dwconfid
+  status=$(dwcli stage query --session $dwsessid --configuration $dwconfid |awk '{ print $8 }')
+  count=$((count++))
+  echo "Files remaining to be staged: <$status>"
+done
+      
+Note 2: The backing path must end with a slash. Note that the --dir is 
+        relative to $DW_JOB_STRIPED, and must start with a slash.  This is 
+        non-intuitive, but does make some degree of sense.
+
+Note 3: Stage in is similar. You do not specify $DW_JOB_STRIPED for --dir,
+        that part is implied.
+
 
 Known Problems and Gotchas:
 ---------------------------
@@ -311,25 +350,6 @@ current PATH (particularly if the PATH contains ".") will also cause problems.
 
 9) Using dwcli to stage in or out from the job script
 -----------------------------------------------------
-
-The dwcli command line tool is the easiest way to stage data out during the
-job script (not during the main program). The path handling is a little
-tricky as you don't use real burst buffer paths. Rather you use relative
-paths that begin with slash. Here is an example of dwcli invocation that
-I think makes the entire concept clear
-
-dwsessid=$(dwcli ls session)
-dwconfid=$(dwcli ls configuration)
-mkdir -p /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
-aprun -n 1 mkdir -p $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
-< Write some data into $DW_JOB_STRIPED/lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat>
-
-dwcli stage out --session $dwsessid --configuration $dwconfid --backing-path /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat/ --dir /lustre/ttscratch1/bws/job.81111.tt-drm/jobdir/bbdat
-
-Note that the backing path must end with a slash. Note that the --dir is 
-relative to $DW_JOB_STRIPED, and must start with a slash.  This is 
-non-intuitive, but does make some degree of sense. Stage in is similar.  
-You do not specify $DW_JOB_STRIPED for --dir, that part is implied.
 
 --- end of README.datawarp ---
 
