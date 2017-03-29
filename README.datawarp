@@ -12,7 +12,7 @@
 Notes on using DataWarp on LANL Cray systems
 ============================================
 
-Last Update 24 Feb 2017
+Last Update 27 March 2017
 Cornell Wright
 
 DataWarp is a Cray product that provides a high speed storage device based on
@@ -175,8 +175,8 @@ DataWarp job.  This should be corrected soon.
 ------------------------------
 
 Sometimes there is an ssh based communication problem between the msub command
-and the DataWarp service.  Cray has plans to move that interface to a “restful
-interface”, but for the moment it’s operating over ssh.  Sometimes if keys
+and the DataWarp service.  Cray has plans to move that interface to a "restful
+interface" but for the moment it's operating over ssh.  Sometimes if keys
 have changed, the underlying ssh fails. The (rather generic) symptom is an
 error message from msub:
 
@@ -193,7 +193,7 @@ something like:
 The popen command on the first line may be the source of the problem.
 Removing the python Popen parameter escapes, it converts to:
 
-/opt/cray/elogin/eswrap/default/bin/dw_wlm_cli -f job_process —job /users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170206.094549.724988764.sh
+/opt/cray/elogin/eswrap/default/bin/dw_wlm_cli -f job_process -job /users/cornell/pgm/hio/ga-gnu/libhio-1.4.0/test/run/job.20170206.094549.724988764.sh
 
 Perform the equivalent conversion on the command from your ~/ac_datawarp.log
 file and run the command by hand and see if there are any SSH related errors.
@@ -308,7 +308,9 @@ default to Python 3, possibly via a "module load python" command will cause
 problems. Additionally, having a file or directory named "python" on the
 current PATH (particularly if the PATH contains ".") will also cause problems.  
 
+
 9) Using dwcli to stage in or out from the job script
+-----------------------------------------------------
 
 The dwcli command line tool is the easiest way to stage data out during the
 job script (not during the main program). The path handling is a little
