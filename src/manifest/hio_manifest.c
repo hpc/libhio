@@ -586,8 +586,8 @@ static int hioi_manifest_parse_2_0 (hio_dataset_t dataset, json_object *object) 
     }
 
     if (size != context->c_size) {
-      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size does not match dataset",
-                     HIO_MANIFEST_KEY_COMM_SIZE);
+      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size %d does not match dataset %d",
+                     context->c_size, size);
       return HIO_ERR_BAD_PARAM;
     }
   }
@@ -679,8 +679,8 @@ static int hioi_manifest_parse_3_0 (hio_dataset_t dataset, json_object *object) 
     }
 
     if (size != context->c_size) {
-      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size does not match dataset",
-                     HIO_MANIFEST_KEY_COMM_SIZE);
+      hioi_err_push (HIO_ERR_BAD_PARAM, &dataset->ds_object, "communicator size %d does not match dataset %d",
+                     context->c_size, size);
       return HIO_ERR_BAD_PARAM;
     }
   }
