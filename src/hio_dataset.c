@@ -494,7 +494,7 @@ static int hioi_dataset_header_compare_newest (const void *a, const void *b) {
   const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
 
   if (headera->ds_id == headerb->ds_id) {
-    return ((headera->ds_priority > headerb->ds_priority) - (headera->ds_priority < headerb->ds_priority));
+    return ((headera->ds_priority < headerb->ds_priority) - (headera->ds_priority > headerb->ds_priority));
   }
 
   return ((headera->ds_mtime > headerb->ds_mtime) - (headera->ds_mtime < headerb->ds_mtime));
@@ -505,7 +505,7 @@ static int hioi_dataset_header_compare_highest (const void *a, const void *b) {
   const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
 
   if (headera->ds_id == headerb->ds_id) {
-    return ((headera->ds_priority > headerb->ds_priority) - (headera->ds_priority < headerb->ds_priority));
+    return ((headera->ds_priority < headerb->ds_priority) - (headera->ds_priority > headerb->ds_priority));
   }
 
   return ((headera->ds_id > headerb->ds_id) - (headera->ds_id < headerb->ds_id));
