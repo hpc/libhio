@@ -21,12 +21,18 @@ static int hioi_dataset_open_last (hio_dataset_t dataset) {
   int rc, count = 0;
 
   for (int i = 0 ; i < context->c_mcount ; ++i) {
+    int old_count = count;
     module = context->c_modules[i];
 
     rc = module->dataset_list (module, hioi_object_identifier (dataset), &headers, &count);
     if (HIO_SUCCESS != rc && HIO_ERR_NOT_FOUND != rc) {
       hioi_err_push (rc, &dataset->ds_object, "dataset_open: error listing datasets on data root %s",
                      module->data_root);
+    }
+
+    /* set the relative priority */
+    for (int j = old_count ; j < count ; ++j) {
+      headers[j].ds_priority = i;
     }
   }
 

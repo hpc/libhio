@@ -808,6 +808,8 @@ struct hio_dataset_header_t {
   struct hio_module_t *module;
   /** dataset name */
   char     ds_name[HIO_DATASET_NAME_MAX];
+  /** priority (to break ties) */
+  int      ds_priority;
   /** dataset identifier */
   int64_t  ds_id;
   /** dataset modification time */
