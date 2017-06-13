@@ -140,13 +140,13 @@ batch_sub() {
 
   msg "Required DataWarp Capacity: $dw_cap"
   if [[ $batch -gt 0 ]]; then
-    type msub > /dev/null 2>&1
+    type sbatch > /dev/null 2>&1
     if [[ $? -eq 0 ]]; then 
-      gotmsub=1
+      gotmsub=0   # use sbatch
     else
-      type sbatch > /dev/null 2>&1
+      type msub > /dev/null 2>&1
       if [[ $? -eq 0 ]]; then 
-        gotmsub=0   # use sbatch
+        gotmsub=1   # use msub
       else 
         errx "Neither msub nor sbatch commands available"
       fi
@@ -186,7 +186,7 @@ batch_sub() {
       echo "#MSUB -o $jobout -joe" >> $jobsh
       echo "#MSUB -d $PWD" >> $jobsh
     else
-      echo "#SBATCH -p workq" >> $jobsh
+      # echo "#SBATCH -p workq" >> $jobsh
       echo "#SBATCH -N $nodes" >> $jobsh
       echo "#SBATCH -n $((nodes * ppn * tpp))" >> $jobsh
       echo "#SBATCH -t $walltime" >> $jobsh
