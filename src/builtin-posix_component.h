@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -74,6 +74,20 @@ typedef struct builtin_posix_module_dataset_t {
 
   /** API to use to read/write files */
   int                 ds_file_api;
+
+  /* the following apply to basic mode only */
+
+  /** use a simple file layout for data (manifest optional) */
+  bool                ds_simple_layout;
+
+  /** regex for simple file names */
+  char               *ds_simple_filename;
+
+  /** suppress the creation of hio dataset path and manifest files */
+  bool                ds_simple_omit_directory;
+
+  /** attempt to import POSIX file(s) if no HIO dataset is found */
+  bool                ds_simple_import;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;

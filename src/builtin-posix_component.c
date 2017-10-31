@@ -34,6 +34,10 @@
 #include <sys/stat.h>
 #endif
 
+#if !defined(PATH_MAX)
+#define PATH_MAX 2048
+#endif
+
 static hio_var_enum_t hioi_dataset_lock_strategies = {
   .count = 4,
   .values = (hio_var_enum_value_t []){
@@ -111,6 +115,33 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
     return HIO_SUCCESS;
   }
 
+  /* create trace directory if requested */
+  if (context->c_enable_tracing) {
+    if (posix_dataset->ds_simple_omit_directory) {
+      rc = asprintf (&path, "%s/hio_trace.%s.%" PRId64 "/posix", posix_module->base.data_root,
+                     hioi_object_identifier (&posix_dataset->base.ds_object), posix_dataset->base.ds_id);
+    } else {
+      rc = asprintf (&path, "%s/trace/posix", posix_dataset->base_path);
+    }
+
+    if (0 > rc) {
+      return hioi_err_errno (errno);
+    }
+
+    rc = hioi_mkpath (context, path, access_mode);
+    if (0 > rc || EEXIST == errno) {
+      if (EEXIST != errno) {
+        hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: error creating dataset tracing directory: %s",
+                       path);
+      }
+      free (path);
+    }
+  }
+
+  if (posix_dataset->ds_simple_omit_directory) {
+    return HIO_SUCCESS;
+  }
+
   /* create the data directory*/
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix: creating dataset directory @ %s", posix_dataset->base_path);
 
@@ -140,24 +171,6 @@ static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_modu
 
   free (path);
 
-  /* create trace directory if requested */
-  if (context->c_enable_tracing) {
-    rc = asprintf (&path, "%s/trace/posix", posix_dataset->base_path);
-    if (0 > rc) {
-      return hioi_err_errno (errno);
-    }
-
-    rc = hioi_mkpath (context, path, access_mode);
-    if (0 > rc || EEXIST == errno) {
-      if (EEXIST != errno) {
-        hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: error creating context directory: %s",
-                       path);
-      }
-      free (path);
-
-      return hioi_err_errno (errno);
-    }
-  }
 
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: successfully created dataset directories %s", posix_dataset->base_path);
 
@@ -634,7 +647,7 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
   }
 
   /* default to strided output mode */
-  posix_dataset->ds_fmode = HIO_FILE_MODE_STRIDED;
+  posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
   hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_fmode,
                    "dataset_file_mode", NULL, HIO_CONFIG_TYPE_INT32, &hioi_dataset_file_modes,
                    "Modes for writing dataset files. Valid values: (0: basic, 1: file_per_node, 2: strided)", 0);
@@ -644,11 +657,39 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
     posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
   }
 
-  if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode) {
-    posix_dataset->ds_bs = 1ul << 23;
-    hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_bs,
-                     "dataset_block_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
-                     "Block size to use when writing in optimized mode (default: 8M)", 0);
+  posix_dataset->ds_bs = 1ul << 23;
+  hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_bs,
+                   "dataset_block_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
+                   "Internal parameter controlling the size of dataset blocks (default: 8M)", 0);
+
+  if (HIO_FILE_MODE_BASIC == posix_dataset->ds_fmode) {
+    posix_dataset->ds_simple_layout = false;
+    hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_simple_layout,
+                     "posix_simple_layout", NULL, HIO_CONFIG_TYPE_BOOL, NULL,
+                     "Look for data files in the data root not in the context dataset directory (default: false)", 0);
+
+    if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
+      posix_dataset->ds_simple_filename = strdup ("%c_%d_%016i_%e.%08r");
+    } else {
+      posix_dataset->ds_simple_filename = strdup ("%c_%d_%016i_%e");
+    }
+
+    hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_simple_filename,
+                     "posix_simple_filename", NULL, HIO_CONFIG_TYPE_STRING, NULL,
+                     "Filename to use for simple layout data files. Expansion rules: %c:context, %d:dataset, "
+                     "%i:identifier, %r:rank, and %e:element (default: %c_%d_%016i_%e)", 0);
+
+    posix_dataset->ds_simple_omit_directory = false;
+    hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_simple_omit_directory,
+                     "posix_simple_omit_directory", NULL, HIO_CONFIG_TYPE_BOOL, NULL,
+                     "Suppress the creation of the normal HIO directory structure. This is only relevant "
+                     "when using simple output mode (default: false)", 0);
+
+    posix_dataset->ds_simple_import = false;
+    hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_simple_import,
+                     "posix_simple_import", NULL, HIO_CONFIG_TYPE_BOOL, NULL,
+                     "If no HIO dataset manifest is found attempt to import the dataset from a simple file. "
+                     "Using this option will delay some errors to element open. (default: false)", 0);
   }
 
   return HIO_SUCCESS;
@@ -853,6 +894,38 @@ static int bultin_posix_scatter_data (builtin_posix_module_dataset_t *posix_data
 }
 #endif
 
+
+static int builtin_posix_load_manifest (builtin_posix_module_dataset_t *posix_dataset, hio_manifest_t *manifest) {
+  hio_context_t context = hioi_object_context ((hio_object_t) posix_dataset);
+  char *path = NULL;
+  int rc;
+
+  if (0 != context->c_rank) {
+    return HIO_SUCCESS;
+  }
+
+  /* load manifest. the manifest data will be shared with other processes in hioi_dataset_scatter */
+  rc = asprintf (&path, "%s/manifest.json", posix_dataset->base_path);
+  assert (0 < rc);
+  if (access (path, F_OK)) {
+    /* this should never happen on a valid dataset */
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: could not find top-level manifest %s", path);
+    rc = HIO_ERR_NOT_FOUND;
+  } else {
+    rc = HIO_SUCCESS;
+  }
+
+  /* read the manifest if it exists */
+  if (HIO_SUCCESS == rc) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: loading manifest header from %s...", path);
+    rc = hioi_manifest_read (context, path, manifest);
+  }
+
+  free (path);
+
+  return rc;
+}
+
 static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_dataset_t dataset) {
   builtin_posix_module_dataset_t *posix_dataset = (builtin_posix_module_dataset_t *) dataset;
   builtin_posix_module_t *posix_module = (builtin_posix_module_t *) module;
@@ -860,7 +933,6 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   hio_manifest_t manifest = NULL;
   uint64_t start, stop;
   int rc = HIO_SUCCESS;
-  char *path = NULL;
 
   start = hioi_gettime ();
 
@@ -874,11 +946,9 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   }
 
 #if HIO_MPI_HAVE(3)
-  if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode) {
-    rc = hioi_context_generate_leader_list (context);
-    if (HIO_SUCCESS != rc) {
-      return rc;
-    }
+  rc = hioi_context_generate_leader_list (context);
+  if (HIO_SUCCESS != rc) {
+    return rc;
   }
 #endif
 
@@ -917,33 +987,20 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     }
   }
 
-  if (!(dataset->ds_flags & HIO_FLAG_CREAT)) {
-    if (0 == context->c_rank) {
-      /* load manifest. the manifest data will be shared with other processes in hioi_dataset_scatter */
-      rc = asprintf (&path, "%s/manifest.json", posix_dataset->base_path);
-      assert (0 < rc);
-      if (access (path, F_OK)) {
-        /* this should never happen on a valid dataset */
-        free (path);
-        hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: could not find top-level manifest %s", path);
-        rc = HIO_ERR_NOT_FOUND;
-      } else {
-        rc = HIO_SUCCESS;
+  if (0 == context->c_rank) {
+    if ((dataset->ds_flags & HIO_FLAG_CREAT) || posix_dataset->ds_simple_layout) {
+      rc = builtin_posix_create_dataset_dirs (posix_module, posix_dataset);
+      if (HIO_SUCCESS == rc) {
+        /* generate an empty manifest */
+        rc = hioi_manifest_generate (dataset, false, &manifest);
       }
-    }
-
-    /* read the manifest if it exists */
-    if (HIO_SUCCESS == rc) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix:dataset_open: loading manifest header from %s...", path);
-      rc = hioi_manifest_read (context, path, &manifest);
-      free (path);
-      path = NULL;
-    }
-  } else if (0 == context->c_rank) {
-    rc = builtin_posix_create_dataset_dirs (posix_module, posix_dataset);
-    if (HIO_SUCCESS == rc) {
-      /* serialize the manifest to send to remote ranks */
-      rc = hioi_manifest_generate (dataset, false, &manifest);
+    } else {
+      rc = builtin_posix_load_manifest (posix_dataset, &manifest);
+      if (HIO_SUCCESS != rc && posix_dataset->ds_simple_import) {
+        rc = hioi_manifest_generate (dataset, false, &manifest);
+        posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
+        posix_dataset->ds_simple_layout = true;
+      }
     }
   }
 
@@ -966,10 +1023,29 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     return HIO_ERR_BAD_PARAM;
   }
 
+  /* ensure that simple layout is *not* specified with a mode other than basic */
+  if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode && posix_dataset->ds_simple_layout) {
+    hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: %s::% " PRId64 "simple layout requested with an incompatible file mode. "
+              "using basic mode instead.", hioi_object_identifier (&dataset->ds_object), dataset->ds_id);
+    posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
+  }
+
+  if (!posix_dataset->ds_simple_layout && posix_dataset->ds_simple_omit_directory) {
+    hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: %s::% " PRId64 "cannot omit HIO directory structure without using a "
+              "simple layout", hioi_object_identifier (&dataset->ds_object), dataset->ds_id);
+    posix_dataset->ds_simple_omit_directory = false;
+  }
+
   if (context->c_enable_tracing) {
     char *path;
 
-    rc = asprintf (&path, "%s/trace/posix/trace.%d", posix_dataset->base_path, context->c_rank);
+    if (posix_dataset->ds_simple_omit_directory) {
+      rc = asprintf (&path, "%s/hio_trace.%s.%" PRId64 "/posix/trace.%d", posix_module->base.data_root,
+                     hioi_object_identifier (&dataset->ds_object), dataset->ds_id, context->c_rank);
+    } else {
+      rc = asprintf (&path, "%s/trace/posix/trace.%d", posix_dataset->base_path, context->c_rank);
+    }
+
     if (rc > 0) {
       posix_dataset->ds_trace_fh = fopen (path, "a");
       free (path);
@@ -988,9 +1064,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   }
 
   /* if possible set up a shared memory window for this dataset */
-  if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode || HIO_SET_ELEMENT_SHARED == dataset->ds_mode) {
-    POSIX_TRACE_CALL(posix_dataset, hioi_dataset_shared_init (dataset, dataset->ds_fsattr.fs_scount * posix_dataset->ds_fcount), "shared_init", 0, 0);
-  }
+  POSIX_TRACE_CALL(posix_dataset, hioi_dataset_shared_init (dataset, dataset->ds_fsattr.fs_scount * posix_dataset->ds_fcount), "shared_init", 0, 0);
 
   if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
     if (NULL == dataset->ds_shared_control) {
@@ -1055,7 +1129,7 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
   (void) hioi_dataset_map_release (dataset);
 #endif
 
-  if (dataset->ds_flags & HIO_FLAG_WRITE) {
+  if ((dataset->ds_flags & HIO_FLAG_WRITE) && !posix_dataset->ds_simple_omit_directory) {
     char *path;
 
     /* write manifest header */
@@ -1258,17 +1332,143 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
   return rc;
 }
 
+static int builtin_posix_module_element_path_simple (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
+                                                     hio_element_t element, char **path_out)
+{
+  hio_context_t context = hioi_object_context (&posix_dataset->base.ds_object);
+  char new_path[PATH_MAX] = {'\0', }, format[32];
+  size_t prefix_length;
+  char *tmp, *simple_filename, *cur;
+  size_t current_length = 0;
+  int ret;
+
+  ret = asprintf (&simple_filename, "%s/%s", posix_module->base.data_root, posix_dataset->ds_simple_filename);
+  if (0 >= ret) {
+    return ret;
+  }
+
+  tmp = strchr (simple_filename + strlen (posix_module->base.data_root), '%');
+  if (NULL == tmp) {
+    *path_out = simple_filename;
+    return ret;
+  }
+
+  cur = simple_filename;
+
+  do {
+    size_t cur_length;
+    long value = -1;
+
+    *(tmp++) = '\0';
+    cur_length = strlen (cur);
+
+    if (current_length + cur_length >= sizeof (new_path)) {
+      free (simple_filename);
+      return -1;
+    }
+
+    strcat (new_path, cur);
+    current_length += cur_length;
+    cur = tmp;
+
+    if ('%' == tmp[0]) {
+      if (current_length + 1 >= sizeof (new_path)) {
+        free (simple_filename);
+        return -1;
+      }
+
+      strcat (new_path, "%");
+      ++current_length;
+      continue;
+    }
+
+    prefix_length = strspn (tmp, "0123456789");
+    if (prefix_length) {
+      value = strtol (tmp, NULL, 10);
+    }
+
+    if (prefix_length > 29) {
+      free (simple_filename);
+      return -1;
+    }
+
+    tmp += prefix_length;
+    cur = tmp;
+
+    if ('c' == tmp[0] || 'd' == tmp[0] || 'e' == tmp[0]) {
+      size_t append_length;
+      const char *append;
+
+      switch (tmp[0]) {
+      case 'c':
+        append = hioi_object_identifier(context);
+        break;
+      case 'd':
+        append = hioi_object_identifier(&posix_dataset->base.ds_object);
+        break;
+      case 'e':
+        append = hioi_object_identifier(element);
+        break;
+      }
+
+      append_length = strlen (append);
+
+      if (current_length + append_length >= sizeof (new_path)) {
+        free (simple_filename);
+        return -1;
+      }
+
+      strcat (new_path, append);
+      current_length += append_length;
+      cur++;
+      continue;
+    }
+
+    if ('r' == tmp[0]) {
+      format[0] = '%';
+      if (prefix_length) {
+        memcpy (format + 1, tmp - prefix_length, prefix_length);
+      }
+
+      strcpy (format + 1 +  prefix_length, "d");
+
+      current_length += snprintf (new_path + current_length, sizeof (new_path) - current_length, format, context->c_rank);
+    } else if ('i' == tmp[0]) {
+      format[0] = '%';
+      if (prefix_length) {
+        memcpy (format + 1, tmp - prefix_length, prefix_length);
+      }
+
+      strcpy (format + 1 +  prefix_length, "ld");
+
+      current_length += snprintf (new_path + current_length, sizeof (new_path) - current_length, format, posix_dataset->base.ds_id);
+    } else {
+      hioi_err_push (HIO_ERR_BAD_PARAM, &context->c_object, "posix: malformed filename string: %s", posix_dataset->ds_simple_filename);
+    }
+
+    cur++;
+  } while (NULL != (tmp = strchr (cur, '%')));
+
+  *path_out = strdup (new_path);
+
+  return current_length;
+}
+
 static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
                                                     hio_element_t element) {
   const char *element_name = hioi_object_identifier(element);
   char *path;
   int rc;
 
-  if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
-    rc = asprintf (&path, "%s/data/element_data.%s.%08d", posix_dataset->base_path, element_name,
-                   element->e_rank);
+  if (!posix_dataset->ds_simple_layout) {
+    if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
+      rc = asprintf (&path, "%s/data/element_data.%s.%08d", posix_dataset->base_path, element_name,
+                     element->e_rank);
+    } else {
+      rc = asprintf (&path, "%s/data/element_data.%s", posix_dataset->base_path, element_name);
+    }
   } else {
-    rc = asprintf (&path, "%s/data/element_data.%s", posix_dataset->base_path, element_name);
+    rc = builtin_posix_module_element_path_simple (posix_module, posix_dataset, element, &path);
   }
 
   if (0 > rc) {
@@ -1654,6 +1854,10 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
         actual -= current;
         remaining -= current;
       }
+
+      hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
+                "posix: on %s. expected %ld, got %ld, errno = %d, fd = %d, fh = %p", reading ? "read" : "write",
+                (long) current, (long) ret, errno, file->f_fd, file->f_hndl);
 
       if (ret < current) {
         /* short io */
