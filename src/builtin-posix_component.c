@@ -35,11 +35,12 @@
 #endif
 
 static hio_var_enum_t hioi_dataset_lock_strategies = {
-  .count = 3,
+  .count = 4,
   .values = (hio_var_enum_value_t []){
     {.string_value = "default", .value = HIO_FS_LOCK_DEFAULT},
     {.string_value = "group", .value = HIO_FS_LOCK_GROUP},
     {.string_value = "disable", .value = HIO_FS_LOCK_DISABLE},
+    {.string_value = "no-expand", .value = HIO_FS_LOCK_NOEXPAND},
   },
 };
 
@@ -673,6 +674,20 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
 
   posix_dataset->ds_fcount = 1;
 
+  if (fs_attr->fs_flags & HIO_FS_SUPPORTS_BLOCK_LOCKING) {
+    /* use group locking if available as we guarantee stripe exclusivity in optimized mode */
+    if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
+      fs_attr->fs_lock_strategy = HIO_FS_LOCK_GROUP;
+    } else {
+      fs_attr->fs_lock_strategy = HIO_FS_LOCK_DEFAULT;
+    }
+
+    hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_lock_strategy,
+                     "lock_mode", NULL, HIO_CONFIG_TYPE_INT32, &hioi_dataset_lock_strategies,
+                     "Lock mode for underlying files. default - Use filesystem default, "
+                     " group - Use group locking, disabled - Disable locking", 0);
+  }
+
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_STRIPING) {
     if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
       posix_dataset->ds_stripe_exclusivity = false;
@@ -683,13 +698,6 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
 
       /* pick a reasonable default stripe size */
       fs_attr->fs_ssize = 1 << 24;
-
-      /* use group locking if available as we guarantee stripe exclusivity in optimized mode */
-      fs_attr->fs_lock_strategy = HIO_FS_LOCK_GROUP;
-      hioi_config_add (context, &dataset->ds_object, &fs_attr->fs_lock_strategy,
-                       "lock_mode", NULL, HIO_CONFIG_TYPE_INT32, &hioi_dataset_lock_strategies,
-                       "Lock mode for underlying files. default - Use filesystem default, "
-                       " group - Use group locking, disabled - Disable locking", 0);
 
 #if HIO_MPI_HAVE(3)
       /* if group locking is not available then each rank should attempt to write to
