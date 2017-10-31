@@ -74,6 +74,34 @@ static int hioi_fs_open_posix (hio_context_t context, const char *path, hio_fs_a
   return fd;
 }
 
+#if defined(LL_SUPER_MAGIC)
+static int hioi_fs_luste_set_locking (int fd, hio_fs_attr_t *fs_attr) {
+  int rc;
+
+  switch (fs_attr->fs_lock_strategy) {
+#if defined(LL_IOC_GROUP_LOCK)
+  case HIO_FS_LOCK_GROUP:
+    rc = ioctl (fd,  LL_IOC_GROUP_LOCK, 1);
+    break;
+#endif
+#if defined(LL_FILE_IGNORE_LOCK)
+  case HIO_FS_LOCK_DISABLE:
+    rc = ioctl (fd, LL_IOC_SETFLAGS, &(int){LL_FILE_IGNORE_LOCK});
+    break;
+#endif
+#if defined(LL_IOC_REQUEST_ONLY)
+  case HIO_FS_LOCK_NOEXPAND:
+    rc = ioctl (fd, LL_IOC_REQUEST_ONLY);
+    break;
+#endif
+  default:
+    return HIO_ERR_BAD_PARAM;
+  }
+
+  return rc;
+}
+#endif
+
 static int hioi_fs_open_lustre (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr,
 				int flags, int mode) {
 #if defined(LL_SUPER_MAGIC)
@@ -93,14 +121,7 @@ static int hioi_fs_open_lustre (hio_context_t context, const char *path, hio_fs_
       return hioi_err_errno (errno);
     }
 
-#if defined(LL_IOC_GROUP_LOCK)
-    if (HIO_FS_LOCK_GROUP == fs_attr->fs_lock_strategy) {
-      rc = ioctl (fd,  LL_IOC_GROUP_LOCK, 1);
-    }
-#endif
-    if (HIO_FS_LOCK_DISABLE == fs_attr->fs_lock_strategy) {
-      rc = ioctl (fd, LL_IOC_SETFLAGS, &(int){LL_FILE_IGNORE_LOCK});
-    }
+    hioi_fs_luste_set_locking (fd, fs_attr);
 
     return fd;
   }
@@ -130,14 +151,7 @@ static int hioi_fs_open_lustre (hio_context_t context, const char *path, hio_fs_
       rc = ioctl (fd, LL_IOC_LOV_SETSTRIPE, &lum);
     }
 
-#if defined(LL_IOC_GROUP_LOCK)
-    if (HIO_FS_LOCK_GROUP == fs_attr->fs_lock_strategy) {
-      rc = ioctl (fd,  LL_IOC_GROUP_LOCK, 1);
-    }
-#endif
-    if (HIO_FS_LOCK_DISABLE == fs_attr->fs_lock_strategy) {
-      rc = ioctl (fd, LL_IOC_SETFLAGS, &(int){LL_FILE_IGNORE_LOCK});
-    }
+    hioi_fs_luste_set_locking (fd, fs_attr);
 
     return fd;
   }
@@ -249,7 +263,7 @@ static int hioi_fs_query_lustre (const char *path, hio_fs_attr_t *fs_attr) {
     return hioi_err_errno (errno);
   }
 
-  fs_attr->fs_flags |= HIO_FS_SUPPORTS_STRIPING | HIO_FS_SUPPORTS_RAID;
+  fs_attr->fs_flags |= HIO_FS_SUPPORTS_STRIPING | HIO_FS_SUPPORTS_RAID | HIO_FS_SUPPORTS_BLOCK_LOCKING;
   fs_attr->fs_type        = HIO_FS_TYPE_LUSTRE;
   fs_attr->fs_sunit       = 64 * 1024;
   fs_attr->fs_smax_size   = 0x100000000ul;

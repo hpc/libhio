@@ -1228,6 +1228,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 
 static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset,
                                     char *path, hio_file_t *file) {
+  hio_context_t context = hioi_object_context (&posix_dataset->base.ds_object);
   hio_object_t hio_object = &posix_dataset->base.ds_object;
   int open_flags = 0, rc;
 
@@ -1240,7 +1241,8 @@ static int builtin_posix_open_file (builtin_posix_module_t *posix_module, builti
     open_flags |= O_RDONLY;
   }
 
-  rc = hioi_file_open (file, path, open_flags, posix_dataset->ds_file_api, posix_module->access_mode);
+  rc = hioi_file_open (context, file, &posix_dataset->base.ds_fsattr, path, open_flags, posix_dataset->ds_file_api,
+                       posix_module->access_mode);
   if (HIO_SUCCESS != rc) {
     hioi_err_push (rc, hio_object, "posix: error opening path %s. errno: %d", path, errno);
   }
