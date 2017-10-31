@@ -320,7 +320,6 @@ int hioi_dataset_gather_manifest (hio_dataset_t dataset, hio_manifest_t *manifes
 
 #if HIO_MPI_HAVE(1)
 int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifest_t *manifest_out, bool simple) {
-  hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_manifest_t manifest;
   int rc, comm_rank;
 
