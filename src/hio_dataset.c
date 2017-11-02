@@ -249,6 +249,10 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
     return rc;
   }
 
+  hioi_config_add (module->context, &dataset->ds_object, &module->data_root, "data_root",
+                   NULL, HIO_CONFIG_TYPE_STRING, NULL, "Data root in use on this dataset",
+                   HIO_VAR_FLAG_READONLY);
+
   if (NULL == dataset->ds_buffer.b_base) {
     (void) posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
     if (NULL != dataset->ds_buffer.b_base) {

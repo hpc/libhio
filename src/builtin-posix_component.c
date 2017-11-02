@@ -685,6 +685,12 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
                      "Suppress the creation of the normal HIO directory structure. This is only relevant "
                      "when using simple output mode (default: false)", 0);
 
+    if (!posix_dataset->ds_simple_layout && posix_dataset->ds_simple_omit_directory) {
+      hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: %s::% " PRId64 "cannot omit HIO directory structure without using a "
+                "simple layout", hioi_object_identifier (&posix_dataset->base.ds_object), posix_dataset->base.ds_id);
+      posix_dataset->ds_simple_omit_directory = false;
+    }
+
     posix_dataset->ds_simple_import = false;
     hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_simple_import,
                      "posix_simple_import", NULL, HIO_CONFIG_TYPE_BOOL, NULL,
@@ -1028,12 +1034,6 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: %s::% " PRId64 "simple layout requested with an incompatible file mode. "
               "using basic mode instead.", hioi_object_identifier (&dataset->ds_object), dataset->ds_id);
     posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
-  }
-
-  if (!posix_dataset->ds_simple_layout && posix_dataset->ds_simple_omit_directory) {
-    hioi_log (context, HIO_VERBOSE_WARN, "posix:dataset_open: %s::% " PRId64 "cannot omit HIO directory structure without using a "
-              "simple layout", hioi_object_identifier (&dataset->ds_object), dataset->ds_id);
-    posix_dataset->ds_simple_omit_directory = false;
   }
 
   if (context->c_enable_tracing) {
@@ -1744,6 +1744,7 @@ static int builtin_posix_element_translate (builtin_posix_module_t *posix_module
 static bool builtin_posix_stripe_lock (hio_element_t element, int stripe_id) {
   hio_dataset_t dataset = hioi_element_dataset (element);
 
+#if 0
   if (dataset->ds_shared_control) {
     /* locally lock the stripe */
     pthread_mutex_lock (&dataset->ds_shared_control->s_stripes[stripe_id].s_mutex);
@@ -1751,14 +1752,18 @@ static bool builtin_posix_stripe_lock (hio_element_t element, int stripe_id) {
   }
 
   return false;
+#endif
+  return true;
 }
 
 static void builtin_posix_stripe_unlock (hio_element_t element, int stripe_id) {
+#if 0
   hio_dataset_t dataset = hioi_element_dataset (element);
 
   if (dataset->ds_shared_control) {
     pthread_mutex_unlock (&dataset->ds_shared_control->s_stripes[stripe_id].s_mutex);
   }
+#endif
 }
 
 
