@@ -4,5 +4,5 @@
 
 AC_DEFUN([HIO_CHECK_MPI_FEATURES],[
     # Check for MPI-3.0 functions
-    AC_CHECK_FUNCS_ONCE([MPI_Win_allocate_shared MPI_Comm_split_type])
+    AC_CHECK_FUNCS_ONCE([MPI_Win_allocate_shared MPI_Comm_split_type MPI_Reduce_scatter_block])
 ])

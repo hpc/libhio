@@ -466,10 +466,18 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
 
   free (ranks);
 
+#if defined(HAVE_MPI_REDUCE_SCATTER_BLOCK)
   /* NTH: reduce scatter block should be faster than doing an allreduce on the entire array. this
    * still use a O(n) memory and will likely be changed in a future release to further cut down on
    * the communication time and memory usage. */
   rc = MPI_Reduce_scatter_block (all_ranks, &io_leader, 1, MPI_INT, MPI_MAX, context->c_comm);
+#else
+  /* MPI_Reduce_scatter_block is an MPI-2.2 function. For older MPI installations we have to
+   * fall back to MPI_Allreduce. */
+  rc = MPI_Allreduce (MPI_IN_PLACE, all_ranks, context->c_size, MPI_INT, MPI_MAX, context->c_comm);
+  io_leader = all_ranks[context->c_rank];
+#endif
+
   free (all_ranks);
   if (MPI_SUCCESS != rc) {
     return hioi_err_mpi (rc);
