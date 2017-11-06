@@ -305,7 +305,14 @@ static int hioi_context_set_default_droot (hio_context_t context) {
     return HIO_ERROR;
   }
 
-  rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
+  if (NULL == getenv ("DW_JOB_STRIPED")) {
+    /* just use posix IO by default */
+    rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
+  } else {
+    /* automatically add a datawarp root if one exists */
+    rc = asprintf (&context->c_droots, "datawarp,posix:%s", cwd_buffer);
+  }
+
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }

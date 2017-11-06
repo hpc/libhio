@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -154,10 +154,10 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rtime, "read_time_usec",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio write calls in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rcount, "read_count",
+  hioi_perf_add (context, &new_dataset->ds_object, (void *) &new_dataset->ds_stat.s_rcount, "read_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to read APIs in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_wcount, "write_count",
+  hioi_perf_add (context, &new_dataset->ds_object, (void *) &new_dataset->ds_stat.s_wcount, "write_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset instance", 0);
 
 
@@ -249,9 +249,13 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
     return rc;
   }
 
+  hioi_config_add (module->context, &dataset->ds_object, &module->data_root, "data_root",
+                   NULL, HIO_CONFIG_TYPE_STRING, NULL, "Data root in use on this dataset",
+                   HIO_VAR_FLAG_READONLY);
+
   if (NULL == dataset->ds_buffer.b_base) {
-    (void) posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
-    if (NULL != dataset->ds_buffer.b_base) {
+    rc = posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
+    if (0 != rc || NULL != dataset->ds_buffer.b_base) {
       dataset->ds_buffer.b_size = dataset->ds_buffer_size;
       dataset->ds_buffer.b_remaining = dataset->ds_buffer.b_size;
     }
@@ -320,7 +324,6 @@ int hioi_dataset_gather_manifest (hio_dataset_t dataset, hio_manifest_t *manifes
 
 #if HIO_MPI_HAVE(1)
 int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifest_t *manifest_out, bool simple) {
-  hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_manifest_t manifest;
   int rc, comm_rank;
 
@@ -418,6 +421,7 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifes
   return rc;
 }
 
+#if HIO_MPI_HAVE(1)
 int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest, int rc) {
   hio_context_t context = (hio_context_t) dataset->ds_object.parent;
   int *ranks = NULL, *all_ranks, rank_count = 0, io_leader, mpirc;
@@ -462,10 +466,18 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
 
   free (ranks);
 
+#if defined(HAVE_MPI_REDUCE_SCATTER_BLOCK)
   /* NTH: reduce scatter block should be faster than doing an allreduce on the entire array. this
    * still use a O(n) memory and will likely be changed in a future release to further cut down on
    * the communication time and memory usage. */
   rc = MPI_Reduce_scatter_block (all_ranks, &io_leader, 1, MPI_INT, MPI_MAX, context->c_comm);
+#else
+  /* MPI_Reduce_scatter_block is an MPI-2.2 function. For older MPI installations we have to
+   * fall back to MPI_Allreduce. */
+  rc = MPI_Allreduce (MPI_IN_PLACE, all_ranks, context->c_size, MPI_INT, MPI_MAX, context->c_comm);
+  io_leader = all_ranks[context->c_rank];
+#endif
+
   free (all_ranks);
   if (MPI_SUCCESS != rc) {
     return hioi_err_mpi (rc);
@@ -488,6 +500,7 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
 
   return rc;
 }
+#endif
 
 static int hioi_dataset_header_compare_newest (const void *a, const void *b) {
   const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
