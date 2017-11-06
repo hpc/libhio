@@ -154,10 +154,10 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rtime, "read_time_usec",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio write calls in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rcount, "read_count",
+  hioi_perf_add (context, &new_dataset->ds_object, (void *) &new_dataset->ds_stat.s_rcount, "read_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to read APIs in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_wcount, "write_count",
+  hioi_perf_add (context, &new_dataset->ds_object, (void *) &new_dataset->ds_stat.s_wcount, "write_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset instance", 0);
 
 
@@ -254,8 +254,8 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
                    HIO_VAR_FLAG_READONLY);
 
   if (NULL == dataset->ds_buffer.b_base) {
-    (void) posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
-    if (NULL != dataset->ds_buffer.b_base) {
+    rc = posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
+    if (0 != rc || NULL != dataset->ds_buffer.b_base) {
       dataset->ds_buffer.b_size = dataset->ds_buffer_size;
       dataset->ds_buffer.b_remaining = dataset->ds_buffer.b_size;
     }
