@@ -111,9 +111,9 @@
 }
 
 % Custom commands
-%\newcommand{\clearemptydoublepage}{%
-%$  \newpage{\pagestyle{empty}\cleardoublepage}%
-%}
+\newcommand{\clearemptydoublepage}{%
+  \newpage{\pagestyle{empty}\cleardoublepage}%
+}
 
 \newcommand{\HRule}[1]{\hfill \rule{0.2\linewidth}{#1}} % Horizontal rule at the bottom of the page, adjust width here
 
