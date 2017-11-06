@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -421,6 +421,7 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifes
   return rc;
 }
 
+#if HIO_MPI_HAVE(1)
 int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest, int rc) {
   hio_context_t context = (hio_context_t) dataset->ds_object.parent;
   int *ranks = NULL, *all_ranks, rank_count = 0, io_leader, mpirc;
@@ -491,6 +492,7 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
 
   return rc;
 }
+#endif
 
 static int hioi_dataset_header_compare_newest (const void *a, const void *b) {
   const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
