@@ -723,7 +723,8 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
 
   if (fs_attr->fs_flags & HIO_FS_SUPPORTS_BLOCK_LOCKING) {
     /* use group locking if available as we guarantee stripe exclusivity in optimized mode */
-    if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode) {
+    if (HIO_FILE_MODE_OPTIMIZED == posix_dataset->ds_fmode || (HIO_FLAG_READ == (posix_dataset->base.ds_flags & (HIO_FLAG_READ | HIO_FLAG_WRITE)))) {
+      /* use group locking when we know it will not cause issues  */
       fs_attr->fs_lock_strategy = HIO_FS_LOCK_GROUP;
     } else {
       fs_attr->fs_lock_strategy = HIO_FS_LOCK_DEFAULT;
@@ -1003,9 +1004,9 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
     } else {
       rc = builtin_posix_load_manifest (posix_dataset, &manifest);
       if (HIO_SUCCESS != rc && posix_dataset->ds_simple_import) {
-        rc = hioi_manifest_generate (dataset, false, &manifest);
         posix_dataset->ds_fmode = HIO_FILE_MODE_BASIC;
         posix_dataset->ds_simple_layout = true;
+        rc = hioi_manifest_generate (dataset, false, &manifest);
       }
     }
   }
@@ -1342,15 +1343,24 @@ static int builtin_posix_module_element_path_simple (builtin_posix_module_t *pos
   size_t current_length = 0;
   int ret;
 
-  ret = asprintf (&simple_filename, "%s/%s", posix_module->base.data_root, posix_dataset->ds_simple_filename);
-  if (0 >= ret) {
-    return ret;
+  if (posix_dataset->ds_simple_filename[0] != '/') {
+    ret = asprintf (&simple_filename, "%s/%s", posix_module->base.data_root, posix_dataset->ds_simple_filename);
+
+    if (0 >= ret) {
+      return ret;
+    }
+
+    tmp = strchr (simple_filename + strlen (posix_module->base.data_root), '%');
+  } else {
+    /* NTH: this is a weird case but the simplest way to deal with importing/exporting. If the filename starts with a /
+     * we assume it is an exact path and ignore the data root. */
+    simple_filename = strdup (posix_dataset->ds_simple_filename);
+    tmp = strchr (simple_filename, '%');
   }
 
-  tmp = strchr (simple_filename + strlen (posix_module->base.data_root), '%');
   if (NULL == tmp) {
     *path_out = simple_filename;
-    return ret;
+    return strlen (simple_filename);
   }
 
   cur = simple_filename;
@@ -1476,6 +1486,10 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
   }
 
   if (F_OK != access (path, R_OK) && !(HIO_FLAG_WRITE & posix_dataset->base.ds_flags)) {
+    if (posix_dataset->ds_simple_layout) {
+      return HIO_ERR_NOT_FOUND;
+    }
+
     /* fall back on old naming scheme */
     free (path);
 
@@ -1512,7 +1526,6 @@ static int builtin_posix_module_element_open (hio_dataset_t dataset, hio_element
   if (HIO_FILE_MODE_BASIC == posix_dataset->ds_fmode) {
     rc = builtin_posix_module_element_open_basic (posix_module, posix_dataset, element);
     if (HIO_SUCCESS != rc) {
-      hioi_object_release (&element->e_object);
       return rc;
     }
   }
