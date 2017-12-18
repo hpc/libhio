@@ -685,7 +685,10 @@ struct hio_dataset {
   hio_dataset_map_t   ds_map;
 #endif
 
+  /** pointer to dataset shared control data */
   hio_shared_control_t *ds_shared_control;
+  /** size of shared memory region */
+  size_t                ds_shared_region_size;
 
   /** close the dataset and free any internal resources */
   hio_dataset_close_fn_t ds_close;

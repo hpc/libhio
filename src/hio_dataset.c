@@ -254,12 +254,15 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
                    HIO_VAR_FLAG_READONLY);
 
   if (NULL == dataset->ds_buffer.b_base) {
+    /* if the backend did not already allocate a buffer then allocate it now */
     rc = posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
     if (0 != rc || NULL != dataset->ds_buffer.b_base) {
       dataset->ds_buffer.b_size = dataset->ds_buffer_size;
       dataset->ds_buffer.b_remaining = dataset->ds_buffer.b_size;
     }
   }
+
+  hioi_list_init (dataset->ds_buffer.b_reqlist);
 
   dataset->ds_rotime = rotime;
 
