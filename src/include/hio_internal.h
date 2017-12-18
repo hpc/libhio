@@ -389,7 +389,7 @@ int hioi_context_generate_leader_list (hio_context_t context);
 #endif
 
 /**
- * @brief Query filesystem attributes
+ * @brief Query filesystem attributes from all ranks
  *
  * @param[in]  context    hio context
  * @param[in]  path       path on the filesystem to query (directory/file ok)
@@ -405,6 +405,24 @@ int hioi_context_generate_leader_list (hio_context_t context);
  * will be retreived from this function.
  */
 int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *attributes);
+
+/**
+ * @brief Query filesystem attributes from a single rank
+ *
+ * @param[in]  context    hio context
+ * @param[in]  path       path on the filesystem to query (directory/file ok)
+ * @param[out] attributes filesystem path attributes
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns hio error code on error
+ *
+ * This function queries a filesystem path and returns the attributes of that
+ * path (block count, stripe count, etc). The query function also returns an
+ * open function that should be used to open/create data files. The open function
+ * takes an attributes structure as an extra argument. Any striping information
+ * will be retreived from this function.
+ */
+int hioi_fs_query_single (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr);
 
 /**
  * @brief Set filesystem striping attributes on a path
