@@ -969,7 +969,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   if (HIO_FS_TYPE_DATAWARP == dataset->ds_fsattr.fs_type) {
     posix_dataset->ds_file_api = HIO_FAPI_STDIO;
   } else {
-    posix_dataset->ds_file_api = HIO_FAPI_POSIX;
+    posix_dataset->ds_file_api = HIO_FAPI_PPOSIX;
   }
 
   hioi_config_add (context, &posix_dataset->base.ds_object, &posix_dataset->ds_file_api,
@@ -1830,6 +1830,8 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
       hioi_log (hioi_object_context (&element->e_object), HIO_VERBOSE_DEBUG_HIGH,
                 "posix: %s %lu bytes at file offset %" PRIu64, (reading)?"reading":"writing", current, file->f_offset);
 
+      /* this code is not working as expected. i will re-enable it once it is fixed */
+#if 0
       /* If we are writing to the file we get better performance by reducing the contention on the
        * filesystem by locking before the write. Since this operation may be a network operation
        * in the future (currently it is local only) it is best to hold the lock until we are
@@ -1859,12 +1861,13 @@ static ssize_t builtin_posix_module_element_io_internal (builtin_posix_module_t 
           }
         }
       }
+#endif
 
       /* perform actual io */
       if (reading) {
-        POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_read (file, (void *) data, current), "file_read", offset, actual);
+        POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_read (file, (void *) data, current), "file_read", offset, current);
       } else {
-        POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_write (file, (void *) data, current), "file_write", offset, actual);
+        POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_write (file, (void *) data, current), "file_write", offset, current);
       }
 
       if (ret > 0) {
