@@ -334,10 +334,12 @@ int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, con
   new_var->var_enum        = var_enum;
   new_var->var_cb          = notify_cb;
 
-  hioi_config_set_from_kv_list (&context->c_fconfig, object, new_var);
-  hioi_config_set_from_env (context, object, new_var);
-  /* check if any variables were set by hio_config_set_value */
-  hioi_config_set_from_kv_list (&object->config_set, object, new_var);
+  if (!(flags & HIO_VAR_FLAG_READONLY)) {
+    hioi_config_set_from_kv_list (&context->c_fconfig, object, new_var);
+    hioi_config_set_from_env (context, object, new_var);
+    /* check if any variables were set by hio_config_set_value */
+    hioi_config_set_from_kv_list (&object->config_set, object, new_var);
+  }
 
   return HIO_SUCCESS;
 }

@@ -411,7 +411,7 @@ int hioi_fs_set_stripe (const char *path, hio_fs_attr_t *fs_attr) {
   return HIO_ERR_NOT_AVAILABLE;
 }
 
-int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr) {
+int hioi_fs_query_single (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr) {
   struct statfs fsinfo;
   char tmp[4096];
   int rc;
@@ -421,10 +421,6 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
   }
 
   do {
-    if (0 != context->c_rank) {
-      break;
-    }
-
     if (NULL == realpath (path, tmp)) {
       fs_attr->fs_type = hioi_err_errno (errno);
       break;
@@ -481,6 +477,22 @@ int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_at
               fs_attr->fs_smax_count, fs_attr->fs_sunit, fs_attr->fs_ssize, fs_attr->fs_smax_size);
 
   } while (0);
+
+  if (0 > fs_attr->fs_type) {
+    return fs_attr->fs_type;
+  }
+
+  fs_attr->fs_open = hio_fs_open_fns[fs_attr->fs_type];
+  /* if this assert is hit the above array needs to be updated */
+  assert (NULL != fs_attr->fs_open);
+
+  return HIO_SUCCESS;
+}
+
+int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr) {
+  if (0 == context->c_rank) {
+    hioi_fs_query_single (context, path, fs_attr);
+  }
 
 #if HIO_MPI_HAVE(1)
   if (hioi_context_using_mpi (context)) {

@@ -54,6 +54,8 @@ typedef struct builtin_datawarp_module_dataset_t {
   int keep_last;
 
   hio_dataset_close_fn_t posix_ds_close;
+  int64_t stage_out_stripe_size;
+  int64_t stage_out_stripe_count;
 } builtin_datawarp_module_dataset_t;
 
 typedef struct builtin_datawarp_resident_id_t {
@@ -376,6 +378,18 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
         be_data->keep_last = datawarp_dataset->keep_last;
       }
 
+      datawarp_dataset->stage_out_stripe_count = -1;
+      hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->stage_out_stripe_count,
+                       "datawarp_stage_out_stripe_count", builtin_datawarp_keep_last_set_cb, HIO_CONFIG_TYPE_INT64, NULL,
+                       "Stripe count of data directory when staged out to lustre. Only applies to datasets with unique "
+                       "address spaces.(default: -1 (auto)) ", 0);
+
+      datawarp_dataset->stage_out_stripe_size = -1;
+      hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->stage_out_stripe_size,
+                       "datawarp_stage_out_stripe_count", builtin_datawarp_keep_last_set_cb, HIO_CONFIG_TYPE_INT64, NULL,
+                       "Stripe size of data directory when staged out to lustre. Only applies to datasets with unique "
+                       "address spaces. (default: -1 (auto))", 0);
+
       builtin_datawarp_cleanup (dataset, be_data);
     }
   }
@@ -385,6 +399,113 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
   dataset->ds_close = builtin_datawarp_module_dataset_close;
 
   return HIO_SUCCESS;
+}
+
+static inline int builtin_datawarp_set_output_striping (builtin_datawarp_module_dataset_t *datawarp_dataset,
+                                                        const char *dw_path, const char *pfs_path, mode_t pfs_mode)
+{
+  hio_context_t context = hioi_object_context (&datawarp_dataset->posix_dataset.base.ds_object);
+  size_t total_size = 0, count = 0, average_size;
+  struct dirent dir_entry, *result;
+  hio_fs_attr_t fs_attr;
+  struct stat statinfo;
+  char *data_path;
+  DIR *dh;
+  int rc;
+
+  if (HIO_SET_ELEMENT_UNIQUE == datawarp_dataset->posix_dataset.base.ds_mode) {
+    /* nothing to do */
+    return HIO_SUCCESS;
+  }
+
+  /* find out the default stripe information */
+  rc = hioi_fs_query_single (context, pfs_path, &fs_attr);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  rc = asprintf (&data_path, "%s/data", dw_path);
+  if (0 > rc) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  /* see how large the typical file is. we will set the default stripe size
+   * and count based on this information. */
+  dh = opendir (data_path);
+  if (NULL == dh) {
+    free (data_path);
+    return hioi_err_errno (errno);
+  }
+
+  while (0 == readdir_r (dh, &dir_entry, &result)) {
+    if (NULL == result) {
+      break;
+    }
+    if ('.' == result->d_name[0]) {
+      continue;
+    }
+
+    rc = fstatat (dirfd (dh), result->d_name, &statinfo, 0);
+    if (0 == rc && !S_ISDIR(statinfo.st_mode)) {
+      total_size += statinfo.st_size;
+      count++;
+    }
+  }
+
+  closedir (dh);
+
+  average_size = total_size / count;
+
+  if (-1 != datawarp_dataset->stage_out_stripe_count) {
+    fs_attr.fs_scount = datawarp_dataset->stage_out_stripe_count;
+  } else {
+    /* by default use 90% of the available IO resources */
+    fs_attr.fs_scount = (fs_attr.fs_smax_count * 9) / 10;
+  }
+
+  if (-1 != datawarp_dataset->stage_out_stripe_size) {
+    fs_attr.fs_ssize =  datawarp_dataset->stage_out_stripe_size;
+  } else if (average_size < 0x1000000ul) {
+    fs_attr.fs_ssize = 0x100000ul;
+  } else {
+    fs_attr.fs_ssize = 0x1000000ul;
+  }
+
+  /* ensure we don't exceed the maximum values */
+  if (fs_attr.fs_ssize > fs_attr.fs_smax_size) {
+    hioi_log (context, HIO_VERBOSE_WARN, "requested stripe size exceeeds the maximum: requested = %"
+              PRIu64 ", max = %" PRIu64, fs_attr.fs_ssize, fs_attr.fs_smax_size);
+    fs_attr.fs_ssize = fs_attr.fs_smax_size;
+  }
+
+  if (fs_attr.fs_scount > fs_attr.fs_smax_count) {
+    hioi_log (context, HIO_VERBOSE_WARN, "requested stripe count exceeeds the maximum: requested = %"
+              PRIu64 ", max = %" PRIu64, fs_attr.fs_scount, fs_attr.fs_smax_count);
+    fs_attr.fs_scount = fs_attr.fs_smax_count;
+  }
+
+  free (data_path);
+  rc = asprintf (&data_path, "%s/data", pfs_path);
+  if (0 > rc) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  /* need to make sure the directory is created before we can set striping parameters */
+  if (0 != access (data_path, R_OK)) {
+    rc = hioi_mkpath (context, data_path, pfs_mode);
+    if (HIO_SUCCESS != rc) {
+      free (data_path);
+      return rc;
+    }
+  }
+
+  rc = hioi_fs_set_stripe (data_path, &fs_attr);
+  if (HIO_SUCCESS != rc) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "could not set file system striping on stage out target %s", data_path);
+  }
+  free (data_path);
+
+  return rc;
 }
 
 static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
@@ -442,6 +563,12 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
       free (dataset_path);
       free (pfs_path);
       return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    /* set the striping on the output directory based on what we have in datawarp */
+    rc = builtin_datawarp_set_output_striping (datawarp_dataset, dataset_path, pfs_path, pfs_mode);
+    if (HIO_SUCCESS != rc) {
+      hioi_log (context, HIO_VERBOSE_WARN, "error setting striping on stage-out directory. code = %d", rc);
     }
 
     rc = dw_stage_directory_out (dataset_path, pfs_path, stage_mode);
