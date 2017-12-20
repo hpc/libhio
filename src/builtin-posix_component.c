@@ -709,7 +709,8 @@ static int builtin_posix_module_setup_striping (hio_context_t context, struct hi
   /* query the filesystem for current striping parameters */
   rc = hioi_fs_query (context, module->data_root, fs_attr);
   if (HIO_SUCCESS != rc) {
-    hioi_err_push (rc, &context->c_object, "posix: error querying the filesystem");
+    hioi_err_push (rc, &context->c_object, "posix: error querying the filesystem. rc = %d, path = %s\n",
+                   rc, module->data_root);
     return rc;
   }
 
