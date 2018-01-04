@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -527,19 +527,75 @@ static int hioi_dataset_header_compare_highest (const void *a, const void *b) {
   return ((headera->ds_id > headerb->ds_id) - (headera->ds_id < headerb->ds_id));
 }
 
-int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t id) {
+int hioi_dataset_list_sort (hio_dataset_list_t *list, int64_t id) {
   int (*compar) (const void *, const void *);
 
   if (HIO_DATASET_ID_NEWEST == id) {
     compar = hioi_dataset_header_compare_newest;
   } else if (HIO_DATASET_ID_HIGHEST == id) {
     compar = hioi_dataset_header_compare_highest;
+  } else if (HIO_DATASET_ID_ANY == id) {
+    /* nothing to do */
+    return HIO_SUCCESS;
   } else {
     return HIO_ERR_BAD_PARAM;
   }
 
-  (void) qsort (headers, count, sizeof (headers[0]), compar);
+  (void) qsort (list->headers, list->header_count, sizeof (list->headers[0]), compar);
   return HIO_SUCCESS;
+}
+
+hio_dataset_list_t *hioi_dataset_list_alloc (void) {
+  hio_dataset_list_t *new_list = calloc (1, sizeof (*new_list));
+  return new_list;
+}
+
+void hioi_dataset_list_release (hio_dataset_list_t *list) {
+  for (size_t i = 0 ; i < list->header_count ; ++i) {
+    free (list->headers[i].ds_path);
+  }
+
+  free (list->headers);
+  free (list);
+}
+
+hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, const char *dataset_name, int64_t sort_key)
+{
+  hio_dataset_list_t *list;
+  int rc;
+
+  list = hioi_dataset_list_alloc ();
+  if (NULL == list) {
+    return NULL;
+  }
+
+  for (int i = 0 ; i < context->c_mcount ; ++i) {
+    hio_module_t *module = context->c_modules[i];
+
+    rc = module->dataset_list (module, dataset_name, i, list);
+    if (HIO_SUCCESS != rc && HIO_ERR_NOT_FOUND != rc) {
+      hioi_err_push (rc, &context->c_object, "hioi_dataset_get_list: error listing datasets on data root %s",
+                     module->data_root);
+    }
+  }
+
+
+  /* sort this list using the requested key */
+  hioi_dataset_list_sort (list, sort_key);
+
+  /* debug output */
+  if (0 == context->c_rank && HIO_VERBOSE_DEBUG_MED <= context->c_verbose) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "found %lu dataset ids across all data roots:",
+              (unsigned long) list->header_count);
+
+    for (int i = 0 ; i < list->header_count ; ++i) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "dataset %s::%" PRId64 ": mtime = %ld, status = %d, "
+                "data_root = %s", list->headers[i].ds_name, list->headers[i].ds_id, list->headers[i].ds_mtime,
+                list->headers[i].ds_status, list->headers[i].module->data_root);
+    }
+  }
+
+  return list;
 }
 
 #endif

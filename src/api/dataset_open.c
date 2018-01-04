@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -15,61 +15,32 @@
 
 static int hioi_dataset_open_last (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context ((hio_object_t) dataset);
-  hio_dataset_header_t *headers = NULL;
+  hio_dataset_list_t *list;
   int64_t id = dataset->ds_id;
   hio_module_t *module;
-  int rc, count = 0;
+  int rc;
 
-  for (int i = 0 ; i < context->c_mcount ; ++i) {
-    int old_count = count;
-    module = context->c_modules[i];
-
-    rc = module->dataset_list (module, hioi_object_identifier (dataset), &headers, &count);
-    if (HIO_SUCCESS != rc && HIO_ERR_NOT_FOUND != rc) {
-      hioi_err_push (rc, &dataset->ds_object, "dataset_open: error listing datasets on data root %s",
-                     module->data_root);
-    }
-
-    /* set the relative priority */
-    for (int j = old_count ; j < count ; ++j) {
-      headers[j].ds_priority = i;
-    }
+  list = hioi_dataset_list_get (context, hioi_object_identifier (dataset), id);
+  if (NULL == list) {
+    return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  if (0 == count) {
-    free (headers);
-    return HIO_ERR_NOT_FOUND;
-  }
+  for (int i = list->header_count - 1 ; i >= 0 ; --i) {
+    module = list->headers[i].module;
 
-  hioi_dataset_headers_sort (headers, count, id);
-
-  /* debug output */
-  if (0 == context->c_rank && HIO_VERBOSE_DEBUG_MED <= context->c_verbose) {
-    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "found %d dataset ids accross all data roots:", count);
-
-    for (int i = 0 ; i < count ; ++i) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "dataset %s::%" PRId64 ": mtime = %ld, status = %d, "
-                "data_root = %s", hioi_object_identifier (&dataset->ds_object), headers[i].ds_id,
-                headers[i].ds_mtime, headers[i].ds_status, headers[i].module->data_root);
-    }
-  }
-
-  for (int i = count - 1 ; i >= 0 ; --i) {
-    module = headers[i].module;
-
-    if (0 != headers[i].ds_status) {
+    if (0 != list->headers[i].ds_status) {
       hioi_log (context, HIO_VERBOSE_DEBUG_MED, "skipping dataset with non-zero status: %s::%" PRId64
-                ". status = %d", hioi_object_identifier (&dataset->ds_object), headers[i].ds_id,
-                headers[i].ds_status);
+                ". status = %d", hioi_object_identifier (&dataset->ds_object), list->headers[i].ds_id,
+                list->headers[i].ds_status);
       continue;
     }
 
     hioi_log (context, HIO_VERBOSE_DEBUG_MED, "attempting to open dataset %s::%" PRId64 " on data root "
               "%s (module: %p). index %d", hioi_object_identifier (&dataset->ds_object),
-              headers[i].ds_id, module->data_root, module, i);
+              list->headers[i].ds_id, module->data_root, module, i);
 
     /* set the current dataset id to the one we are attempting to open */
-    dataset->ds_id = headers[i].ds_id;
+    dataset->ds_id = list->headers[i].ds_id;
     rc = hioi_dataset_open_internal (module, dataset);
     if (HIO_SUCCESS == rc) {
       break;
@@ -79,7 +50,7 @@ static int hioi_dataset_open_last (hio_dataset_t dataset) {
     dataset->ds_id = id;
   }
 
-  free (headers);
+  hioi_dataset_list_release (list);
 
   return rc;
 }

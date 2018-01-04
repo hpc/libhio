@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -20,6 +20,7 @@
 
 struct hio_module_t;
 struct hio_dataset_header_t;
+struct hio_dataset_list_t;
 
 /**
  * Open a dataset with an hio module
@@ -75,10 +76,10 @@ typedef int
  */
 typedef int
 (*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name,
-                                 struct hio_dataset_header_t **headers, int *count);
+                                 int priority, struct hio_dataset_list_t *list);
 
 typedef int
-(*hio_module_dataset_dump_fn_t) (struct hio_module_t *module, const char *name, int64_t id,
+(*hio_module_dataset_dump_fn_t) (struct hio_module_t *module, const struct hio_dataset_header_t *header,
                                  uint32_t dump_flags, int rank, FILE *fh);
 
 /**

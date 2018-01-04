@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -824,8 +824,16 @@ struct hio_dataset_header_t {
   int      ds_mode;
   /** dataset status (set at close time) */
   int      ds_status;
+  /** dataset path */
+  char    *ds_path;
 };
 typedef struct hio_dataset_header_t hio_dataset_header_t;
+
+struct hio_dataset_list_t {
+  hio_dataset_header_t *headers;
+  size_t header_count;
+};
+typedef struct hio_dataset_list_t hio_dataset_list_t;
 
 /**
  * Compare two headers

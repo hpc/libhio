@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -352,7 +352,38 @@ hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *da
  *
  * This function is used internally for sorting header arrays.
  */
-int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t id);
+int hioi_dataset_list_sort (hio_dataset_list_t *list, int64_t id);
+
+/**
+ * Allocates an hio dataset list structure
+ */
+hio_dataset_list_t *hioi_dataset_list_alloc (void);
+
+/**
+ * Release an hio dataset list structure
+ *
+ * @param[in] list        list to release
+ *
+ * After this call all the memory associated with a dataset listing will be released. The
+ * memory pointed to by list will no longer be valid.
+ */
+void hioi_dataset_list_release (hio_dataset_list_t *list);
+
+
+/**
+ * Get a list of datasets from all data roots
+ *
+ * @param[in] context      libhio context object
+ * @param[in] dataset_name data set name to list (may be NULL)
+ * @param[in] sort_key     sort key to use (see hio.h)
+ *
+ * @returns hio list object on success
+ * @returns NULL on failure
+ *
+ * This functions lists all the available (and no so available) datasets on the current
+ * context. The returned list must be freed using hioi_dataset_list_release().
+ */
+hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, const char *dataset_name, int64_t sort_key);
 
 /* element functions */
 

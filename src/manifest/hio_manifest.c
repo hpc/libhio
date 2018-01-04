@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <bzlib.h>
+#include <libgen.h>
 
 #if !defined(__STRICT_ANSI__)
 /* silence pedantic error about extension usage in json-c */
@@ -971,6 +972,14 @@ int hioi_manifest_read (hio_context_t context, const char *path, hio_manifest_t 
 
   rc = hioi_manifest_deserialize (context, buffer, file_size, manifest_out);
   free (buffer);
+
+  if (HIO_SUCCESS == rc) {
+    char *location = strdup (path), *tmp;
+
+    tmp = dirname (location);
+    hioi_manifest_set_string (manifest_out[0]->json_object, HIO_MANIFEST_KEY_LOCATION, tmp);
+    free (location);
+  }
 
   return rc;
 }

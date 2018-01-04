@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -278,6 +278,12 @@
  *   directly in the data root (not in the directory structure). The file name(s) used are taken
  *   from the posix_simple_filename configuration variable.
  *
+ * - @b dataset_posix_directory_mode - Directory structure to use when creating a new dataset. The
+ *   valid values are hierarchical and single. The hierarchical structure stores new datasets in
+ *   the context.hio/dataset/id directory. The single format stores new datasets in the
+ *   context.dataset.id.hiod directory. The current default is the use the hierarchical structure
+ *   but this may change in a future release.
+ *
  * - @b posix_simple_filename - File names(s) to use when reading/writing POSIX files in simple mode.
  *   The file name can be a single POSIX file or can include any of %c, %d, %i, %e, or %r. These expand
  *   to context name, dataset name, dataset identifier, element name, and rank respectively. Both rank
@@ -450,6 +456,12 @@ typedef struct hio_object *hio_object_t;
  * @brief Most recently modified dataset id
  */
 #define HIO_DATASET_ID_NEWEST (int64_t) -0x10000002
+
+/**
+ * @ingroup API
+ * @brief Any dataset id
+ */
+#define HIO_DATASET_ID_ANY (int64_t) -0x10000004
 
 /**
  * @ingroup API

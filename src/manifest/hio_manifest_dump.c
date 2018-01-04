@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -22,6 +22,7 @@ static struct hioi_key_mapping_t hioi_key_mapping[] = {
   {.key = HIO_MANIFEST_KEY_VERSION, .value = "Manifest version"},
   {.key = HIO_MANIFEST_KEY_COMPAT, .value = "Manifest compatibility version"},
   {.key = HIO_MANIFEST_KEY_IDENTIFIER, .value = "Name"},
+  {.key = HIO_MANIFEST_KEY_LOCATION, .value = "Location"},
   {.key = HIO_MANIFEST_KEY_DATASET_ID, .value = "Dataset identifier"},
   {.key = HIO_MANIFEST_KEY_SIZE, .value = "Size"},
   {.key = HIO_MANIFEST_KEY_HIO_VERSION, .value = "libhio version"},
