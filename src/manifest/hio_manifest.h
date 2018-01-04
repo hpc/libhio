@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -25,6 +25,8 @@
 #define HIO_MANIFEST_KEY_RANK        "rank"
 #define HIO_MANIFEST_KEY_CONFIG      "config"
 #define HIO_MANIFEST_KEY_PERF        "perf"
+/* temporary key used by dump */
+#define HIO_MANIFEST_KEY_LOCATION    "location"
 
 #define HIO_MANIFEST_KEY_DATASET_MODE "hio_dataset_mode"
 #define HIO_MANIFEST_KEY_FILE_MODE    "hio_file_mode"

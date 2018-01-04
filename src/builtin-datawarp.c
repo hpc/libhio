@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -670,7 +670,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
   hio_context_t context = datawarp_module->posix_module.base.context;
   builtin_datawarp_dataset_backend_data_t *be_data;
   struct dirent context_entry, *tmp = NULL;
-  hio_dataset_header_t *headers = NULL;
+  hio_dataset_list_t *list = NULL;
   hio_dataset_data_t *ds_data;
   char *context_path;
   DIR *context_dir;
@@ -681,82 +681,54 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
     return HIO_SUCCESS;
   }
 
-  rc = asprintf (&context_path, "%s/%s.hio", datawarp_module->posix_module.base.data_root,
-                 hioi_object_identifier (context));
-  if (0 > rc) {
+  list = hioi_dataset_list_alloc ();
+  if (NULL == be_data || NULL == list) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  context_dir = opendir (context_path);
-  if (NULL == context_dir) {
-    /* no context directory == no datasets */
-    free (context_path);
-    return HIO_SUCCESS;
+  /* use the internal version of the dataset list function since only the 0th rank
+   * is processing the list */
+  rc = builtin_posix_module_dataset_list_internal (&datawarp_module->posix_module.base, NULL, 0, list);
+  if (HIO_SUCCESS != rc || 0 == list->header_count) {
+    hioi_dataset_list_release (list);
+    return rc;
   }
 
-  while (!readdir_r (context_dir, &context_entry, &tmp) && NULL != tmp) {
-    if ('.' == context_entry.d_name[0]) {
-      continue;
-    }
+  hioi_dataset_list_sort (list, HIO_DATASET_ID_NEWEST);
 
-    rc = hioi_dataset_data_lookup (context, context_entry.d_name, &ds_data);
+  for (int i = 0 ; i < count ; ++i) {
+    int complete = 0, pending = 0, deferred = 0, failed = 0, stage_mode = HIO_DATAWARP_STAGE_MODE_DISABLE;
+    hio_dataset_header_t *header = list->headers + i;
+
+    rc = hioi_dataset_data_lookup (context, header->ds_name, &ds_data);
     if (HIO_SUCCESS != rc) {
       /* should not happen */
-      free (context_path);
-      return rc;
+      break;
     }
 
     be_data = builtin_datawarp_get_dbd (ds_data);
     if (NULL == be_data) {
-      free (context_path);
-      return HIO_ERR_OUT_OF_RESOURCE;
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
     }
 
-    /* use the internal version of the dataset list function since only the 0th rank
-     * is processing the list */
-    rc = builtin_posix_module_dataset_list_internal (&datawarp_module->posix_module.base, context_entry.d_name,
-                                                     &headers, &count);
-    if (HIO_SUCCESS != rc || 0 == count) {
-      free (context_path);
-      return rc;
+    rc = dw_query_directory_stage (header->ds_path, &complete, &pending, &deferred, &failed);
+    if (0 == rc) {
+      /* end of job stages will have all files in the deferred stage. anything else will be
+       * treated as an immediate stage */
+      stage_mode = (deferred > 0) ? DW_STAGE_AT_JOB_END : DW_STAGE_IMMEDIATE;
     }
 
-    hioi_dataset_headers_sort (headers, count, HIO_DATASET_ID_NEWEST);
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%"PRIi64" with status "
+              "%d. stage mode %d", context_entry.d_name, header->ds_id, header->ds_status, stage_mode);
 
-    for (int i = 0 ; i < count ; ++i) {
-      int complete = 0, pending = 0, deferred = 0, failed = 0, stage_mode = HIO_DATAWARP_STAGE_MODE_DISABLE;
-      char *ds_path;
-
-      rc = asprintf (&ds_path, "%s/%s/%"PRIi64, context_path, context_entry.d_name, headers[i].ds_id);
-      if (0 > rc) {
-        free (headers);
-        free (context_path);
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-
-      rc = dw_query_directory_stage (ds_path, &complete, &pending, &deferred, &failed);
-      free (ds_path);
-
-      if (0 == rc) {
-        /* end of job stages will have all files in the deferred stage. anything else will be
-         * treated as an immediate stage */
-        stage_mode = (deferred > 0) ? DW_STAGE_AT_JOB_END : DW_STAGE_IMMEDIATE;
-      }
-
-      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%"PRIi64" with status "
-                "%d. stage mode %d", context_entry.d_name, headers[i].ds_id, headers[i].ds_status, stage_mode);
-
-      builtin_datawarp_add_resident (be_data, headers[i].ds_id, stage_mode, true);
-    }
-
-    free (headers);
-    headers = NULL;
-    count = 0;
+    builtin_datawarp_add_resident (be_data, header->ds_id, stage_mode, true);
+    rc = HIO_SUCCESS;
   }
 
-  closedir (context_dir);
+  hioi_dataset_list_release (list);
 
-  return HIO_SUCCESS;
+  return rc;
 }
 
 static int builtin_datawarp_component_query (hio_context_t context, const char *data_root,

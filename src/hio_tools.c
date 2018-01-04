@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2016      Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2016-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -11,7 +11,8 @@
 
 #include "hio_internal.h"
 
-int hio_dataset_dump (const char *data_roots, const char *context_name, const char *dataset_name, int64_t dataset_id, uint32_t flags, int rank, FILE *fh) {
+int hio_dataset_dump (const char *data_roots, const char *context_name, const char *dataset_name, const int64_t dataset_id, uint32_t flags, int rank, FILE *fh) {
+  hio_dataset_list_t *list;
   hio_context_t context;
   int rc;
 
@@ -38,14 +39,24 @@ int hio_dataset_dump (const char *data_roots, const char *context_name, const ch
       break;
     }
 
-    for (int i = 0 ; i < context->c_mcount ; ++i) {
-      hio_module_t *module = context->c_modules[i];
+    list = hioi_dataset_list_get (context, dataset_name, dataset_id < 0 ? dataset_id : HIO_DATASET_ID_ANY);
+    if (NULL == list) {
+      break;
+    }
 
-      rc = module->dataset_dump (module, dataset_name, dataset_id, flags, rank, fh);
-      if (HIO_SUCCESS != rc) {
-        hioi_log (context, HIO_VERBOSE_WARN, "dataset_dump: error dumping dataset(s) from data root %s\n", module->data_root);
+    for (size_t i = 0 ; i < list->header_count ; ++i) {
+      if (HIO_DATASET_ID_ANY == dataset_id || dataset_id == list->headers[i].ds_id) {
+        hio_module_t *module = list->headers[i].module;
+        (void) module->dataset_dump (module, list->headers + i, flags, rank, fh);
+
+        if (HIO_DATASET_ID_NEWEST == dataset_id || HIO_DATASET_ID_HIGHEST == dataset_id) {
+          /* if only the highest or newest id is request we are done */
+          break;
+        }
       }
     }
+
+    hioi_dataset_list_release (list);
   } while (0);
 
   (void) hio_fini (&context);
