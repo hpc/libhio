@@ -116,6 +116,8 @@ static int builtin_posix_dataset_path (struct hio_module_t *module, builtin_posi
   } else if (HIO_DIR_MODE_SINGLE == dmode) {
     rc = asprintf (path, "%s/%s.%s.%" PRId64 ".hiod", module->data_root, hioi_object_identifier(context), name,
                    set_id);
+  } else {
+    return HIO_ERROR;
   }
 
   return (0 > rc) ? hioi_err_errno (errno) : HIO_SUCCESS;
@@ -254,7 +256,7 @@ static int builtin_posix_module_dataset_list_hierarchical (struct hio_module_t *
   int num_set_ids = list->header_count, set_id_index = list->header_count;
   hio_manifest_t manifest = NULL;
   struct dirent *dp;
-  char *path = NULL, *tmp;
+  char *path = NULL;
   DIR *dir = NULL;
   int rc;
 
@@ -285,17 +287,15 @@ static int builtin_posix_module_dataset_list_hierarchical (struct hio_module_t *
       break;
     }
 
-    tmp = realloc (list->headers, (num_set_ids + list->header_count) * sizeof (list->headers[0]));
-    if (NULL == tmp) {
-      num_set_ids = list->header_count;
+    rc = hioi_dataset_list_resize (list, num_set_ids);
+    if (HIO_SUCCESS != rc) {
       break;
     }
-    list->headers = (hio_dataset_header_t *) tmp;
 
     rewinddir (dir);
 
     while (NULL != (dp = readdir (dir))) {
-      char *dataset_path;
+      char *dataset_path, *tmp;
       int64_t ds_id;
 
       /* verify that this is a valid dataset. at this time all identifiers MUST be unsigned integers */
@@ -323,27 +323,28 @@ static int builtin_posix_module_dataset_list_hierarchical (struct hio_module_t *
 
   free (path);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_list_hierarchical: found %d datasets", num_set_ids - list->header_count);
-
-  list->header_count = num_set_ids;
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_list_hierarchical: found %ld datasets", (long) (num_set_ids - list->header_count));
 
   return rc;
 }
 
 static int builtin_posix_scan_single_fname (const char *context_name, const char *name, const char *fname_in,
                                             char dataset_name[], size_t dataset_name_len, int64_t *ds_id) {
-  char *fname = strdup(fname_in), *fname_tmp, *id = NULL, *ftype;
+  char *fname, *fname_tmp, *id = NULL, *ftype;
   size_t context_name_len = strlen (context_name), match_name_len;
 
   /* this function does not simply tokenize the path as it is valid for both the context name and dataset name
    * to contain .'s */
-  if (0 != strncmp (fname, context_name, context_name_len)) {
+  if (0 != strncmp (fname_in, context_name, context_name_len)) {
     return HIO_ERR_NOT_FOUND;
   }
+
+  fname = strdup (fname_in);
 
   fname_tmp = fname + context_name_len + 1;
   ftype = strstr (fname_tmp, ".hiod");
   if (NULL == ftype) {
+    free (fname);
     return HIO_ERR_NOT_FOUND;
   }
 
@@ -363,6 +364,7 @@ static int builtin_posix_scan_single_fname (const char *context_name, const char
   }
 
   if (NULL == id) {
+    free (fname);
     return HIO_ERR_NOT_FOUND;
   }
 
@@ -372,6 +374,7 @@ static int builtin_posix_scan_single_fname (const char *context_name, const char
 
   if (name) {
     if (0 != strcmp (name, fname_tmp)) {
+      free (fname);
       return HIO_ERR_NOT_FOUND;
     }
   }
@@ -379,6 +382,7 @@ static int builtin_posix_scan_single_fname (const char *context_name, const char
   if (dataset_name) {
     match_name_len = strlen (fname_tmp);
     if (match_name_len > dataset_name_len - 1) {
+      free (fname);
       return HIO_ERR_TRUNCATE;
     }
 
@@ -394,9 +398,7 @@ static int builtin_posix_module_dataset_list_single (struct hio_module_t *module
                                                      int priority, hio_dataset_list_t *list) {
   hio_context_t context = module->context;
   const char *context_name = hioi_object_identifier (&context->c_object);
-  const size_t context_name_len = strlen (context_name);
-  const size_t name_len = name ? strlen (name) : 0;
-  char ds_name_buffer[HIO_DATASET_NAME_MAX], *tmp;
+  char ds_name_buffer[HIO_DATASET_NAME_MAX];
   int num_set_ids = list->header_count, set_id_index = list->header_count;
   hio_manifest_t manifest = NULL;
   struct dirent *dp;
@@ -426,12 +428,10 @@ static int builtin_posix_module_dataset_list_single (struct hio_module_t *module
       break;
     }
 
-    tmp = realloc (list->headers, num_set_ids * sizeof (list->headers[0]));
-    if (NULL == tmp) {
-      num_set_ids = list->header_count;
+    rc = hioi_dataset_list_resize (list, num_set_ids);
+    if (HIO_SUCCESS != rc) {
       break;
     }
-    list->headers = (hio_dataset_header_t *) tmp;
 
     rewinddir (dir);
 
@@ -457,9 +457,7 @@ static int builtin_posix_module_dataset_list_single (struct hio_module_t *module
     closedir (dir);
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_list_single: found %d datasets", num_set_ids - list->header_count);
-
-  list->header_count = num_set_ids;
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "posix:dataset_list_single: found %ld datasets", (long)(num_set_ids - list->header_count));
 
   return rc;
 }
@@ -1148,6 +1146,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   if (0 != context->c_rank) {
     /* now that we have the configuration we can get the correct path on non-zero ranks */
     free (posix_dataset->base_path);
+    posix_dataset->base_path = NULL;
 
     builtin_posix_dataset_path (module, posix_dataset->ds_dmode, &posix_dataset->base_path,
                                 hioi_object_identifier (posix_dataset), posix_dataset->base.ds_id);
@@ -1506,7 +1505,6 @@ static int builtin_posix_module_element_path_simple (builtin_posix_module_t *pos
 
   do {
     size_t cur_length;
-    long value = -1;
 
     *(tmp++) = '\0';
     cur_length = strlen (cur);
@@ -1532,10 +1530,6 @@ static int builtin_posix_module_element_path_simple (builtin_posix_module_t *pos
     }
 
     prefix_length = strspn (tmp, "0123456789");
-    if (prefix_length) {
-      value = strtol (tmp, NULL, 10);
-    }
-
     if (prefix_length > 29) {
       free (simple_filename);
       return -1;
@@ -1546,7 +1540,7 @@ static int builtin_posix_module_element_path_simple (builtin_posix_module_t *pos
 
     if ('c' == tmp[0] || 'd' == tmp[0] || 'e' == tmp[0]) {
       size_t append_length;
-      const char *append;
+      const char *append = NULL;
 
       switch (tmp[0]) {
       case 'c':
@@ -1558,6 +1552,13 @@ static int builtin_posix_module_element_path_simple (builtin_posix_module_t *pos
       case 'e':
         append = hioi_object_identifier(element);
         break;
+      }
+
+      /* silence static analysis warning */
+      if (NULL == append) {
+        assert (0);
+        free (simple_filename);
+        return -1;
       }
 
       append_length = strlen (append);
@@ -1598,6 +1599,8 @@ static int builtin_posix_module_element_path_simple (builtin_posix_module_t *pos
     cur++;
   } while (NULL != (tmp = strchr (cur, '%')));
 
+  free (simple_filename);
+
   *path_out = strdup (new_path);
 
   return current_length;
@@ -1625,12 +1628,12 @@ static int builtin_posix_module_element_open_basic (builtin_posix_module_t *posi
   }
 
   if (F_OK != access (path, R_OK) && !(HIO_FLAG_WRITE & posix_dataset->base.ds_flags)) {
+    /* fall back on old naming scheme */
+    free (path);
+
     if (posix_dataset->ds_simple_layout) {
       return HIO_ERR_NOT_FOUND;
     }
-
-    /* fall back on old naming scheme */
-    free (path);
 
     if (HIO_SET_ELEMENT_UNIQUE == posix_dataset->base.ds_mode) {
       rc = asprintf (&path, "%s/element_data.%s.%08d", posix_dataset->base_path, element_name,
@@ -1894,9 +1897,9 @@ static int builtin_posix_element_translate (builtin_posix_module_t *posix_module
 }
 
 static bool builtin_posix_stripe_lock (hio_element_t element, int stripe_id) {
+#if 0
   hio_dataset_t dataset = hioi_element_dataset (element);
 
-#if 0
   if (dataset->ds_shared_control) {
     /* locally lock the stripe */
     pthread_mutex_lock (&dataset->ds_shared_control->s_stripes[stripe_id].s_mutex);

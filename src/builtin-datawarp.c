@@ -204,7 +204,6 @@ static int builtin_datawarp_revoke_stage (hio_module_t *module, const char *ds_n
   rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, hioi_object_identifier (context),
                  ds_name, ds_id);
   if (0 > rc) {
-    free (dataset_path);
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
@@ -254,8 +253,17 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
     char *dw_path;
 
     rc = asprintf (&dw_path, "%s/%s.hio/%s/%llu", module->data_root, hioi_object_identifier (context), name, set_id);
+    if (0 > rc) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
     do {
       rc = dw_query_directory_stage (dw_path, &complete, &pending, &deferred, &failed);
+      if (0 != rc) {
+        hioi_err_push (HIO_ERROR, &module->context->c_object, "error querying directory stage. got %d\n", rc);
+        return HIO_ERROR;
+      }
+
       if (!complete) {
         const struct timespec interval = {.tv_sec = 0, .tv_nsec = 1000000};
         nanosleep (&interval, NULL);
@@ -432,8 +440,8 @@ static inline int builtin_datawarp_set_output_striping (builtin_datawarp_module_
   /* see how large the typical file is. we will set the default stripe size
    * and count based on this information. */
   dh = opendir (data_path);
+  free (data_path);
   if (NULL == dh) {
-    free (data_path);
     return hioi_err_errno (errno);
   }
 
@@ -453,6 +461,13 @@ static inline int builtin_datawarp_set_output_striping (builtin_datawarp_module_
   }
 
   closedir (dh);
+
+  /* this should never happen. silence static analysis error */
+  if (0 == count) {
+    assert (0);
+
+    return HIO_ERROR;
+  }
 
   average_size = total_size / count;
 
@@ -479,12 +494,11 @@ static inline int builtin_datawarp_set_output_striping (builtin_datawarp_module_
   }
 
   if (fs_attr.fs_scount > fs_attr.fs_smax_count) {
-    hioi_log (context, HIO_VERBOSE_WARN, "requested stripe count exceeeds the maximum: requested = %"
-              PRIu64 ", max = %" PRIu64, fs_attr.fs_scount, fs_attr.fs_smax_count);
+    hioi_log (context, HIO_VERBOSE_WARN, "requested stripe count exceeeds the maximum: requested = %u"
+              ", max = %u", fs_attr.fs_scount, fs_attr.fs_smax_count);
     fs_attr.fs_scount = fs_attr.fs_smax_count;
   }
 
-  free (data_path);
   rc = asprintf (&data_path, "%s/data", pfs_path);
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
@@ -594,7 +608,6 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
       return HIO_ERROR;
     }
     free (pfs_path);
-    free (dataset_path);
 
     be_data = builtin_datawarp_get_dbd (dataset->ds_data);
     /* backend data should have created when this dataset was opened */
@@ -619,6 +632,8 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
                 "resident ids %d", rc, num_resident - 1);
     }
   }
+
+  free (dataset_path);
 
   return rc;
 }
@@ -682,7 +697,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
   }
 
   list = hioi_dataset_list_alloc ();
-  if (NULL == be_data || NULL == list) {
+  if (NULL == list) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 

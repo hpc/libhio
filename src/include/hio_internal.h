@@ -369,6 +369,14 @@ hio_dataset_list_t *hioi_dataset_list_alloc (void);
  */
 void hioi_dataset_list_release (hio_dataset_list_t *list);
 
+/**
+ * Resize a dataset list array
+ *
+ * @param[in] list        list to resize
+ * @param[in] new_count   new size for list array
+ */
+int hioi_dataset_list_resize (hio_dataset_list_t *list, size_t new_count);
+
 
 /**
  * Get a list of datasets from all data roots

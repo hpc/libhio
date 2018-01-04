@@ -527,6 +527,21 @@ static int hioi_dataset_header_compare_highest (const void *a, const void *b) {
   return ((headera->ds_id > headerb->ds_id) - (headera->ds_id < headerb->ds_id));
 }
 
+int hioi_dataset_list_resize (hio_dataset_list_t *list, size_t new_count) {
+  hio_dataset_header_t *tmp;
+
+  tmp = (hio_dataset_header_t *) realloc (list->headers, new_count * sizeof (*tmp));
+  if (NULL == tmp) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  list->header_count = new_count;
+  list->headers = tmp;
+
+  return HIO_SUCCESS;
+
+}
+
 int hioi_dataset_list_sort (hio_dataset_list_t *list, int64_t id) {
   int (*compar) (const void *, const void *);
 

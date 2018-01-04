@@ -18,7 +18,7 @@ static int hioi_dataset_open_last (hio_dataset_t dataset) {
   hio_dataset_list_t *list;
   int64_t id = dataset->ds_id;
   hio_module_t *module;
-  int rc;
+  int rc = HIO_ERR_NOT_FOUND;
 
   list = hioi_dataset_list_get (context, hioi_object_identifier (dataset), id);
   if (NULL == list) {
