@@ -1,7 +1,18 @@
 HIO NEWS
 ========
 
-Last updated 2017-03-16
+Last updated 2018-01-04
+
+Release hio.1.4.1.0-rc1
+
+This is a new release that adds support for importing files not written by
+libhio. This support can be enabled by setting the posix_simple_filename
+and posix_simple_import. This support is not enabled by default. This
+release additionally adds support for a new directory layout. The new
+layout creates a single directory in the data root instead of creating
+a hierarchical directory structure. This new support can be enabled by
+setting dataset_posix_directory_mode=single. The default directory
+structure has not changed but may change in the 1.5.0 release.
 
 Release hio.1.4.0.0
 
