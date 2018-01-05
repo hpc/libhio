@@ -561,6 +561,10 @@ static int builtin_posix_module_dataset_list (struct hio_module_t *module, const
   /* set the correct module pointer for this rank */
   for (int i = num_sets[0] ; i < list->header_count ; ++i) {
     list->headers[i].module = module;
+    if (0 != context->c_rank) {
+      /* dataset path pointer is not valid on non-zero ranks. it isn't needed on there ranks at this time. */
+      list->headers[i].ds_path = NULL;
+    }
   }
 
   return HIO_SUCCESS;
