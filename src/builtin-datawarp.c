@@ -259,6 +259,17 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
 
     do {
       rc = dw_query_directory_stage (dw_path, &complete, &pending, &deferred, &failed);
+      free (dw_path);
+      if (0 != rc) {
+        rc = asprintf (&dw_path, "%s/%s.%s.%" PRId64 ".hiod", module->data_root, hioi_object_identifier (context), name, set_id);
+        if (0 > rc) {
+          return HIO_ERR_OUT_OF_RESOURCE;
+        }
+
+        rc = dw_query_directory_stage (dw_path, &complete, &pending, &deferred, &failed);
+        free (dw_path);
+      }
+
       if (0 != rc) {
         hioi_err_push (HIO_ERROR, &module->context->c_object, "error querying directory stage. got %d\n", rc);
         return HIO_ERROR;
@@ -684,12 +695,10 @@ static int builtin_datawarp_component_fini (void) {
 static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_module) {
   hio_context_t context = datawarp_module->posix_module.base.context;
   builtin_datawarp_dataset_backend_data_t *be_data;
-  struct dirent context_entry, *tmp = NULL;
   hio_dataset_list_t *list = NULL;
   hio_dataset_data_t *ds_data;
   char *context_path;
-  DIR *context_dir;
-  int rc, count = 0;
+  int rc;
 
   if (0 != context->c_rank) {
     /* nothing to do */
@@ -711,7 +720,9 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
 
   hioi_dataset_list_sort (list, HIO_DATASET_ID_NEWEST);
 
-  for (int i = 0 ; i < count ; ++i) {
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found %d resident datasets", list->header_count);
+
+  for (int i = 0 ; i < list->header_count ; ++i) {
     int complete = 0, pending = 0, deferred = 0, failed = 0, stage_mode = HIO_DATAWARP_STAGE_MODE_DISABLE;
     hio_dataset_header_t *header = list->headers + i;
 
@@ -734,8 +745,8 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
       stage_mode = (deferred > 0) ? DW_STAGE_AT_JOB_END : DW_STAGE_IMMEDIATE;
     }
 
-    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%"PRIi64" with status "
-              "%d. stage mode %d", context_entry.d_name, header->ds_id, header->ds_status, stage_mode);
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%" PRIi64 " with status "
+              "%d. stage mode %d", header->ds_name, header->ds_id, header->ds_status, stage_mode);
 
     builtin_datawarp_add_resident (be_data, header->ds_id, stage_mode, true);
     rc = HIO_SUCCESS;
