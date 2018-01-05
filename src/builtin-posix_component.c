@@ -1253,6 +1253,8 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
     }
   }
 
+  dataset->ds_stat.s_ctime += hioi_gettime () - start;
+
 #if HIO_MPI_HAVE(3)
   /* release the shared state if it was allocated */
   (void) hioi_dataset_shared_fini (dataset);
@@ -1260,6 +1262,8 @@ static int builtin_posix_module_dataset_close (hio_dataset_t dataset) {
   /* release the dataset map if one was allocated */
   (void) hioi_dataset_map_release (dataset);
 #endif
+
+  (void) hioi_dataset_aggregate_statistics (dataset);
 
   if ((dataset->ds_flags & HIO_FLAG_WRITE) && !posix_dataset->ds_simple_omit_directory) {
     char *path;
@@ -1763,7 +1767,9 @@ static int builtin_posix_element_translate_strided (builtin_posix_module_t *posi
 
   if (file_id != file->f_bid || file->f_element != element) {
     if (file->f_bid >= 0) {
+      uint64_t start = hioi_gettime ();
       POSIX_TRACE_CALL(posix_dataset, hioi_file_close (file), "file_close", file->f_bid, 0);
+      posix_dataset->base.ds_stat.s_ctime += hioi_gettime () - start;
     }
     file->f_bid = -1;
 
@@ -1851,7 +1857,9 @@ static int builtin_posix_element_translate_opt (builtin_posix_module_t *posix_mo
 
   if (file_index != file->f_bid) {
     if (file->f_bid >= 0) {
+      uint64_t start = hioi_gettime ();
       POSIX_TRACE_CALL(posix_dataset, hioi_file_close (file), "file_close", file->f_bid, 0);
+      posix_dataset->base.ds_stat.s_ctime += hioi_gettime () - start;
     }
 
     file->f_bid = -1;

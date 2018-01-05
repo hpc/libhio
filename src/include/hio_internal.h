@@ -324,6 +324,18 @@ void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element);
  */
 int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data);
 
+/**
+ * Aggregate performance statistics on all processes
+ *
+ * @param[in] dataset      hio dataset
+ *
+ * This is a collective routine which aggregates all the statistics for the dataset. It
+ * should be called after all IO has completed (including flush and close) but before
+ * the dataset is serialized.
+ */
+int hioi_dataset_aggregate_statistics (hio_dataset_t dataset);
+
+
 /* context dataset persistent data functions */
 
 /**

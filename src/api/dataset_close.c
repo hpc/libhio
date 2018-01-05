@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -13,7 +13,6 @@
 
 int hio_dataset_close (hio_dataset_t dataset) {
   hio_dataset_data_t *ds_data;
-  uint64_t tmp[6];
   hio_context_t context;
   uint64_t rctime;
   int rc;
@@ -34,17 +33,11 @@ int hio_dataset_close (hio_dataset_t dataset) {
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Closing dataset %s::%" PRIu64,
             hioi_object_identifier (dataset), dataset->ds_id);
 
-  tmp[0] = dataset->ds_stat.s_bread;
-  tmp[1] = dataset->ds_stat.s_bwritten;
-  tmp[2] = dataset->ds_stat.s_rtime;
-  tmp[3] = dataset->ds_stat.s_wtime;
-  tmp[4] = atomic_load(&dataset->ds_stat.s_rcount);
-  tmp[5] = atomic_load(&dataset->ds_stat.s_wcount);
+  /* now actually close the dataset and write out the manifest */
+  rc = hioi_dataset_close_internal (dataset);
 
   context->c_bread += dataset->ds_stat.s_bread;
   context->c_bwritten += dataset->ds_stat.s_bwritten;
-
-  rc = hioi_dataset_close_internal (dataset);
 
   rctime = hioi_gettime ();
 
@@ -65,25 +58,13 @@ int hio_dataset_close (hio_dataset_t dataset) {
       ds_data->dd_average_write_time += (uint64_t) ((float) (rctime - dataset->ds_rotime) * 0.2);
     }
   }
-#if HIO_MPI_HAVE(1)
-  if (1 != context->c_size) {
-    MPI_Reduce (0 == context->c_rank ? MPI_IN_PLACE : tmp, tmp, 6, MPI_UINT64_T, MPI_SUM, 0, context->c_comm);
-  }
-#endif
-
-  /* store global statistics */
-  dataset->ds_stat.s_abread = tmp[0];
-  dataset->ds_stat.s_abwritten = tmp[1];
-  dataset->ds_stat.s_artime = tmp[2];
-  dataset->ds_stat.s_awtime = tmp[3];
-  dataset->ds_stat.s_arcount = tmp[4];
-  dataset->ds_stat.s_awcount = tmp[5];
 
   if (0 == context->c_rank && context->c_print_stats) {
     printf ("hio.dataset.stat %s.%s.%" PRIu64 " RW_Bytes %" PRIu64 " B %" PRIu64 " B, RW_Ops %" PRIu64 " ops %" PRIu64 " ops, "
-            "RW_API_Time %" PRIu64 " us %" PRIu64 " us, Walltime %" PRIu64 " us\n", hioi_object_identifier (&context->c_object),
-            hioi_object_identifier (&dataset->ds_object), dataset->ds_id, tmp[0], tmp[1], tmp[4], tmp[5], tmp[2],
-            tmp[3], rctime - dataset->ds_rotime);
+            "RW_API_Time %" PRIu64 " us %" PRIu64 " us, Close_Time: %" PRIu64 " us, Walltime %" PRIu64 " us\n",
+            hioi_object_identifier (&context->c_object), hioi_object_identifier (&dataset->ds_object), dataset->ds_id,
+            dataset->ds_stat.s_abread, dataset->ds_stat.s_abwritten, dataset->ds_stat.s_arcount, dataset->ds_stat.s_awcount,
+            dataset->ds_stat.s_artime, dataset->ds_stat.s_awtime, dataset->ds_stat.s_actime, rctime - dataset->ds_rotime);
   }
 
   /* reset the id to the id originally requested */
