@@ -161,6 +161,9 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset instance", 0);
 
 
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_ctime, "close_time",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Time spent closing file(s)", 0);
+
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_abread, "aggregate_bytes_read",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset", 0);
 
@@ -178,6 +181,9 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
 
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_awcount, "aggregate_write_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_actime, "aggregate_close_time",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent closing file(s)", 0);
 
   hioi_list_init (new_dataset->ds_elist);
 
@@ -611,6 +617,37 @@ hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, const char *da
   }
 
   return list;
+}
+
+int hioi_dataset_aggregate_statistics (hio_dataset_t dataset) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
+  uint64_t tmp[7];
+
+  /* collect statistics now so they can be included in the manifest */
+  tmp[0] = dataset->ds_stat.s_bread;
+  tmp[1] = dataset->ds_stat.s_bwritten;
+  tmp[2] = dataset->ds_stat.s_rtime;
+  tmp[3] = dataset->ds_stat.s_wtime;
+  tmp[4] = atomic_load(&dataset->ds_stat.s_rcount);
+  tmp[5] = atomic_load(&dataset->ds_stat.s_wcount);
+  tmp[6] = dataset->ds_stat.s_ctime;
+
+#if HIO_MPI_HAVE(1)
+  if (1 != context->c_size) {
+    MPI_Allreduce (MPI_IN_PLACE, tmp, 7, MPI_UINT64_T, MPI_SUM, context->c_comm);
+  }
+#endif
+
+  /* store global statistics */
+  dataset->ds_stat.s_abread = tmp[0];
+  dataset->ds_stat.s_abwritten = tmp[1];
+  dataset->ds_stat.s_artime = tmp[2];
+  dataset->ds_stat.s_awtime = tmp[3];
+  dataset->ds_stat.s_arcount = tmp[4];
+  dataset->ds_stat.s_awcount = tmp[5];
+  dataset->ds_stat.s_actime = tmp[6];
+
+  return HIO_SUCCESS;
 }
 
 #endif
