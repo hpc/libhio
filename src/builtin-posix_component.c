@@ -1115,8 +1115,7 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
   if (dataset->ds_flags & HIO_FLAG_TRUNC) {
     /* blow away the existing dataset */
     if (0 == context->c_rank) {
-      (void) builtin_posix_module_dataset_unlink (module, hioi_object_identifier(dataset),
-                                                  dataset->ds_id);
+      (void) module->dataset_unlink (module, hioi_object_identifier(dataset), dataset->ds_id);
     }
   }
 
