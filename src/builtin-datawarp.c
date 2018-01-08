@@ -172,9 +172,8 @@ static int builtin_datawarp_revoke_stage (hio_module_t *module, const char *ds_n
   char *dataset_path, *pfs_path;
   int rc;
 
-  rc = asprintf (&dataset_path, "%s/%s.hio/%s/%llu", data_root, hioi_object_identifier (context),
-                 ds_name, ds_id);
-  if (0 > rc) {
+  rc = builtin_posix_dataset_existing_path (module, &dataset_path, module->data_root, ds_name, ds_id);
+  if (HIO_SUCCESS != rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
@@ -201,10 +200,9 @@ static int builtin_datawarp_revoke_stage (hio_module_t *module, const char *ds_n
   (void) datawarp_module->posix_unlink (module, ds_name, ds_id);
 
   /* remove created directories on pfs */
-  rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, hioi_object_identifier (context),
-                 ds_name, ds_id);
-  if (0 > rc) {
-    return HIO_ERR_OUT_OF_RESOURCE;
+  rc = builtin_posix_dataset_existing_path (module, &pfs_path, datawarp_module->pfs_path, ds_name, ds_id);
+  if (HIO_SUCCESS != rc) {
+    return rc;
   }
 
   /* ignore failure. if the directory is not empty then we shouldn't be removing it */
@@ -252,24 +250,13 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
     int complete = 0, pending, deferred, failed;
     char *dw_path;
 
-    rc = asprintf (&dw_path, "%s/%s.hio/%s/%llu", module->data_root, hioi_object_identifier (context), name, set_id);
-    if (0 > rc) {
-      return HIO_ERR_OUT_OF_RESOURCE;
-    }
-
     do {
-      rc = dw_query_directory_stage (dw_path, &complete, &pending, &deferred, &failed);
-      free (dw_path);
-      if (0 != rc) {
-        rc = asprintf (&dw_path, "%s/%s.%s.%" PRId64 ".hiod", module->data_root, hioi_object_identifier (context), name, set_id);
-        if (0 > rc) {
-          return HIO_ERR_OUT_OF_RESOURCE;
-        }
-
-        rc = dw_query_directory_stage (dw_path, &complete, &pending, &deferred, &failed);
-        free (dw_path);
+      rc = builtin_posix_dataset_existing_path (module, &dw_path, module->data_root, name, set_id);
+      if (HIO_SUCCESS != rc) {
+        return rc;
       }
 
+      rc = dw_query_directory_stage (dw_path, &complete, &pending, &deferred, &failed);
       if (0 != rc) {
         hioi_err_push (HIO_ERROR, &module->context->c_object, "error querying directory stage. got %d\n", rc);
         return HIO_ERROR;
@@ -566,11 +553,11 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
 
     /* data write is complete. start staging the dataset out to the parallel file system */
 
-    rc = asprintf (&pfs_path, "%s/%s.hio/%s/%llu", datawarp_module->pfs_path, hioi_object_identifier(context),
-                   hioi_object_identifier(dataset), dataset->ds_id);
-    if (0 > rc) {
+    rc = builtin_posix_dataset_path_data_root (&posix_module->base, posix_dataset->ds_dmode, &pfs_path, datawarp_module->pfs_path,
+                                               hioi_object_identifier(dataset), dataset->ds_id);
+    if (HIO_SUCCESS != rc) {
       free (dataset_path);
-      return HIO_ERR_OUT_OF_RESOURCE;
+      return rc;
     }
 
     if (HIO_DATAWARP_STAGE_MODE_AUTO == datawarp_dataset->stage_mode) {

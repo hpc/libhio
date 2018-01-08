@@ -105,22 +105,45 @@ static void builtin_posix_trace (builtin_posix_module_dataset_t *posix_dataset, 
     builtin_posix_trace ((ds), e, v, v2, _start, _stop);        \
   } while (0)
 
-static int builtin_posix_dataset_path (struct hio_module_t *module, builtin_posix_dataset_dmode_t dmode, char **path,
-                                       const char *name, uint64_t set_id) {
+int builtin_posix_dataset_path_data_root (struct hio_module_t *module, builtin_posix_dataset_dmode_t dmode, char **path,
+                                          const char *data_root, const char *name, uint64_t set_id) {
   hio_context_t context = module->context;
   int rc;
 
   if (HIO_DIR_MODE_HIERARCHICAL == dmode) {
-    rc = asprintf (path, "%s/%s.hio/%s/%" PRId64, module->data_root, hioi_object_identifier(context), name,
+    rc = asprintf (path, "%s/%s.hio/%s/%" PRId64, data_root, hioi_object_identifier(context), name,
                    set_id);
   } else if (HIO_DIR_MODE_SINGLE == dmode) {
-    rc = asprintf (path, "%s/%s.%s.%" PRId64 ".hiod", module->data_root, hioi_object_identifier(context), name,
+    rc = asprintf (path, "%s/%s.%s.%" PRId64 ".hiod", data_root, hioi_object_identifier(context), name,
                    set_id);
   } else {
     return HIO_ERROR;
   }
 
   return (0 > rc) ? hioi_err_errno (errno) : HIO_SUCCESS;
+}
+
+static int builtin_posix_dataset_path (struct hio_module_t *module, builtin_posix_dataset_dmode_t dmode, char **path,
+                                       const char *name, uint64_t set_id) {
+  return builtin_posix_dataset_path_data_root (module, dmode, path, module->data_root, name, set_id);
+}
+
+int builtin_posix_dataset_existing_path (struct hio_module_t *module, char **path, const char *data_root, const char *name, uint64_t set_id) {
+  hio_context_t context = module->context;
+  int rc;
+
+  rc = builtin_posix_dataset_path_data_root (module, HIO_DIR_MODE_HIERARCHICAL, path, data_root, name, set_id);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  if (!access (*path, R_OK)) {
+    return HIO_SUCCESS;
+  }
+
+  free (*path);
+
+  return builtin_posix_dataset_path_data_root (module, HIO_DIR_MODE_SINGLE, path, data_root, name, set_id);
 }
 
 static int builtin_posix_create_dataset_dirs (builtin_posix_module_t *posix_module, builtin_posix_module_dataset_t *posix_dataset) {
