@@ -105,4 +105,9 @@ extern hio_component_t builtin_posix_component;
 int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name,
                                                 int priority, hio_dataset_list_t *list);
 
+int builtin_posix_dataset_existing_path (struct hio_module_t *module, char **path, const char *data_root,
+                                         const char *name, uint64_t set_id);
+int builtin_posix_dataset_path_data_root (struct hio_module_t *module, builtin_posix_dataset_dmode_t dmode, char **path,
+                                          const char *data_root, const char *name, uint64_t set_id);
+
 #endif /* BUILTIN_POSIX_COMPONENT_H */
