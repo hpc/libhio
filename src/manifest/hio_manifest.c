@@ -28,7 +28,7 @@
 
 #include <json.h>
 
-#define HIO_MANIFEST_VERSION "3.0"
+#define HIO_MANIFEST_VERSION "3.1"
 #define HIO_MANIFEST_COMPAT  "3.0"
 
 /* manifest helper functions */
@@ -156,6 +156,37 @@ static int hioi_manifest_save_vars (json_object *top, const char *name, hio_var_
     hio_var_t *var = var_array->vars + i;
     const char *name = var->var_name;
 
+    if (var->var_enum) {
+      uint64_t value;
+
+      switch (var->var_type) {
+      case HIO_CONFIG_TYPE_INT32:
+        value = (uint64_t) var->var_storage->int32val;
+        break;
+      case HIO_CONFIG_TYPE_INT64:
+        value = var->var_storage->int64val;
+        break;
+      case HIO_CONFIG_TYPE_UINT32:
+        value = var->var_storage->uint32val;
+        break;
+      case HIO_CONFIG_TYPE_UINT64:
+        value = var->var_storage->uint64val;
+        break;
+      default:
+        /* XXX -- If this assert is hit then either a new type was added or it was a developer error */
+        assert (0);
+      }
+
+      for (int i = 0 ; i < var->var_enum->count ; ++i) {
+        if (value == var->var_enum->values[i].value) {
+          hioi_manifest_set_string (object, name, var->var_enum->values[i].string_value);
+          break;
+        }
+      }
+
+      continue;
+    }
+
     switch (var->var_type) {
     case HIO_CONFIG_TYPE_INT32:
       hioi_manifest_set_signed_number (object, name, var->var_storage->int32val);
@@ -173,7 +204,10 @@ static int hioi_manifest_save_vars (json_object *top, const char *name, hio_var_
       hioi_manifest_set_string (object, name, var->var_storage->boolval ? "true" : "false");
       break;
     case HIO_CONFIG_TYPE_STRING:
-      hioi_manifest_set_string (object, name, var->var_storage->strval);
+      if (var->var_storage->strval) {
+        /* only save the string if it has been set to something */
+        hioi_manifest_set_string (object, name, var->var_storage->strval);
+      }
       break;
     case HIO_CONFIG_TYPE_FLOAT:
       hioi_manifest_set_double (object, name, var->var_storage->doubleval);
@@ -206,6 +240,8 @@ static json_object *hio_manifest_generate_simple_3_0 (hio_dataset_t dataset) {
   } else {
     hioi_manifest_set_string (top, HIO_MANIFEST_KEY_DATASET_MODE, "shared");
   }
+
+  hioi_manifest_set_string (top, HIO_MANIFEST_KEY_CONTEXT_NAME, hioi_object_identifier (&context->c_object));
 
   rc = hioi_manifest_save_vars (top, HIO_MANIFEST_KEY_CONFIG, &dataset->ds_object.configuration);
   if (HIO_SUCCESS != rc) {
@@ -771,6 +807,18 @@ static int hioi_manifest_parse_header_2_0 (hio_context_t context, hio_dataset_he
   }
 
   strncpy (header->ds_name, tmp_string, sizeof (header->ds_name));
+
+  rc = hioi_manifest_get_string (object, HIO_MANIFEST_KEY_CONTEXT_NAME, &tmp_string);
+  if (HIO_SUCCESS == rc) {
+    if (strlen (tmp_string) >= HIO_CONTEXT_NAME_MAX) {
+      /* dataset name is too long */
+      return HIO_ERR_BAD_PARAM;
+    }
+
+    strncpy (header->ds_context_name, tmp_string, sizeof (header->ds_context_name));
+  } else {
+    header->ds_context_name[0] = '\0';
+  }
 
   header->ds_mode = value;
 

@@ -818,6 +818,8 @@ struct hio_element {
 struct hio_dataset_header_t {
   /** associated module */
   struct hio_module_t *module;
+  /** context name */
+  char     ds_context_name[HIO_CONTEXT_NAME_MAX];
   /** dataset name */
   char     ds_name[HIO_DATASET_NAME_MAX];
   /** priority (to break ties) */
