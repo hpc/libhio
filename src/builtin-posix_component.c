@@ -35,10 +35,6 @@
 #include <sys/stat.h>
 #endif
 
-#if !defined(PATH_MAX)
-#define PATH_MAX 2048
-#endif
-
 static hio_var_enum_t hioi_dataset_lock_strategies = {
   .count = 4,
   .values = (hio_var_enum_value_t []){
@@ -2236,6 +2232,14 @@ static int builtin_posix_module_fini (struct hio_module_t *module) {
   return HIO_SUCCESS;
 }
 
+bool builtin_posix_module_compare (hio_module_t *module, const char *data_root) {
+  if (0 == strncasecmp (data_root, "posix:", 6)) {
+    data_root += 6;
+  }
+
+  return 0 == strcmp (module->data_root, data_root);
+}
+
 hio_module_t builtin_posix_module_template = {
   .dataset_open   = builtin_posix_module_dataset_open,
   .dataset_unlink = builtin_posix_module_dataset_unlink,
@@ -2244,6 +2248,7 @@ hio_module_t builtin_posix_module_template = {
 
   .dataset_list   = builtin_posix_module_dataset_list,
   .dataset_dump   = builtin_posix_module_dataset_dump,
+  .compare        = builtin_posix_module_compare,
 
   .fini           = builtin_posix_module_fini,
   .version        = HIO_MODULE_VERSION_1,

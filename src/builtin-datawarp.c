@@ -44,6 +44,7 @@ typedef struct builtin_datawarp_module_t {
   hio_module_dataset_open_fn_t posix_open;
   hio_module_dataset_unlink_fn_t posix_unlink;
   hio_module_fini_fn_t posix_fini;
+  hio_module_compare_fn_t posix_compare;
   char *pfs_path;
 } builtin_datawarp_module_t;
 
@@ -744,6 +745,15 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
   return rc;
 }
 
+bool builtin_datawarp_module_compare (hio_module_t *module, const char *data_root) {
+  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
+  if (0 == strncasecmp("datawarp", data_root, 8) || 0 == strncasecmp("dw", data_root, 2)) {
+    return true;
+  }
+
+  return datawarp_module->posix_compare (module, data_root);
+}
+
 static int builtin_datawarp_component_query (hio_context_t context, const char *data_root,
                                              const char *next_data_root, hio_module_t **module) {
   builtin_datawarp_module_t *new_module;
@@ -816,9 +826,11 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
   new_module->posix_open = posix_module->dataset_open;
   new_module->posix_unlink = posix_module->dataset_unlink;
   new_module->posix_fini = posix_module->fini;
+  new_module->posix_compare = posix_module->compare;
 
   new_module->posix_module.base.dataset_open = builtin_datawarp_module_dataset_open;
   new_module->posix_module.base.dataset_unlink = builtin_datawarp_module_dataset_unlink;
+  new_module->posix_module.base.compare = builtin_datawarp_module_compare;
   new_module->posix_module.base.ds_object_size = sizeof (builtin_datawarp_module_dataset_t);
   new_module->posix_module.base.fini = builtin_datawarp_module_fini;
 

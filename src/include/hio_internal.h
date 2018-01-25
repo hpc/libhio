@@ -17,12 +17,11 @@
 #if !defined(HIO_INTERNAL_H)
 #define HIO_INTERNAL_H
 
-#include "hio_config.h"
 #include "hio_types.h"
+#include "hio_component.h"
 #include "hio_var.h"
 
 #include <stddef.h>
-#include <inttypes.h>
 
 #if defined(HAVE_SYS_TIME_H)
 #include <sys/time.h>
