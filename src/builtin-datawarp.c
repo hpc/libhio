@@ -165,120 +165,139 @@ static builtin_datawarp_dataset_backend_data_t *builtin_datawarp_get_dbd (hio_da
   return be_data;
 }
 
-static int builtin_datawarp_revoke_stage (hio_module_t *module, const char *ds_name, int64_t ds_id) {
+static int builtin_datawarp_revoke_stage (hio_module_t *module, hio_dataset_header_t *header) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_datawarp_dataset_backend_data_t *ds_data;
   hio_context_t context = module->context;
-  const char *data_root = module->data_root;
-  char *dataset_path, *pfs_path;
+  char *pfs_path, *last_slash, *tmp = header->ds_path;
   int rc;
 
-  rc = builtin_posix_dataset_existing_path (module, &dataset_path, module->data_root, ds_name, ds_id);
-  if (HIO_SUCCESS != rc) {
-    return HIO_ERR_OUT_OF_RESOURCE;
-  }
-
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: revoking end-of-job stage for datawarp dataset %s::%lld. "
-            "burst-buffer directory: %s", ds_name, ds_id, dataset_path);
-
-  /* revoke the end of job stage for the previous dataset */
-  rc = dw_stage_directory_out (dataset_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
-  if (0 != rc) {
-    hioi_err_push (HIO_ERROR, NULL, "builtin-datawarp/dataset_close: error revoking prior "
-                   "end-of-job stage of dataset %s::%lld. errno: %d", ds_name, ds_id, errno);
-
-    rc = access(dataset_path, R_OK | W_OK | X_OK);
-    hioi_log (context, HIO_VERBOSE_DEBUG_XLOW, "access(%s, R_OK|W_OK|X_OK) returns %d errno: %d",
-              dataset_path, rc, errno);
-
-    free (dataset_path);
+  last_slash = strrchr (header->ds_path, '/');
+  if (NULL == last_slash) {
+    /* should not happen */
     return HIO_ERROR;
   }
 
-  free (dataset_path);
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: revoking end-of-job stage for datawarp "
+            "dataset %s::%lld. burst-buffer directory: %s, pfs directory: %s/%s", header->ds_name, header->ds_id,
+            header->ds_path, datawarp_module->pfs_path, last_slash + 1);
 
-  /* remove the last end-of-job dataset from the burst buffer */
-  (void) datawarp_module->posix_unlink (module, ds_name, ds_id);
+  /* revoke the end of job stage for the previous dataset */
+  rc = dw_stage_directory_out (header->ds_path, NULL, DW_REVOKE_STAGE_AT_JOB_END);
+  if (0 != rc) {
+    hioi_err_push (HIO_ERROR, NULL, "builtin-datawarp/dataset_close: error revoking prior "
+                   "end-of-job stage of dataset %s::%lld. errno: %d", header->ds_name, header->ds_id, errno);
 
-  /* remove created directories on pfs */
-  rc = builtin_posix_dataset_existing_path (module, &pfs_path, datawarp_module->pfs_path, ds_name, ds_id);
-  if (HIO_SUCCESS != rc) {
-    return rc;
+    rc = access (header->ds_path, R_OK | W_OK | X_OK);
+    hioi_log (context, HIO_VERBOSE_DEBUG_XLOW, "access(%s, R_OK|W_OK|X_OK) returns %d errno: %d",
+              header->ds_path, rc, errno);
+
+    return HIO_ERROR;
   }
 
-  /* ignore failure. if the directory is not empty then we shouldn't be removing it */
-  (void) rmdir (pfs_path);
-  free (pfs_path);
-  errno = 0;
+  /* remove the last end-of-job dataset from the burst buffer */
+  (void) builtin_posix_unlink_dir (context, header);
+
+  rc = asprintf (&pfs_path, "%s/%s", datawarp_module->pfs_path, last_slash + 1);
+  if (0 >= rc) {
+    return HIO_ERR_OUT_OF_RESOURCE;
+  }
+
+  header->ds_path = pfs_path;
+
+  /* ignore error when removing a stage-out directory from the parallel file system */
+  (void) builtin_posix_unlink_dir (module->context, header);
+  header->ds_path = tmp;
 
   return HIO_SUCCESS;
+}
+
+static int buildin_datawarp_module_dataset_unlink_dir (struct hio_module_t *module, hio_dataset_header_t *header, int stage_mode) {
+  int complete = 0, pending, deferred, failed, rc;
+
+  switch (stage_mode) {
+  case DW_STAGE_IMMEDIATE:
+      do {
+        rc = dw_query_directory_stage (header->ds_path, &complete, &pending, &deferred, &failed);
+        if (0 != rc) {
+          hioi_err_push (HIO_ERROR, &module->context->c_object, "error querying directory stage. got %d\n", rc);
+          return HIO_ERROR;
+        }
+
+        if (!complete) {
+          nanosleep (&(struct timespec) {.tv_sec = 0, .tv_nsec = 1000000}, NULL);
+        }
+      } while (!complete);
+
+      /* fall through -- silence static analysis warnings */
+  case HIO_DATAWARP_STAGE_MODE_DISABLE:
+    return builtin_posix_unlink_dir (module->context, header);
+  default:
+    return builtin_datawarp_revoke_stage (module, header);
+  }
 }
 
 static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_datawarp_dataset_backend_data_t *be_data;
-  builtin_datawarp_resident_id_t *rid, *next;
+  builtin_datawarp_resident_id_t *rid = NULL, *next;
   hio_context_t context = module->context;
   hio_dataset_data_t *ds_data = NULL;
+  hio_dataset_list_t *list;
   int stage_mode, rc;
   bool found = false;
 
-  (void) hioi_dataset_data_lookup (context, name, &ds_data);
-  if (NULL == ds_data) {
-    return HIO_ERR_NOT_FOUND;
+  if (module->context->c_rank) {
+    return HIO_ERR_NOT_AVAILABLE;
   }
 
-  be_data = builtin_datawarp_get_dbd (ds_data);
-  if (NULL == be_data) {
-    return HIO_ERR_NOT_FOUND;
+  list = hioi_dataset_list_alloc ();
+  if (NULL == list) {
+    return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  hioi_list_foreach_safe (rid, next, be_data->resident_ids, builtin_datawarp_resident_id_t, dwrid_list) {
-    if (set_id == rid->dwrid_id) {
-      hioi_list_remove (rid, dwrid_list);
-      found = true;
+  do {
+    rc = builtin_posix_module_dataset_list_internal (&datawarp_module->posix_module.base, name, NULL, 0, list);
+    if (HIO_SUCCESS != rc) {
       break;
     }
-  }
 
-  if (!found) {
-    return HIO_ERR_NOT_FOUND;
-  }
+    rc = HIO_ERR_NOT_FOUND;
 
-  stage_mode = rid->dwrid_stage_mode;
+    (void) hioi_dataset_data_lookup (context, name, &ds_data);
+    if (NULL == ds_data) {
+      break;
+    }
 
-  if (DW_STAGE_IMMEDIATE == stage_mode) {
-    int complete = 0, pending, deferred, failed;
-    char *dw_path;
+    be_data = builtin_datawarp_get_dbd (ds_data);
+    if (NULL == be_data) {
+      break;
+    }
 
-    do {
-      rc = builtin_posix_dataset_existing_path (module, &dw_path, module->data_root, name, set_id);
-      if (HIO_SUCCESS != rc) {
-        return rc;
+    hioi_list_foreach_safe (rid, next, be_data->resident_ids, builtin_datawarp_resident_id_t, dwrid_list) {
+      if (set_id == rid->dwrid_id) {
+        hioi_list_remove (rid, dwrid_list);
+        found = true;
+        break;
       }
+    }
 
-      rc = dw_query_directory_stage (dw_path, &complete, &pending, &deferred, &failed);
-      if (0 != rc) {
-        hioi_err_push (HIO_ERROR, &module->context->c_object, "error querying directory stage. got %d\n", rc);
-        return HIO_ERROR;
+    if (!found) {
+      rid = NULL;
+      break;
+    }
+
+    for (size_t i = 0 ; i < list->header_count ; ++i) {
+      if (list->headers[i].ds_id == set_id) {
+        rc = buildin_datawarp_module_dataset_unlink_dir (module, list->headers + i, rid->dwrid_stage_mode);
       }
+    }
 
-      if (!complete) {
-        const struct timespec interval = {.tv_sec = 0, .tv_nsec = 1000000};
-        nanosleep (&interval, NULL);
-      }
-    } while (!complete);
+    free (rid);
+    --be_data->num_resident;
+  } while (0);
 
-    rc = datawarp_module->posix_unlink (module, name, set_id);
-  } else if (HIO_DATAWARP_STAGE_MODE_DISABLE == stage_mode) {
-    /* this dataset was detected at init time */
-    rc = datawarp_module->posix_unlink (module, name, set_id);
-  } else {
-    rc = builtin_datawarp_revoke_stage (module, name, set_id);
-  }
-
-  free (rid);
-  --be_data->num_resident;
+  hioi_dataset_list_release (list);
 
   return rc;
 }
@@ -333,6 +352,10 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
   builtin_posix_module_dataset_t *posix_dataset;
   int rc = HIO_SUCCESS, num_resident;
 
+  if (0 != strcmp (module->data_root, dataset->ds_data_root)) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp/dataset_open: opening dataset %s:%lu",
             hioi_object_identifier (dataset), (unsigned long) dataset->ds_id);
 
@@ -372,6 +395,10 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
       hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->stage_mode,
                        "datawarp_stage_mode", NULL, HIO_CONFIG_TYPE_INT32, &builtin_datawarp_stage_modes,
                        "Datawarp stage mode to use with this dataset instance", 0);
+
+      hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->pfs_path,
+                       "datawarp_stage_out_destination", NULL, HIO_CONFIG_TYPE_STRING, NULL,
+                       "Target directory for stage-out operations", 0);
 
       datawarp_dataset->keep_last = be_data->keep_last;
       hioi_config_add (context, &dataset->ds_object, &datawarp_dataset->keep_last,
@@ -529,7 +556,7 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
   builtin_datawarp_dataset_backend_data_t *be_data;
   mode_t pfs_mode = posix_module->access_mode;
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  char *dataset_path = NULL;
+  char *dataset_path = NULL, *pfs_path = NULL;
   int rc, stage_mode, num_resident;
 
   if (0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE)) {
@@ -541,26 +568,24 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
     }
   }
 
+
+  if (datawarp_module->pfs_path && 0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE) &&
+      HIO_DATAWARP_STAGE_MODE_DISABLE != datawarp_dataset->stage_mode) {
+    rc = builtin_posix_dataset_path_data_root (posix_dataset, &pfs_path, datawarp_module->pfs_path);
+    assert (HIO_SUCCESS == rc);
+  }
+
   /* close the dataset with the underlying posix module */
   rc = datawarp_dataset->posix_ds_close (dataset);
   if (HIO_SUCCESS != rc) {
     free (dataset_path);
+    free (pfs_path);
     return rc;
   }
 
   if (datawarp_module->pfs_path && 0 == context->c_rank && (dataset->ds_flags & HIO_FLAG_WRITE) &&
       HIO_DATAWARP_STAGE_MODE_DISABLE != datawarp_dataset->stage_mode) {
-    char *pfs_path;
-
     /* data write is complete. start staging the dataset out to the parallel file system */
-
-    rc = builtin_posix_dataset_path_data_root (&posix_module->base, posix_dataset->ds_dmode, &pfs_path, datawarp_module->pfs_path,
-                                               hioi_object_identifier(dataset), dataset->ds_id);
-    if (HIO_SUCCESS != rc) {
-      free (dataset_path);
-      return rc;
-    }
-
     if (HIO_DATAWARP_STAGE_MODE_AUTO == datawarp_dataset->stage_mode) {
       stage_mode = DW_STAGE_AT_JOB_END;
     } else {
@@ -644,8 +669,6 @@ static int builtin_datawarp_module_fini (struct hio_module_t *module) {
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Finalizing datawarp filesystem module for data root %s",
 	    module->data_root);
 
-  free (datawarp_module->pfs_path);
-
   if (datawarp_module->posix_fini) {
     /* posix fini will free the module so call this last */
     datawarp_module->posix_fini (&datawarp_module->posix_module.base);
@@ -700,7 +723,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
 
   /* use the internal version of the dataset list function since only the 0th rank
    * is processing the list */
-  rc = builtin_posix_module_dataset_list_internal (&datawarp_module->posix_module.base, NULL, 0, list);
+  rc = builtin_posix_module_dataset_list_internal (&datawarp_module->posix_module.base, NULL, NULL, 0, list);
   if (HIO_SUCCESS != rc || 0 == list->header_count) {
     hioi_dataset_list_release (list);
     return rc;
@@ -708,7 +731,8 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
 
   hioi_dataset_list_sort (list, HIO_DATASET_ID_NEWEST);
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found %d resident datasets", list->header_count);
+  hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found %lu resident datasets",
+            (unsigned long) list->header_count);
 
   for (int i = 0 ; i < list->header_count ; ++i) {
     int complete = 0, pending = 0, deferred = 0, failed = 0, stage_mode = HIO_DATAWARP_STAGE_MODE_DISABLE;
@@ -756,12 +780,23 @@ bool builtin_datawarp_module_compare (hio_module_t *module, const char *data_roo
 
 static int builtin_datawarp_component_query (hio_context_t context, const char *data_root,
                                              const char *next_data_root, hio_module_t **module) {
+  const char *dw_root;
   builtin_datawarp_module_t *new_module;
   hio_module_t *posix_module;
-  char *posix_data_root;
   int rc;
 
-  if (strncasecmp("datawarp", data_root, 8) && strncasecmp("dw", data_root, 2)) {
+  if (0 == strcmp (context->c_dw_root, "auto")) {
+    dw_root = getenv ("DW_JOB_STRIPED");
+    if (NULL == dw_root) {
+      hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: neither DW_JOB_STRIPED nor HIO_datawarp_root "
+                "set. disabling datawarp support%s", "");
+      return HIO_ERR_NOT_AVAILABLE;
+    }
+  } else {
+    dw_root = context->c_dw_root;
+  }
+
+  if (NULL == dw_root || (strncasecmp("datawarp", data_root, 8) && strncasecmp("dw", data_root, 2) && strcmp (dw_root, data_root))) {
     hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: module datawarp does not match for data "
               "root %s", data_root);
     return HIO_ERR_NOT_AVAILABLE;
@@ -777,39 +812,10 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: using datawarp without file staging support%s", "");
   }
 
-  if (NULL == context->c_dw_root) {
-    hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempted to use datawarp without specifying "
-              "the mount point of the datawarp file system%s", "");
-    return HIO_ERR_NOT_AVAILABLE;
-  }
-
-  /* get a builtin-posix module for interfacing with the burst buffer file system */
-  if (0 == strcmp (context->c_dw_root, "auto")) {
-    char *datawarp_tmp = getenv ("DW_JOB_STRIPED");
-
-    if (NULL == datawarp_tmp) {
-      hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: neither DW_JOB_STRIPED nor HIO_datawarp_root "
-                "set. disabling datawarp support%s", "");
-      return HIO_ERR_NOT_AVAILABLE;
-    }
-
-    posix_data_root = strdup (datawarp_tmp);
-    if (NULL == posix_data_root) {
-      return HIO_ERR_OUT_OF_RESOURCE;
-    }
-  } else {
-    rc = asprintf (&posix_data_root, "%s", context->c_dw_root);
-
-    if (0 > rc) {
-      return HIO_ERR_OUT_OF_RESOURCE;
-    }
-  }
-
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: using datawarp root: %s, pfs backing store: %s",
-            posix_data_root, next_data_root);
+            dw_root, next_data_root);
 
-  rc = builtin_posix_component.query (context, posix_data_root, NULL, &posix_module);
-  free (posix_data_root);
+  rc = builtin_posix_component.query (context, dw_root, NULL, &posix_module);
   if (HIO_SUCCESS != rc) {
     return rc;
   }

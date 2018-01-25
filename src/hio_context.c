@@ -31,7 +31,7 @@ static void hioi_context_release (hio_object_t object) {
   hio_context_t context = (hio_context_t) object;
 
   for (int i = 0 ; i < context->c_mcount ; ++i) {
-    context->c_modules[i]->fini (context->c_modules[i]);
+    hioi_module_release (context->c_modules[i]);
   }
 
   hioi_config_list_release (&context->c_fconfig);

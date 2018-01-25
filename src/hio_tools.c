@@ -39,7 +39,8 @@ int hio_dataset_dump (const char *data_roots, const char *context_name, const ch
       break;
     }
 
-    list = hioi_dataset_list_get (context, dataset_name, dataset_id < 0 ? dataset_id : HIO_DATASET_ID_ANY);
+    list = hioi_dataset_list_get (context, context->c_modules, context->c_mcount, dataset_name, NULL,
+                                  dataset_id < 0 ? dataset_id : HIO_DATASET_ID_ANY);
     if (NULL == list) {
       break;
     }

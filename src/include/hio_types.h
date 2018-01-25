@@ -708,6 +708,13 @@ struct hio_dataset {
   hio_dataset_map_t   ds_map;
 #endif
 
+  /** data root in use */
+  char               *ds_data_root;
+
+  /** backend-specific dataset location. on POSIX filesystems
+   * this is the dataset directory path */
+  char               *ds_uri;
+
   /** pointer to dataset shared control data */
   hio_shared_control_t *ds_shared_control;
   /** size of shared memory region */

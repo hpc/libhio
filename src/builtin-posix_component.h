@@ -32,6 +32,8 @@ typedef enum builtin_posix_dataset_dmode {
   HIO_DIR_MODE_HIERARCHICAL,
   /** use a single directory structure (context.dataset.id.hiod) */
   HIO_DIR_MODE_SINGLE,
+  /** use a single directory but let the user specify the path */
+  HIO_DIR_MODE_USER_SPECIFIED,
 } builtin_posix_dataset_dmode_t;
 
 /* data types */
@@ -102,12 +104,12 @@ typedef struct builtin_posix_module_dataset_t {
 
 extern hio_component_t builtin_posix_component;
 
-int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name,
+int builtin_posix_unlink_dir (hio_context_t context, const hio_dataset_header_t *header);
+
+int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name, const char *uri,
                                                 int priority, hio_dataset_list_t *list);
 
-int builtin_posix_dataset_existing_path (struct hio_module_t *module, char **path, const char *data_root,
-                                         const char *name, uint64_t set_id);
-int builtin_posix_dataset_path_data_root (struct hio_module_t *module, builtin_posix_dataset_dmode_t dmode, char **path,
-                                          const char *data_root, const char *name, uint64_t set_id);
+int builtin_posix_dataset_path_data_root (builtin_posix_module_dataset_t *posix_dataset, char **path,
+                                          const char *data_root);
 
 #endif /* BUILTIN_POSIX_COMPONENT_H */

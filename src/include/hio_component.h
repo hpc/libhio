@@ -72,7 +72,7 @@ typedef int
  * failed dataset identifiers.
  */
 typedef int
-(*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name,
+(*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name, const char *uri,
                                  int priority, struct hio_dataset_list_t *list);
 
 typedef int

@@ -27,10 +27,11 @@ extern hio_component_t builtin_datawarp_component;
 
 #define MAX_COMPONENTS 128
 
-static hio_component_t *hio_builtin_components[] = {&builtin_posix_component,
+static hio_component_t *hio_builtin_components[] = {
 #if HIO_USE_DATAWARP
                                                     &builtin_datawarp_component,
 #endif
+                                                    &builtin_posix_component,
                                                     NULL};
 
 static int hio_component_init_count = 0;
@@ -180,6 +181,17 @@ int hioi_component_fini (void) {
   return HIO_SUCCESS;
 }
 
+void hioi_module_retain (hio_module_t *module) {
+  (void) atomic_fetch_add (&module->ref_count, 1);
+}
+
+void hioi_module_release (hio_module_t *module) {
+  int ref_count = atomic_fetch_add (&module->ref_count, -1);
+  if (1 == ref_count) {
+    module->fini (module);
+  }
+}
+
 int hioi_component_query (hio_context_t context, const char *data_root, const char *next_data_root,
                           hio_module_t **module) {
   int rc;
@@ -189,6 +201,7 @@ int hioi_component_query (hio_context_t context, const char *data_root, const ch
 
     rc = component->query (context, data_root, next_data_root, module);
     if (HIO_SUCCESS == rc) {
+      atomic_init (&(*module)->ref_count, 1);
       return HIO_SUCCESS;
     }
   }
@@ -199,6 +212,7 @@ int hioi_component_query (hio_context_t context, const char *data_root, const ch
 
     rc = component->component->query (context, data_root, next_data_root, module);
     if (HIO_SUCCESS == rc) {
+      atomic_init (&(*module)->ref_count, 1);
       return HIO_SUCCESS;
     }
   }

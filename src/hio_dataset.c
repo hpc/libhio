@@ -135,11 +135,21 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                    "dataset_expected_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
                    "Expected global size of this dataset", 0);
 
+  /* default to automatic selection*/
+  new_dataset->ds_data_root = NULL;
+  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_data_root, "dataset_data_root",
+                   NULL, HIO_CONFIG_TYPE_STRING, NULL, "Data root in use on this dataset. When set before "
+                   "opening a dataset this value influences the search path for the dataset. Leave empty to "
+                   "automatically set", 0);
+
   /* default to a megabyte for the buffer size */
   new_dataset->ds_buffer_size = 1 << 20;
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_buffer_size,
                    "dataset_buffer_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
                    "Buffer size to use for aggregating read and write operations", 0);
+
+  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_uri, "dataset_uri",
+                   NULL, HIO_CONFIG_TYPE_STRING, NULL, "Backend-specific URI to the dataset", 0);
 
   /* set up performance variables */
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bread, "bytes_read",
@@ -243,6 +253,13 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
             "with backend module %p", dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags,
             (void *) module);
 
+  /* disable modification of the data root */
+  (void) hioi_config_set_readonly (&dataset->ds_object, "dataset_data_root", true);
+
+  if (NULL == dataset->ds_data_root) {
+    dataset->ds_data_root = strdup (module->data_root);
+  }
+
   /* Several things need to be done here:
    * 1) check if the user is requesting a specific dataset or the newest available,
    * 2) check if the dataset specified already exists in any module,
@@ -252,12 +269,16 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
   if (HIO_SUCCESS != rc) {
     hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%" PRIu64
               " on data root %s", dataset->ds_object.identifier, dataset->ds_id, module->data_root);
+    /* re-enable modification of the data root */
+    (void) hioi_config_set_readonly (&dataset->ds_object, "dataset_data_root", false);
     return rc;
   }
 
-  hioi_config_add (module->context, &dataset->ds_object, &module->data_root, "data_root",
-                   NULL, HIO_CONFIG_TYPE_STRING, NULL, "Data root in use on this dataset",
-                   HIO_VAR_FLAG_READONLY);
+  /* now lock-down the backend URI. users should not be trying to change this after a dataset is opened */
+  (void) hioi_config_set_readonly (&dataset->ds_object, "dataset_uri", true);
+
+  hioi_module_retain (module);
+  dataset->ds_module = module;
 
   if (NULL == dataset->ds_buffer.b_base) {
     /* if the backend did not already allocate a buffer then allocate it now */
@@ -303,6 +324,8 @@ int hioi_dataset_close_internal (hio_dataset_t dataset) {
 
   free (dataset->ds_buffer.b_base);
   dataset->ds_buffer.b_base = NULL;
+
+  hioi_module_release (dataset->ds_module);
 
   return rc;
 }
@@ -533,16 +556,44 @@ static int hioi_dataset_header_compare_highest (const void *a, const void *b) {
   return ((headera->ds_id > headerb->ds_id) - (headera->ds_id < headerb->ds_id));
 }
 
+static int hioi_dataset_header_compare_priority (const void *a, const void *b) {
+  const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
+  const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
+
+  return ((headera->ds_priority < headerb->ds_priority) - (headera->ds_priority > headerb->ds_priority));
+}
+
+void hioi_dataset_header_cleanup (hio_dataset_header_t *header) {
+  free (header->ds_path);
+  header->ds_path = NULL;
+}
+
 int hioi_dataset_list_resize (hio_dataset_list_t *list, size_t new_count) {
   hio_dataset_header_t *tmp;
 
-  tmp = (hio_dataset_header_t *) realloc (list->headers, new_count * sizeof (*tmp));
-  if (NULL == tmp) {
-    return HIO_ERR_OUT_OF_RESOURCE;
+  if (0 != new_count) {
+    /* cleanup any headers we may be deleting */
+    for (size_t i = new_count ; i < list->header_count ; ++i) {
+      hioi_dataset_header_cleanup (list->headers + i);
+    }
+
+    tmp = (hio_dataset_header_t *) realloc (list->headers, new_count * sizeof (*tmp));
+    if (NULL == tmp) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    if (new_count > list->header_count) {
+      memset (tmp + list->header_count, 0, (new_count - list->header_count) * sizeof (*tmp));
+    }
+
+    list->headers = tmp;
+  } else {
+    /* just release the list as it is not needed */
+    free (list->headers);
+    list->headers = NULL;
   }
 
   list->header_count = new_count;
-  list->headers = tmp;
 
   return HIO_SUCCESS;
 
@@ -555,11 +606,8 @@ int hioi_dataset_list_sort (hio_dataset_list_t *list, int64_t id) {
     compar = hioi_dataset_header_compare_newest;
   } else if (HIO_DATASET_ID_HIGHEST == id) {
     compar = hioi_dataset_header_compare_highest;
-  } else if (HIO_DATASET_ID_ANY == id) {
-    /* nothing to do */
-    return HIO_SUCCESS;
   } else {
-    return HIO_ERR_BAD_PARAM;
+    compar = hioi_dataset_header_compare_priority;
   }
 
   (void) qsort (list->headers, list->header_count, sizeof (list->headers[0]), compar);
@@ -572,15 +620,18 @@ hio_dataset_list_t *hioi_dataset_list_alloc (void) {
 }
 
 void hioi_dataset_list_release (hio_dataset_list_t *list) {
-  for (size_t i = 0 ; i < list->header_count ; ++i) {
-    free (list->headers[i].ds_path);
+  if (NULL == list) {
+    return;
   }
 
-  free (list->headers);
+  /* release list contents and header array */
+  (void) hioi_dataset_list_resize (list, 0);
+
   free (list);
 }
 
-hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, const char *dataset_name, int64_t sort_key)
+hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, hio_module_t **modules, size_t module_count,
+                                           const char *dataset_name, const char *uri, int64_t sort_key)
 {
   hio_dataset_list_t *list;
   int rc;
@@ -590,13 +641,11 @@ hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, const char *da
     return NULL;
   }
 
-  for (int i = 0 ; i < context->c_mcount ; ++i) {
-    hio_module_t *module = context->c_modules[i];
-
-    rc = module->dataset_list (module, dataset_name, i, list);
+  for (size_t i = 0 ; i < module_count ; ++i) {
+    rc = modules[i]->dataset_list (modules[i], dataset_name, uri, i, list);
     if (HIO_SUCCESS != rc && HIO_ERR_NOT_FOUND != rc) {
       hioi_err_push (rc, &context->c_object, "hioi_dataset_get_list: error listing datasets on data root %s",
-                     module->data_root);
+                     modules[i]->data_root);
     }
   }
 

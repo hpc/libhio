@@ -396,12 +396,21 @@ void hioi_dataset_list_release (hio_dataset_list_t *list);
  */
 int hioi_dataset_list_resize (hio_dataset_list_t *list, size_t new_count);
 
+/**
+ * Clean up the memory associated with a dataset header
+ *
+ * @param[in] header   dataset header pointer
+ */
+void hioi_dataset_header_cleanup (hio_dataset_header_t *header);
 
 /**
  * Get a list of datasets from all data roots
  *
  * @param[in] context      libhio context object
+ * @param[in] modules      array of pointers to libhio modules
+ * @param[in] module_count number of modules in the module array
  * @param[in] dataset_name data set name to list (may be NULL)
+ * @param[in] uri          backend specific uri (may be NULL)
  * @param[in] sort_key     sort key to use (see hio.h)
  *
  * @returns hio list object on success
@@ -410,7 +419,8 @@ int hioi_dataset_list_resize (hio_dataset_list_t *list, size_t new_count);
  * This functions lists all the available (and no so available) datasets on the current
  * context. The returned list must be freed using hioi_dataset_list_release().
  */
-hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, const char *dataset_name, int64_t sort_key);
+hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, hio_module_t **modules, size_t module_count,
+                                           const char *dataset_name, const char *uri, int64_t sort_key);
 
 /* element functions */
 
