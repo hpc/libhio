@@ -64,14 +64,23 @@ static herr_t H5FD_hio_query(const H5FD_t *_f1, unsigned long *flags);
 static haddr_t H5FD_hio_get_eoa(const H5FD_t *_file, H5FD_mem_t type);
 static herr_t H5FD_hio_set_eoa(H5FD_t *_file, H5FD_mem_t type, haddr_t addr);
 static herr_t H5FD_hio_set_eof(H5FD_hio_t *file);
-static haddr_t H5FD_hio_get_eof(const H5FD_t *_file);
 static herr_t  H5FD_hio_get_handle(H5FD_t *_file, hid_t H5_ATTR_UNUSED fapl, void** file_handle);
 static herr_t H5FD_hio_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
             size_t size, void *buf);
 static herr_t H5FD_hio_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
             size_t size, const void *buf);
-static herr_t H5FD_hio_flush(H5FD_t *_file, hid_t dxpl_id, unsigned closing);
 static herr_t H5FD_hio_haddr_to_HIOOff(haddr_t addr, off_t *hio_off);
+#if H5_VERSION_GE(1,10,0)
+static haddr_t H5FD_hio_get_eof(const H5FD_t *_file, H5FD_mem_t type);
+#define GET_DRIVER(a) H5P_peek_driver((a))
+#define GET_DRIVER_INFO(a) H5P_peek_driver_info((a))
+#else
+typedef unsigned hbool_t;
+static haddr_t H5FD_hio_get_eof(const H5FD_t *_file);
+#define GET_DRIVER(a) H5P_get_driver((a))
+#define GET_DRIVER_INFO(a) H5P_get_driver_info((a))
+#endif
+static herr_t H5FD_hio_flush(H5FD_t *_file, hid_t dxpl_id, hbool_t closing);
 
 /** 
  * HIO-specific file access properties 
@@ -87,6 +96,9 @@ static const H5FD_class_t H5FD_hio_g = {
     "hio",                                /*name         */
     HADDR_MAX,                            /*maxaddr      */
     H5F_CLOSE_SEMI,                       /*fc_degree    */
+#if H5_VERSION_GE(1,10,0)
+    NULL,                                 /* terminate   */
+#endif
     NULL,                                 /*sb_size      */
     NULL,                                 /*sb_encode    */
     NULL,                                 /*sb_decode    */
@@ -234,9 +246,9 @@ H5Pget_fapl_hio(hid_t fapl_id, hio_settings_t *settings/*out*/)
 
     if(NULL == (plist = H5P_object_verify(fapl_id, H5P_FILE_ACCESS)))
         HGOTO_ERROR(H5E_PLIST, H5E_BADTYPE, FAIL, "not a file access list")
-    if(H5FD_HIO_g != H5P_get_driver(plist))
+    if(H5FD_HIO_g != GET_DRIVER(plist))
         HGOTO_ERROR(H5E_PLIST, H5E_BADVALUE, FAIL, "incorrect VFL driver")
-    if(NULL == (fa = (H5FD_hio_fapl_t *)H5P_get_driver_info(plist)))
+    if(NULL == (fa = (H5FD_hio_fapl_t *)GET_DRIVER_INFO(plist)))
         HGOTO_ERROR(H5E_PLIST, H5E_BADVALUE, FAIL, "bad VFL driver info")
 
     *settings = *fa->settings;
@@ -568,10 +580,10 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
     /* Obtain a pointer to hio-specific file access properties */
     if(NULL == (plist = H5P_object_verify(fapl_id, H5P_FILE_ACCESS)))
         HGOTO_ERROR(H5E_ARGS, H5E_BADTYPE, NULL, "not a file access property list")
-    if(H5P_FILE_ACCESS_DEFAULT == fapl_id || H5FD_HIO_g != H5P_get_driver(plist)) {
+    if(H5P_FILE_ACCESS_DEFAULT == fapl_id || H5FD_HIO_g != GET_DRIVER(plist)) {
         fa = &_fa;
     } else {
-        if(NULL == (fa = (const H5FD_hio_fapl_t *)H5P_get_driver_info(plist)))
+        if(NULL == (fa = (const H5FD_hio_fapl_t *)GET_DRIVER_INFO(plist)))
 	    HGOTO_ERROR(H5E_PLIST, H5E_BADVALUE, NULL, "bad VFL driver info")
     }
 
@@ -869,8 +881,13 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
  *
  *-------------------------------------------------------------------------
  */
+#if H5_VERSION_GE(1,10,0)
+static haddr_t
+H5FD_hio_get_eof(const H5FD_t *_file, H5FD_mem_t type)
+#else
 static haddr_t
 H5FD_hio_get_eof(const H5FD_t *_file)
+#endif
 {
     const H5FD_hio_t  *file = (const H5FD_hio_t*)_file;
 
@@ -1085,7 +1102,7 @@ done:
  *-------------------------------------------------------------------------
  */
 static herr_t
-H5FD_hio_flush(H5FD_t *_file, hid_t H5_ATTR_UNUSED dxpl_id, unsigned closing)
+H5FD_hio_flush(H5FD_t *_file, hid_t H5_ATTR_UNUSED dxpl_id, hbool_t closing)
 {
     H5FD_hio_t    *file = (H5FD_hio_t*)_file;
     herr_t              ret_value = SUCCEED;
