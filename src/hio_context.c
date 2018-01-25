@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -244,6 +244,64 @@ int hioi_context_generate_leader_list (hio_context_t context) {
   return HIO_SUCCESS;
 }
 #endif
+
+int hioi_context_add_data_root (hio_context_t context, const char *data_root) {
+  hio_module_t *module;
+  int rc = HIO_SUCCESS;
+  bool found = false;
+  char *tmp;
+
+  hioi_object_lock (&context->c_object);
+
+  do {
+    for (int i = 0 ; i < context->c_mcount ; ++i) {
+      if (context->c_modules[i]->compare (context->c_modules[i], data_root)) {
+        found = true;
+        break;
+      }
+    }
+
+    if (found) {
+      break;
+    }
+
+    if (HIO_MAX_DATA_ROOTS <= context->c_mcount) {
+      hioi_log (context, HIO_VERBOSE_WARN, "Maximum number of IO modules (%d) reached for this context",
+                HIO_MAX_DATA_ROOTS);
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+
+    rc = hioi_component_query (context, data_root, NULL, &module);
+    if (HIO_SUCCESS != rc) {
+      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", data_root);
+      break;
+    }
+
+    /* the module may be used in this context. see if the dataset size needs to
+     * be increased for this module */
+    if (context->c_ds_size < module->ds_object_size) {
+      context->c_ds_size = module->ds_object_size;
+    }
+
+    context->c_modules[context->c_mcount++] = module;
+
+    rc = asprintf (&tmp, "%s,%s", context->c_droots, data_root);
+    if (0 > rc) {
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+
+    rc = HIO_SUCCESS;
+
+    free (context->c_droots);
+    context->c_droots = tmp;
+  } while (0);
+
+  hioi_object_unlock (&context->c_object);
+
+  return rc;
+}
 
 int hioi_context_create_modules (hio_context_t context) {
   char *data_roots, *data_root, *next_data_root, *last;

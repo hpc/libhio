@@ -146,6 +146,14 @@ int hioi_err_errno (int err);
 int hioi_context_create_modules (hio_context_t context);
 
 /**
+ * Add an additional data root to an hio context
+ *
+ * @param[in] context   hio context
+ * @param[in] data_root new data root
+ */
+int hioi_context_add_data_root (hio_context_t context, const char *data_root);
+
+/**
  * Get the current time (relative to system boot) in usec
  *
  * @returns monotonically increasing time in usec
