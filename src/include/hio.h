@@ -465,6 +465,13 @@ typedef struct hio_object *hio_object_t;
 
 /**
  * @ingroup API
+ * @bried Maximum length of a context name including the
+ *        terminator
+ */
+#define HIO_CONTEXT_NAME_MAX 256
+
+/**
+ * @ingroup API
  * @bried Maximum length of a dataset name including the
  *        terminator.
  */

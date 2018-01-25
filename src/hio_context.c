@@ -423,8 +423,8 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
   hio_context_t context;
   int rc;
 
-  if (!context_name || '\0' == context_name[0]) {
-    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL or zero length");
+  if (!context_name || '\0' == context_name[0] || strlen (context_name) >= HIO_CONTEXT_NAME_MAX) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL, zero length, or too long");
     return HIO_ERR_BAD_PARAM;
   }
 
@@ -501,8 +501,8 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
     return HIO_ERROR;
   }
 
-  if (!context_name || '\0' == context_name[0]) {
-    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL or zero length");
+  if (!context_name || '\0' == context_name[0] ||  strlen (context_name) >= HIO_CONTEXT_NAME_MAX) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL, zero length, or too long");
     return HIO_ERR_BAD_PARAM;
   }
 
