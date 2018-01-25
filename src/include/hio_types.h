@@ -264,6 +264,8 @@ enum {
   HIO_VAR_FLAG_READONLY = 1,
   /** variable value will never change (informational) */
   HIO_VAR_FLAG_CONSTANT = 2,
+  /** variable value is set to the default value (not set by the user) */
+  HIO_VAR_FLAG_DEFAULT_VALUE = 4,
 };
 
 typedef union hio_var_value_t {
