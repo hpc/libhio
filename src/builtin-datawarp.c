@@ -59,13 +59,13 @@ typedef struct builtin_datawarp_module_dataset_t {
   int64_t stage_out_stripe_count;
 } builtin_datawarp_module_dataset_t;
 
-typedef struct builtin_datawarp_resident_id_t {
+typedef struct builtin_datawarp_resident_dataset_t {
   hio_list_t dwrid_list;
-  /** dataset identifier */
-  int64_t dwrid_id;
   /** active stage mode */
   int dwrid_stage_mode;
-} builtin_datawarp_resident_id_t;
+  /** dataset identifier */
+  hio_dataset_header_t header;
+} builtin_datawarp_resident_dataset_t;
 
 typedef struct builtin_datawarp_dataset_backend_data_t {
   hio_dataset_backend_data_t base;
@@ -114,15 +114,17 @@ static void datawarp_debug_logger(uint64_t flags, void *data, char *file,
 }
 #endif
 
-static void builtin_datawarp_add_resident (builtin_datawarp_dataset_backend_data_t *be_data, int64_t id, int stage_mode, bool append) {
-  builtin_datawarp_resident_id_t *rid = calloc (1, sizeof (*rid));
+static void builtin_datawarp_add_resident (builtin_datawarp_dataset_backend_data_t *be_data, int stage_mode,
+                                           const hio_dataset_header_t *header, bool append) {
+  builtin_datawarp_resident_dataset_t *rid = calloc (1, sizeof (*rid));
 
   if (NULL == rid) {
     return;
   }
 
   hioi_list_init (rid->dwrid_list);
-  rid->dwrid_id = id;
+  memcpy (&rid->header, header, sizeof (*header));
+  rid->header.ds_path = strdup (header->ds_path);
   rid->dwrid_stage_mode = stage_mode;
 
   if (append) {
@@ -134,13 +136,19 @@ static void builtin_datawarp_add_resident (builtin_datawarp_dataset_backend_data
   ++be_data->num_resident;
 }
 
+static void builtin_datawarp_remove_resident (builtin_datawarp_dataset_backend_data_t *be_data, builtin_datawarp_resident_dataset_t *rid) {
+    --be_data->num_resident;
+    hioi_list_remove (rid, dwrid_list);
+    hioi_dataset_header_cleanup (&rid->header);
+    free (rid);
+}
+
 static void builtin_datawarp_bed_release (hio_dataset_backend_data_t *data) {
   builtin_datawarp_dataset_backend_data_t *be_data = (builtin_datawarp_dataset_backend_data_t *) data;
-  builtin_datawarp_resident_id_t *resident_id, *next;
+  builtin_datawarp_resident_dataset_t *resident_id, *next;
 
-  hioi_list_foreach_safe (resident_id, next, be_data->resident_ids, builtin_datawarp_resident_id_t, dwrid_list) {
-    hioi_list_remove(resident_id, dwrid_list);
-    free (resident_id);
+  hioi_list_foreach_safe (resident_id, next, be_data->resident_ids, builtin_datawarp_resident_dataset_t, dwrid_list) {
+    builtin_datawarp_remove_resident (be_data, resident_id);
   }
 }
 
@@ -212,8 +220,10 @@ static int builtin_datawarp_revoke_stage (hio_module_t *module, hio_dataset_head
   return HIO_SUCCESS;
 }
 
-static int buildin_datawarp_module_dataset_unlink_dir (struct hio_module_t *module, hio_dataset_header_t *header, int stage_mode) {
+static int builtin_datawarp_module_dataset_unlink_dir (struct hio_module_t *module, hio_dataset_header_t *header, int stage_mode) {
   int complete = 0, pending, deferred, failed, rc;
+
+  hioi_log (module->context, HIO_VERBOSE_DEBUG_MED, "deleting dataset from DataWarp with path %s", header->ds_path);
 
   switch (stage_mode) {
   case DW_STAGE_IMMEDIATE:
@@ -240,7 +250,7 @@ static int buildin_datawarp_module_dataset_unlink_dir (struct hio_module_t *modu
 static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_datawarp_dataset_backend_data_t *be_data;
-  builtin_datawarp_resident_id_t *rid = NULL, *next;
+  builtin_datawarp_resident_dataset_t *rid = NULL, *next;
   hio_context_t context = module->context;
   hio_dataset_data_t *ds_data = NULL;
   hio_dataset_list_t *list;
@@ -274,27 +284,24 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
       break;
     }
 
-    hioi_list_foreach_safe (rid, next, be_data->resident_ids, builtin_datawarp_resident_id_t, dwrid_list) {
-      if (set_id == rid->dwrid_id) {
-        hioi_list_remove (rid, dwrid_list);
+    hioi_list_foreach_safe (rid, next, be_data->resident_ids, builtin_datawarp_resident_dataset_t, dwrid_list) {
+      if (set_id == rid->header.ds_id) {
+        stage_mode = rid->dwrid_stage_mode;
+        builtin_datawarp_remove_resident (be_data, rid);
         found = true;
         break;
       }
     }
 
     if (!found) {
-      rid = NULL;
       break;
     }
 
     for (size_t i = 0 ; i < list->header_count ; ++i) {
       if (list->headers[i].ds_id == set_id) {
-        rc = buildin_datawarp_module_dataset_unlink_dir (module, list->headers + i, rid->dwrid_stage_mode);
+        rc = builtin_datawarp_module_dataset_unlink_dir (module, list->headers + i, stage_mode);
       }
     }
-
-    free (rid);
-    --be_data->num_resident;
   } while (0);
 
   hioi_dataset_list_release (list);
@@ -304,14 +311,14 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
 
 static void builtin_datawarp_cleanup (hio_dataset_t dataset, builtin_datawarp_dataset_backend_data_t *be_data) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  builtin_datawarp_resident_id_t *resident_id, *next;
+  builtin_datawarp_resident_dataset_t *resident_id, *next;
   hio_module_t *module = dataset->ds_module;
 
   hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin_datawarp_cleanup: there are %d resident dataset ids. keeping at most %d",
             be_data->num_resident, be_data->keep_last);
 
-  hioi_list_foreach_safe (resident_id, next, be_data->resident_ids, builtin_datawarp_resident_id_t, dwrid_list) {
-    int64_t ds_id = resident_id->dwrid_id;
+  hioi_list_foreach_safe (resident_id, next, be_data->resident_ids, builtin_datawarp_resident_dataset_t, dwrid_list) {
+    int64_t ds_id = resident_id->header.ds_id;
 
     if (be_data->num_resident <= be_data->keep_last) {
       break;
@@ -320,7 +327,8 @@ static void builtin_datawarp_cleanup (hio_dataset_t dataset, builtin_datawarp_da
     hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%"PRIi64" from datawarp", hioi_object_identifier (dataset),
               ds_id);
 
-    builtin_datawarp_module_dataset_unlink (module, hioi_object_identifier (dataset), ds_id);
+    builtin_datawarp_module_dataset_unlink_dir (module, &resident_id->header, resident_id->dwrid_stage_mode);
+    builtin_datawarp_remove_resident (be_data, resident_id);
   }
 }
 
@@ -346,7 +354,7 @@ static int builtin_datawarp_module_dataset_open (struct hio_module_t *module, hi
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_posix_module_t *posix_module = &datawarp_module->posix_module;
   builtin_datawarp_module_dataset_t *datawarp_dataset = (builtin_datawarp_module_dataset_t *) dataset;
-  builtin_datawarp_resident_id_t *resident_id, *next;
+  builtin_datawarp_resident_dataset_t *resident_id, *next;
   builtin_datawarp_dataset_backend_data_t *be_data;
   hio_context_t context = module->context;
   builtin_posix_module_dataset_t *posix_dataset;
@@ -637,24 +645,15 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
     /* backend data should have created when this dataset was opened */
     assert (NULL != be_data);
 
-    builtin_datawarp_add_resident (be_data, dataset->ds_id, stage_mode, true);
+    /* fill in a minimal header for bookeeping purposes */
+    hio_dataset_header_t header;
 
-    num_resident = be_data->num_resident;
+    header.ds_id = dataset->ds_id;
+    header.ds_path = dataset_path;
+    strncpy (header.ds_name, hioi_object_identifier (&dataset->ds_object), sizeof (header.ds_name));
 
-    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: resident datasets: %d, keep: %d", num_resident,
-              be_data->keep_last);
-
-    if (num_resident > be_data->keep_last) {
-      builtin_datawarp_resident_id_t *rid = (builtin_datawarp_resident_id_t *) be_data->resident_ids.next;
-
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: removing resident dataset with id %"PRIi64,
-                rid->dwrid_id);
-
-      rc = builtin_datawarp_module_dataset_unlink (&posix_module->base, hioi_object_identifier (&dataset->ds_object),
-                                                   rid->dwrid_id);
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: builtin_datawarp_module_dataset_unlink returned %d. "
-                "resident ids %d", rc, num_resident - 1);
-    }
+    builtin_datawarp_add_resident (be_data, stage_mode, &header, true);
+    builtin_datawarp_cleanup (dataset, be_data);
   }
 
   free (dataset_path);
@@ -760,7 +759,7 @@ static int builtin_datawarp_scan_datasets (builtin_datawarp_module_t *datawarp_m
     hioi_log (context, HIO_VERBOSE_DEBUG_MED, "builtin-datawarp: found resident dataset %s::%" PRIi64 " with status "
               "%d. stage mode %d", header->ds_name, header->ds_id, header->ds_status, stage_mode);
 
-    builtin_datawarp_add_resident (be_data, header->ds_id, stage_mode, true);
+    builtin_datawarp_add_resident (be_data, stage_mode, header, true);
     rc = HIO_SUCCESS;
   }
 
