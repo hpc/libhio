@@ -19,7 +19,7 @@ addons:
             - m4
 
 before_script:
-    - if [[ "$TRAVIS_OS_NAME" == "osx" ]] ; then brew install openmpi ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "osx" ]] ; then brew install openmpi ;  brew link --overwrite gcc ; fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then sudo apt-get -qq update ; sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1397BC53640DB551 ; sudo apt-get -qq install openmpi-bin libopenmpi-dev ; fi
 
 script:
