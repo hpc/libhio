@@ -19,7 +19,7 @@ clean:
 noinst_PROGRAMS = hdf5_hio_test
 if HAVE_MPI
 hdf5_hio_test_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS) -DMPI
-hdf5_hio_test_LDFLAGS = $(AM_LDFLAGS) $(XML_LIBS) -lhdf5 -lmpi
+hdf5_hio_test_LDFLAGS = $(AM_LDFLAGS) $(XML_LIBS) -lhdf5
 else
 hdf5_hio_test_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS) 
 hdf5_hio_test_LDFLAGS = $(AM_LDFLAGS) $(XML_LIBS) -lhdf5 
