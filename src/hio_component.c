@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -27,10 +27,11 @@ extern hio_component_t builtin_datawarp_component;
 
 #define MAX_COMPONENTS 128
 
-static hio_component_t *hio_builtin_components[] = {&builtin_posix_component,
+static hio_component_t *hio_builtin_components[] = {
 #if HIO_USE_DATAWARP
                                                     &builtin_datawarp_component,
 #endif
+                                                    &builtin_posix_component,
                                                     NULL};
 
 static int hio_component_init_count = 0;
@@ -180,15 +181,27 @@ int hioi_component_fini (void) {
   return HIO_SUCCESS;
 }
 
-int hioi_component_query (hio_context_t context, const char *data_root, const char *next_data_root,
+void hioi_module_retain (hio_module_t *module) {
+  (void) atomic_fetch_add (&module->ref_count, 1);
+}
+
+void hioi_module_release (hio_module_t *module) {
+  int ref_count = atomic_fetch_add (&module->ref_count, -1);
+  if (1 == ref_count) {
+    module->fini (module);
+  }
+}
+
+int hioi_component_query (hio_context_t context, const char *data_root, char * const *next_data_roots,
                           hio_module_t **module) {
   int rc;
 
   for (int i = 0 ; hio_builtin_components[i] ; ++i) {
     hio_component_t *component = hio_builtin_components[i];
 
-    rc = component->query (context, data_root, next_data_root, module);
+    rc = component->query (context, data_root, next_data_roots, module);
     if (HIO_SUCCESS == rc) {
+      atomic_init (&(*module)->ref_count, 1);
       return HIO_SUCCESS;
     }
   }
@@ -197,8 +210,9 @@ int hioi_component_query (hio_context_t context, const char *data_root, const ch
   for (int i = 0 ; i < hio_external_component_count ; ++i) {
     hio_dynamic_component_t *component = hio_external_components + i;
 
-    rc = component->component->query (context, data_root, next_data_root, module);
+    rc = component->component->query (context, data_root, next_data_roots, module);
     if (HIO_SUCCESS == rc) {
+      atomic_init (&(*module)->ref_count, 1);
       return HIO_SUCCESS;
     }
   }

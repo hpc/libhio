@@ -13,10 +13,7 @@
 #define HIO_COMPONENT_H
 
 #include "hio_config.h"
-
-#if defined(HAVE_STDINT_H)
-#include <stdint.h>
-#endif
+#include "hio_types.h"
 
 struct hio_module_t;
 struct hio_dataset_header_t;
@@ -75,12 +72,24 @@ typedef int
  * failed dataset identifiers.
  */
 typedef int
-(*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name,
+(*hio_module_dataset_list_fn_t) (struct hio_module_t *module, const char *name, const char *uri,
                                  int priority, struct hio_dataset_list_t *list);
 
 typedef int
 (*hio_module_dataset_dump_fn_t) (struct hio_module_t *module, const struct hio_dataset_header_t *header,
                                  uint32_t dump_flags, int rank, FILE *fh);
+
+/**
+ * Compare the data root with the one backing this module
+ *
+ * @param[in] module       hio module
+ * @param[in] data_root    data root to compare
+ *
+ * @returns true if the data roots point to the same location
+ * @returns false otherwise
+ */
+typedef bool
+(*hio_module_compare_fn_t) (struct hio_module_t *module, const char *data_root);
 
 /**
  * Finalize a module and release all resources.
@@ -119,6 +128,15 @@ typedef struct hio_module_t {
 
   /** module versioning */
   int                             version;
+
+  /** compare module with data root */
+  hio_module_compare_fn_t         compare;
+
+  /** reference count */
+  atomic_ulong                    ref_count;
+
+  /** padding for future expansion */
+  uint64_t                        padding[16];
 } hio_module_t;
 
 /**
@@ -152,7 +170,7 @@ typedef int (*hio_component_fini_fn_t) (void);
  *
  * It is safe to push the error code onto the error stack.
  */
-typedef int (*hio_component_query_t) (hio_context_t context, const char *data_root, const char *next_data_root,
+typedef int (*hio_component_query_t) (hio_context_t context, const char *data_root, char * const *next_data_roots,
                                       hio_module_t **module);
 
 typedef uint64_t hio_component_flags_t;
@@ -208,9 +226,30 @@ int hioi_component_fini (void);
  * @returns HIO_ERR_NOT_FOUND if a backend module could not be found
  *
  * This function allocates and returns an hio module for the given data
- * root.
+ * root. The new module will have a retain count of 1 and must be released
+ * by hioi_module_release().
  */
-int hioi_component_query (hio_context_t context, const char *data_root, const char *next_data_root,
+int hioi_component_query (hio_context_t context, const char *data_root, char * const *next_data_roots,
                           hio_module_t **module);
+
+/**
+ * Release a reference to a libhio module
+ *
+ * @param[in] module   libhio module
+ *
+ * This function matches a call to hioi_module_retain() or hioi_component_query(). Once
+ * the last reference to a module is released the module is freed.
+ */
+void hioi_module_release (hio_module_t *module);
+
+/**
+ * Retain a reference to a libhio module
+ *
+ * @param[in] module   libhio module
+ *
+ * This function adds a reference to a libhio module. This reference must
+ * be released by a call to libhio_module_release().
+ */
+void hioi_module_retain (hio_module_t *module);
 
 #endif /* !defined(HIO_COMPONENT_H) */

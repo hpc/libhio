@@ -56,6 +56,26 @@ void hioi_config_list_init (hio_config_kv_list_t *list);
 void hioi_config_list_release (hio_config_kv_list_t *list);
 
 /**
+ * Check if the value of an HIO configuration variable has been modified by the user
+ *
+ * @param[in] object    HIO object
+ * @param[in] variable  variable name
+ *
+ * @returns true if the variable has been modified
+ * @returns false otherwise
+ */
+bool hioi_config_value_is_default (hio_object_t object, const char *variable);
+
+/**
+ * Mark an existing variable as read-only or read-write
+ *
+ * @param[in] object    HIO object
+ * @param[in] variable  variable name
+ * @param[in] value     true if setting as read-only, false for read-write
+ */
+int hioi_config_set_readonly (hio_object_t object, const char *variable, bool value);
+
+/**
  * Initialize the configuration component of an hio object
  *
  * @param[in] object  object to initialize

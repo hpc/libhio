@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -23,6 +23,9 @@
 #include <sys/param.h>
 #include <assert.h>
 
+/** used to scan the environment */
+extern char **environ;
+
 /**
  * Release all resources associated with a context
  */
@@ -31,7 +34,7 @@ static void hioi_context_release (hio_object_t object) {
   hio_context_t context = (hio_context_t) object;
 
   for (int i = 0 ; i < context->c_mcount ; ++i) {
-    context->c_modules[i]->fini (context->c_modules[i]);
+    hioi_module_release (context->c_modules[i]);
   }
 
   hioi_config_list_release (&context->c_fconfig);
@@ -245,10 +248,103 @@ int hioi_context_generate_leader_list (hio_context_t context) {
 }
 #endif
 
+int hioi_context_add_data_root (hio_context_t context, const char *data_root) {
+  hio_module_t *module;
+  int rc = HIO_SUCCESS;
+  bool found = false;
+  char *tmp;
+
+  hioi_object_lock (&context->c_object);
+
+  do {
+    for (int i = 0 ; i < context->c_mcount ; ++i) {
+      if (context->c_modules[i]->compare (context->c_modules[i], data_root)) {
+        found = true;
+        break;
+      }
+    }
+
+    if (found) {
+      break;
+    }
+
+    if (HIO_MAX_DATA_ROOTS <= context->c_mcount) {
+      hioi_log (context, HIO_VERBOSE_WARN, "Maximum number of IO modules (%d) reached for this context",
+                HIO_MAX_DATA_ROOTS);
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+
+    rc = hioi_component_query (context, data_root, NULL, &module);
+    if (HIO_SUCCESS != rc) {
+      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", data_root);
+      break;
+    }
+
+    /* the module may be used in this context. see if the dataset size needs to
+     * be increased for this module */
+    if (context->c_ds_size < module->ds_object_size) {
+      context->c_ds_size = module->ds_object_size;
+    }
+
+    context->c_modules[context->c_mcount++] = module;
+
+    rc = asprintf (&tmp, "%s,%s", context->c_droots, data_root);
+    if (0 > rc) {
+      rc = HIO_ERR_OUT_OF_RESOURCE;
+      break;
+    }
+
+    rc = HIO_SUCCESS;
+
+    free (context->c_droots);
+    context->c_droots = tmp;
+  } while (0);
+
+  hioi_object_unlock (&context->c_object);
+
+  return rc;
+}
+
+static char **hioi_context_data_root_to_array (const char *data_roots) {
+  char *data_root_tmp = strdup (data_roots), **out, *data_root, *last;
+  int root_count = 1;
+
+  for (int i = 0 ; data_root_tmp[i] ; ++i) {
+    if (',' == data_root_tmp[i]) {
+      ++root_count;
+    }
+  }
+
+  out = calloc (root_count + 1, sizeof (char *));
+  if (NULL == out) {
+    free (data_root_tmp);
+    return NULL;
+  }
+
+  data_root = strtok_r (data_root_tmp, ",", &last);
+  for (int i = 0 ; i < root_count ; ++i) {
+    out[i] = strdup (data_root);
+    data_root = strtok_r (NULL, ",", &last);
+  }
+
+  free (data_root_tmp);
+
+  return out;
+}
+
+void hioi_context_data_root_array_release (char **array) {
+  for (int i = 0 ; array[i] ; ++i) {
+    free (array[i]);
+  }
+
+  free (array);
+}
+
 int hioi_context_create_modules (hio_context_t context) {
-  char *data_roots, *data_root, *next_data_root, *last;
   hio_module_t *module = NULL;
   int num_modules = 0;
+  char **roots;
   int rc;
 
   rc = hioi_context_scatter (context);
@@ -256,20 +352,15 @@ int hioi_context_create_modules (hio_context_t context) {
     return rc;
   }
 
-  data_roots = strdup (context->c_droots);
-  if (NULL == data_roots) {
+  roots = hioi_context_data_root_to_array (context->c_droots);
+  if (NULL == roots) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  data_root = strtok_r (data_roots, ",", &last);
-
-  do {
-    next_data_root = strtok_r (NULL, ",", &last);
-
-    rc = hioi_component_query (context, data_root, next_data_root, &module);
+  for (int i = 0 ; roots[i] ; ++i) {
+    rc = hioi_component_query (context, roots[i], roots + i + 1, &module);
     if (HIO_SUCCESS != rc) {
-      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", data_root);
-      data_root = next_data_root;
+      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", roots[i]);
       continue;
     }
 
@@ -285,19 +376,23 @@ int hioi_context_create_modules (hio_context_t context) {
                 HIO_MAX_DATA_ROOTS);
       break;
     }
-    data_root = next_data_root;
-  } while (NULL != data_root);
+  }
+
+  hioi_context_data_root_array_release (roots);
 
   context->c_mcount = num_modules;
   context->c_cur_module = 0;
-
-  free (data_roots);
 
   return rc;
 }
 
 static int hioi_context_set_default_droot (hio_context_t context) {
+  bool persistent_seen = false, non_persistent_seen = false;
   char cwd_buffer[MAXPATHLEN] = "";
+  int datawarp_mount_count = 0;
+  const char *last_mount_seen = NULL;
+  const int dw_persistent_striped_length = 21;
+  char *data_root_tmp = NULL, *tmp;
   int rc;
 
   /* default data root is the current working directory */
@@ -305,17 +400,45 @@ static int hioi_context_set_default_droot (hio_context_t context) {
     return HIO_ERROR;
   }
 
-  if (NULL == getenv ("DW_JOB_STRIPED")) {
-    /* just use posix IO by default */
-    rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
-  } else {
-    /* automatically add a datawarp root if one exists */
-    rc = asprintf (&context->c_droots, "datawarp,posix:%s", cwd_buffer);
+  data_root_tmp = getenv ("DW_JOB_STRIPED");
+  if (NULL != data_root_tmp) {
+    /* make sure the jobdw root is first */
+    data_root_tmp = strdup ("datawarp,");
   }
+
+  /* add all available datawarp mounts to the default data root list */
+  for (int i = 0 ; environ[i] ; ++i) {
+    if (0 == strncmp (environ[i], "DW_PERSISTENT_STRIPED", dw_persistent_striped_length)) {
+      char *name = strdup (environ[i] + dw_persistent_striped_length + 1);
+
+      tmp = strchr (name, '=');
+      *tmp = '\0';
+
+      tmp = data_root_tmp;
+
+      /* named persistent datawarp mount */
+      persistent_seen = true;
+      rc = asprintf (&tmp, "%sdatawarp-%s,", data_root_tmp ? data_root_tmp : "",
+                     name);
+      free (name);
+      free (data_root_tmp);
+
+      data_root_tmp = tmp;
+
+      if (0 > rc) {
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
+    }
+  }
+
+  rc = asprintf (&context->c_droots, "%sposix:%s",  data_root_tmp ? data_root_tmp : "", cwd_buffer);
+  free (data_root_tmp);
 
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "default data roots: %s", context->c_droots);
 
   return HIO_SUCCESS;
 }
@@ -423,8 +546,8 @@ int hio_init_single (hio_context_t *new_context, const char *config_file, const 
   hio_context_t context;
   int rc;
 
-  if (!context_name || '\0' == context_name[0]) {
-    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL or zero length");
+  if (!context_name || '\0' == context_name[0] || strlen (context_name) >= HIO_CONTEXT_NAME_MAX) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL, zero length, or too long");
     return HIO_ERR_BAD_PARAM;
   }
 
@@ -501,8 +624,8 @@ int hio_init_mpi (hio_context_t *new_context, MPI_Comm *comm, const char *config
     return HIO_ERROR;
   }
 
-  if (!context_name || '\0' == context_name[0]) {
-    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL or zero length");
+  if (!context_name || '\0' == context_name[0] ||  strlen (context_name) >= HIO_CONTEXT_NAME_MAX) {
+    hioi_err_push (HIO_ERR_BAD_PARAM, NULL, "context_name NULL, zero length, or too long");
     return HIO_ERR_BAD_PARAM;
   }
 

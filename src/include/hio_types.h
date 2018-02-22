@@ -12,13 +12,13 @@
 #if !defined(HIO_TYPES_H)
 #define HIO_TYPES_H
 
+#include "hio_config.h"
+
 #if HIO_USE_MPI
 #include <mpi.h>
 #endif
 
 #include "hio.h"
-
-#include "hio_component.h"
 
 #define HIO_MPI_HAVE(v) (defined(MPI_VERSION) && MPI_VERSION >= (v))
 
@@ -30,12 +30,17 @@
 #include <pthread.h>
 #endif
 
+#if defined(HAVE_STDINT_H)
+#include <stdint.h>
+#endif
+
+#include <inttypes.h>
+
 #if HIO_ATOMICS_C11
 
 #include <stdatomic.h>
 
 #elif HIO_ATOMICS_BUILTIN
-
 
 typedef volatile unsigned long atomic_ulong;
 
@@ -53,12 +58,20 @@ typedef volatile unsigned long atomic_ulong;
 #define atomic_fetch_or(p, v) __sync_fetch_and_or(p, v)
 #define atomic_load(v) (*(v))
 
+#else
+
+#error "Noooooooooooooooooooooooooooooooooooooooo"
+
 #endif
 
 /**
  * Maximum number of data roots.
  */
 #define HIO_MAX_DATA_ROOTS   64
+
+#if !defined(PATH_MAX)
+#define PATH_MAX 4096
+#endif
 
 /**
  * Simple lists
@@ -119,6 +132,8 @@ static inline size_t hioi_list_length (hio_list_t *list) {
 
   return count;
 }
+
+struct hio_module_t;
 
 /* dataset function types */
 
@@ -264,6 +279,8 @@ enum {
   HIO_VAR_FLAG_READONLY = 1,
   /** variable value will never change (informational) */
   HIO_VAR_FLAG_CONSTANT = 2,
+  /** variable value is set to the default value (not set by the user) */
+  HIO_VAR_FLAG_DEFAULT_VALUE = 4,
 };
 
 typedef union hio_var_value_t {
@@ -405,7 +422,7 @@ struct hio_context {
   hio_config_kv_list_t c_fconfig;
 
   /** io modules (one for each data root) */
-  hio_module_t      *c_modules[HIO_MAX_DATA_ROOTS];
+  struct hio_module_t  *c_modules[HIO_MAX_DATA_ROOTS];
   /** number of data roots */
   int                c_mcount;
   /** current active data root */
@@ -623,7 +640,7 @@ struct hio_dataset {
   hio_dataset_mode_t  ds_mode;
 
   /** module in use */
-  hio_module_t       *ds_module;
+  struct hio_module_t *ds_module;
 
   /** list of elements */
   hio_list_t          ds_elist;
@@ -690,6 +707,13 @@ struct hio_dataset {
   MPI_Win             ds_shared_win;
   hio_dataset_map_t   ds_map;
 #endif
+
+  /** data root in use */
+  char               *ds_data_root;
+
+  /** backend-specific dataset location. on POSIX filesystems
+   * this is the dataset directory path */
+  char               *ds_uri;
 
   /** pointer to dataset shared control data */
   hio_shared_control_t *ds_shared_control;
@@ -818,6 +842,8 @@ struct hio_element {
 struct hio_dataset_header_t {
   /** associated module */
   struct hio_module_t *module;
+  /** context name */
+  char     ds_context_name[HIO_CONTEXT_NAME_MAX];
   /** dataset name */
   char     ds_name[HIO_DATASET_NAME_MAX];
   /** priority (to break ties) */

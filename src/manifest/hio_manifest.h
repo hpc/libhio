@@ -27,6 +27,7 @@
 #define HIO_MANIFEST_KEY_PERF        "perf"
 /* temporary key used by dump */
 #define HIO_MANIFEST_KEY_LOCATION    "location"
+#define HIO_MANIFEST_KEY_CONTEXT_NAME "context"
 
 #define HIO_MANIFEST_KEY_DATASET_MODE "hio_dataset_mode"
 #define HIO_MANIFEST_KEY_FILE_MODE    "hio_file_mode"
