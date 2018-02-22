@@ -604,6 +604,20 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
               "burst-buffer directory: %s lustre dir: %s DW stage mode: %d",  hioi_object_identifier(dataset),
               dataset->ds_id, dataset_path, pfs_path, stage_mode);
 
+    if (0 == access (pfs_path, R_OK)) {
+      /* A file/directory already exists at the target path. Blow it away and continue. */
+      hio_dataset_header_t tmp_header = {.ds_id = dataset->ds_id, .ds_path = pfs_path};
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/dataset_close: a file/directory already exists at stage-out location. "
+                "removing file/directory @ path %s", pfs_path);
+
+      strncpy (tmp_header.ds_name, hioi_object_identifier (&dataset->ds_object), sizeof (tmp_header.ds_name));
+
+      rc = builtin_posix_unlink_dir (context, &tmp_header);
+      if (HIO_SUCCESS != rc) {
+        hioi_log (context, HIO_VERBOSE_WARN, "could not unlink existing file at path %s", pfs_path);
+      }
+    }
+
     rc = hioi_mkpath (context, pfs_path, pfs_mode);
     if (HIO_SUCCESS != rc) {
       free (dataset_path);
@@ -778,13 +792,17 @@ bool builtin_datawarp_module_compare (hio_module_t *module, const char *data_roo
 }
 
 static int builtin_datawarp_component_query (hio_context_t context, const char *data_root,
-                                             const char *next_data_root, hio_module_t **module) {
-  const char *dw_root;
+                                             char * const *next_data_roots, hio_module_t **module) {
+  const char *dw_root, *mount_name, *next_data_root = NULL, *subpath = NULL;
   builtin_datawarp_module_t *new_module;
   hio_module_t *posix_module;
+  char *tmp_env_name;
+  bool auto_root;
   int rc;
 
   if (0 == strcmp (context->c_dw_root, "auto")) {
+    /* in this case the user has not overridden the data root for datawarp */
+    auto_root = true;
     dw_root = getenv ("DW_JOB_STRIPED");
     if (NULL == dw_root) {
       hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: neither DW_JOB_STRIPED nor HIO_datawarp_root "
@@ -801,20 +819,69 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     return HIO_ERR_NOT_AVAILABLE;
   }
 
+  if (0 == strncasecmp("datawarp", data_root, 8) || 0 == strncasecmp("dw", data_root, 2)) {
+    mount_name = strchr (data_root, '-');
+    if (NULL != mount_name) {
+      mount_name++;
+
+      if (!auto_root) {
+        hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: ignoring user-defined DataWarp root for named persistent "
+                  "DataWarp mount %s", mount_name);
+      }
+
+      rc = asprintf (&tmp_env_name, "DW_PERSISTENT_STRIPED_%s", mount_name);
+      if (0 > rc) {
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
+
+      dw_root = getenv (tmp_env_name);
+      free (tmp_env_name);
+      if (NULL == dw_root) {
+        hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: could not find a data root matching %s", mount_name);
+        return HIO_ERROR;
+      }
+    }
+
+    subpath = strchr (data_root, ':');
+    if (subpath) {
+      ++subpath;
+    }
+  }
+
+  if (NULL != next_data_roots) {
+    for (int i = 0 ; next_data_roots[i] ; ++i) {
+      if (0 == strncasecmp (next_data_roots[i], "posix:", 6) || '/' == next_data_roots[i][0]) {
+        next_data_root = next_data_roots[i];
+      }
+    }
+  }
+
   if (NULL != next_data_root && (strncasecmp (next_data_root, "posix:", 6) || access (next_data_root + 6, F_OK))) {
     hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: attempting to use datawarp but PFS stage out "
               "path %s is not accessible", next_data_root);
     return HIO_ERR_NOT_AVAILABLE;
   }
 
-  if (NULL == next_data_root) {
-    hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: using datawarp without file staging support%s", "");
+  if (!subpath) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: using datawarp root: %s, pfs backing store: %s, data root: %s",
+              dw_root, next_data_root, data_root);
+
+    rc = builtin_posix_component.query (context, dw_root, NULL, &posix_module);
+  } else {
+    char *tmp;
+
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: using datawarp root: %s (subpath: %s), pfs backing store: %s, "
+              "data root: %s", dw_root, subpath, next_data_root, data_root);
+
+    rc = asprintf (&tmp, "%s%s", dw_root, subpath);
+    if (0 > rc) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    rc = builtin_posix_component.query (context, tmp, NULL, &posix_module);
+    free (tmp);
   }
 
-  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: using datawarp root: %s, pfs backing store: %s",
-            dw_root, next_data_root);
-
-  rc = builtin_posix_component.query (context, dw_root, NULL, &posix_module);
   if (HIO_SUCCESS != rc) {
     return rc;
   }

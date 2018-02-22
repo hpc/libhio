@@ -170,7 +170,7 @@ typedef int (*hio_component_fini_fn_t) (void);
  *
  * It is safe to push the error code onto the error stack.
  */
-typedef int (*hio_component_query_t) (hio_context_t context, const char *data_root, const char *next_data_root,
+typedef int (*hio_component_query_t) (hio_context_t context, const char *data_root, char * const *next_data_roots,
                                       hio_module_t **module);
 
 typedef uint64_t hio_component_flags_t;
@@ -229,7 +229,7 @@ int hioi_component_fini (void);
  * root. The new module will have a retain count of 1 and must be released
  * by hioi_module_release().
  */
-int hioi_component_query (hio_context_t context, const char *data_root, const char *next_data_root,
+int hioi_component_query (hio_context_t context, const char *data_root, char * const *next_data_roots,
                           hio_module_t **module);
 
 /**

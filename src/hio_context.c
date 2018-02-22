@@ -23,6 +23,9 @@
 #include <sys/param.h>
 #include <assert.h>
 
+/** used to scan the environment */
+extern char **environ;
+
 /**
  * Release all resources associated with a context
  */
@@ -303,10 +306,45 @@ int hioi_context_add_data_root (hio_context_t context, const char *data_root) {
   return rc;
 }
 
+static char **hioi_context_data_root_to_array (const char *data_roots) {
+  char *data_root_tmp = strdup (data_roots), **out, *data_root, *last;
+  int root_count = 1;
+
+  for (int i = 0 ; data_root_tmp[i] ; ++i) {
+    if (',' == data_root_tmp[i]) {
+      ++root_count;
+    }
+  }
+
+  out = calloc (root_count + 1, sizeof (char *));
+  if (NULL == out) {
+    free (data_root_tmp);
+    return NULL;
+  }
+
+  data_root = strtok_r (data_root_tmp, ",", &last);
+  for (int i = 0 ; i < root_count ; ++i) {
+    out[i] = strdup (data_root);
+    data_root = strtok_r (NULL, ",", &last);
+  }
+
+  free (data_root_tmp);
+
+  return out;
+}
+
+void hioi_context_data_root_array_release (char **array) {
+  for (int i = 0 ; array[i] ; ++i) {
+    free (array[i]);
+  }
+
+  free (array);
+}
+
 int hioi_context_create_modules (hio_context_t context) {
-  char *data_roots, *data_root, *next_data_root, *last;
   hio_module_t *module = NULL;
   int num_modules = 0;
+  char **roots;
   int rc;
 
   rc = hioi_context_scatter (context);
@@ -314,20 +352,15 @@ int hioi_context_create_modules (hio_context_t context) {
     return rc;
   }
 
-  data_roots = strdup (context->c_droots);
-  if (NULL == data_roots) {
+  roots = hioi_context_data_root_to_array (context->c_droots);
+  if (NULL == roots) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  data_root = strtok_r (data_roots, ",", &last);
-
-  do {
-    next_data_root = strtok_r (NULL, ",", &last);
-
-    rc = hioi_component_query (context, data_root, next_data_root, &module);
+  for (int i = 0 ; roots[i] ; ++i) {
+    rc = hioi_component_query (context, roots[i], roots + i + 1, &module);
     if (HIO_SUCCESS != rc) {
-      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", data_root);
-      data_root = next_data_root;
+      hioi_log (context, HIO_VERBOSE_WARN, "Could not find an hio io module for data root %s", roots[i]);
       continue;
     }
 
@@ -343,19 +376,23 @@ int hioi_context_create_modules (hio_context_t context) {
                 HIO_MAX_DATA_ROOTS);
       break;
     }
-    data_root = next_data_root;
-  } while (NULL != data_root);
+  }
+
+  hioi_context_data_root_array_release (roots);
 
   context->c_mcount = num_modules;
   context->c_cur_module = 0;
-
-  free (data_roots);
 
   return rc;
 }
 
 static int hioi_context_set_default_droot (hio_context_t context) {
+  bool persistent_seen = false, non_persistent_seen = false;
   char cwd_buffer[MAXPATHLEN] = "";
+  int datawarp_mount_count = 0;
+  const char *last_mount_seen = NULL;
+  const int dw_persistent_striped_length = 21;
+  char *data_root_tmp = NULL, *tmp;
   int rc;
 
   /* default data root is the current working directory */
@@ -363,17 +400,45 @@ static int hioi_context_set_default_droot (hio_context_t context) {
     return HIO_ERROR;
   }
 
-  if (NULL == getenv ("DW_JOB_STRIPED")) {
-    /* just use posix IO by default */
-    rc = asprintf (&context->c_droots, "posix:%s", cwd_buffer);
-  } else {
-    /* automatically add a datawarp root if one exists */
-    rc = asprintf (&context->c_droots, "datawarp,posix:%s", cwd_buffer);
+  data_root_tmp = getenv ("DW_JOB_STRIPED");
+  if (NULL != data_root_tmp) {
+    /* make sure the jobdw root is first */
+    data_root_tmp = strdup ("datawarp,");
   }
+
+  /* add all available datawarp mounts to the default data root list */
+  for (int i = 0 ; environ[i] ; ++i) {
+    if (0 == strncmp (environ[i], "DW_PERSISTENT_STRIPED", dw_persistent_striped_length)) {
+      char *name = strdup (environ[i] + dw_persistent_striped_length + 1);
+
+      tmp = strchr (name, '=');
+      *tmp = '\0';
+
+      tmp = data_root_tmp;
+
+      /* named persistent datawarp mount */
+      persistent_seen = true;
+      rc = asprintf (&tmp, "%sdatawarp-%s,", data_root_tmp ? data_root_tmp : "",
+                     name);
+      free (name);
+      free (data_root_tmp);
+
+      data_root_tmp = tmp;
+
+      if (0 > rc) {
+        return HIO_ERR_OUT_OF_RESOURCE;
+      }
+    }
+  }
+
+  rc = asprintf (&context->c_droots, "%sposix:%s",  data_root_tmp ? data_root_tmp : "", cwd_buffer);
+  free (data_root_tmp);
 
   if (0 > rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
+
+  hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "default data roots: %s", context->c_droots);
 
   return HIO_SUCCESS;
 }

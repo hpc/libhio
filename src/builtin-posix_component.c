@@ -2343,7 +2343,7 @@ static int builtin_posix_component_fini (void) {
 }
 
 static int builtin_posix_component_query (hio_context_t context, const char *data_root,
-					  const char *next_data_root, hio_module_t **module) {
+					  char *const *next_data_roots, hio_module_t **module) {
   builtin_posix_module_t *new_module;
 
   if (0 == strncasecmp("datawarp", data_root, 8) || 0 == strncasecmp("dw", data_root, 2)) {
@@ -2356,9 +2356,8 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
   }
 
   if (access (data_root, F_OK)) {
-    hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: data root %s does not exist or can not be accessed",
+    hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: data root %s does not exist or can not be accessed. directory will be created",
                   data_root);
-    return hioi_err_errno (errno);
   }
 
   new_module = calloc (1, sizeof (builtin_posix_module_t));
