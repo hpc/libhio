@@ -12,6 +12,7 @@ AC_DEFUN([HIO_CHECK_HDF5],[
 
     # Always try to enable hdf5
     use_hdf5=1
+    have_hdf5_src=0
     if ( test $with_hdf5 = no ) ; then
     	use_hdf5=0
     fi
@@ -37,10 +38,8 @@ AC_DEFUN([HIO_CHECK_HDF5],[
     if ( test $use_hdf5 = 1 && test $with_hdf5 = yes ) ; then
         AC_ERROR([HDF5 support requested but not found])
         use_hdf5=0
-    elif ( test $use_hdf5 = 1 && test $with_hdf5_src = auto ) ; then
-        AC_ERROR([HDF5 support requested but hdf5 source dir not specified])
-	use_hdf5=0
-    else
+    elif ( test $use_hdf5 = 1 && test $with_hdf5_src != auto ) ; then
+        have_hdf5_src=1
         CPPFLAGS="$CPPFLAGS -I$with_hdf5_src/src"
     fi
 
@@ -49,5 +48,7 @@ AC_DEFUN([HIO_CHECK_HDF5],[
     fi
 
     AC_DEFINE_UNQUOTED([HIO_USE_HDF5], [$use_hdf5], [Whether to build the hdf5 plugin])
+    AC_DEFINE_UNQUOTED([HAVE_HDF5_SRC], [$have_hdf5_src],
+                            [Define to 1 if hdf5 source is available.])
     AM_CONDITIONAL([HDF5_AVAILABLE], [test $use_hdf5 = 1])
 ])
