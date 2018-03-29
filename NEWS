@@ -1,9 +1,20 @@
 HIO NEWS
 ========
 
-Last updated 2018-01-04
+Last updated 2018-03-29
 
-Release hio.1.4.1.0-rc1
+Release hio.1.4.1.1-rc1
+
+This is a bugfix release. The following bugs have been fixed:
+
+ - #36: Excessive error messages on filesystem query failure. This
+    issue was fixed by updating the code to print out the failure only
+    from rank 0.
+
+ - #37: Errors when using persistent DataWarp reservation. Fixed by
+    updating the data root selection code in builtin-datawarp.c.
+
+Release hio.1.4.1.0
 
 This is a new release that adds support for importing files not written by
 libhio. This support can be enabled by setting the posix_simple_filename
