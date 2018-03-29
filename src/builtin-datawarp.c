@@ -797,12 +797,36 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
   builtin_datawarp_module_t *new_module;
   hio_module_t *posix_module;
   char *tmp_env_name;
-  bool auto_root;
   int rc;
 
-  if (0 == strcmp (context->c_dw_root, "auto")) {
+  if (strncasecmp("datawarp", data_root, 8) && strncasecmp("dw", data_root, 2)) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: module datawarp does not match for data "
+              "root %s", data_root);
+    return HIO_ERR_NOT_AVAILABLE;
+  }
+
+  mount_name = strchr (data_root, '-');
+  if (NULL != mount_name) {
+    mount_name++;
+
+    if (0 == strcmp (context->c_dw_root, "auto")) {
+      hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: ignoring user-defined DataWarp root for named persistent "
+                "DataWarp mount %s", mount_name);
+    }
+
+    rc = asprintf (&tmp_env_name, "DW_PERSISTENT_STRIPED_%s", mount_name);
+    if (0 > rc) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    dw_root = getenv (tmp_env_name);
+    free (tmp_env_name);
+    if (NULL == dw_root) {
+      hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: could not find a data root matching %s", mount_name);
+      return HIO_ERROR;
+    }
+  } else if (0 == strcmp (context->c_dw_root, "auto")) {
     /* in this case the user has not overridden the data root for datawarp */
-    auto_root = true;
     dw_root = getenv ("DW_JOB_STRIPED");
     if (NULL == dw_root) {
       hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: neither DW_JOB_STRIPED nor HIO_datawarp_root "
@@ -813,39 +837,9 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
     dw_root = context->c_dw_root;
   }
 
-  if (NULL == dw_root || (strncasecmp("datawarp", data_root, 8) && strncasecmp("dw", data_root, 2) && strcmp (dw_root, data_root))) {
-    hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "builtin-datawarp/query: module datawarp does not match for data "
-              "root %s", data_root);
-    return HIO_ERR_NOT_AVAILABLE;
-  }
-
-  if (0 == strncasecmp("datawarp", data_root, 8) || 0 == strncasecmp("dw", data_root, 2)) {
-    mount_name = strchr (data_root, '-');
-    if (NULL != mount_name) {
-      mount_name++;
-
-      if (!auto_root) {
-        hioi_log (context, HIO_VERBOSE_WARN, "builtin-datawarp/query: ignoring user-defined DataWarp root for named persistent "
-                  "DataWarp mount %s", mount_name);
-      }
-
-      rc = asprintf (&tmp_env_name, "DW_PERSISTENT_STRIPED_%s", mount_name);
-      if (0 > rc) {
-        return HIO_ERR_OUT_OF_RESOURCE;
-      }
-
-      dw_root = getenv (tmp_env_name);
-      free (tmp_env_name);
-      if (NULL == dw_root) {
-        hioi_log (context, HIO_VERBOSE_ERROR, "builtin-datawarp/query: could not find a data root matching %s", mount_name);
-        return HIO_ERROR;
-      }
-    }
-
-    subpath = strchr (data_root, ':');
-    if (subpath) {
-      ++subpath;
-    }
+  subpath = strchr (data_root, ':');
+  if (subpath) {
+    ++subpath;
   }
 
   if (NULL != next_data_roots) {

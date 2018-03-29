@@ -387,7 +387,6 @@ int hioi_context_create_modules (hio_context_t context) {
 }
 
 static int hioi_context_set_default_droot (hio_context_t context) {
-  bool persistent_seen = false, non_persistent_seen = false;
   char cwd_buffer[MAXPATHLEN] = "";
   int datawarp_mount_count = 0;
   const char *last_mount_seen = NULL;
@@ -417,7 +416,6 @@ static int hioi_context_set_default_droot (hio_context_t context) {
       tmp = data_root_tmp;
 
       /* named persistent datawarp mount */
-      persistent_seen = true;
       rc = asprintf (&tmp, "%sdatawarp-%s,", data_root_tmp ? data_root_tmp : "",
                      name);
       free (name);
