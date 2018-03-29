@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -361,8 +361,12 @@ static int hioi_fs_query_datawarp (const char *path, hio_fs_attr_t *fs_attr) {
   }
 
   rc = dw_get_stripe_configuration (fd, &stripe_size, &stripe_width, &start);
+  close (fd);
   if (0 != rc) {
-    close (fd);
+    if (-ENODATA == rc) {
+      /* not sure why this happens but ignore this error */
+      return HIO_SUCCESS;
+    }
     return hioi_err_errno (errno);
   }
 
@@ -422,14 +426,16 @@ int hioi_fs_query_single (hio_context_t context, const char *path, hio_fs_attr_t
 
   do {
     if (NULL == realpath (path, tmp)) {
-      fs_attr->fs_type = hioi_err_errno (errno);
+      rc = hioi_err_errno (errno);
+      hioi_err_push (rc, &context->c_object, "realpath failed (fatal). path:%s errno:%d(%s)", path, errno, strerror(errno));
+      fs_attr->fs_type = rc;
       break;
     }
 
     /* get general filesystem data */
     rc = statfs (tmp, &fsinfo);
     if (0 > rc) {
-      hioi_log(context, HIO_VERBOSE_DEBUG_LOW, "statfs path:%s rc:%d errno:%d(%s)", tmp, rc, errno, strerror(errno));  
+      hioi_err_push (rc, &context->c_object, "statfs failed (fatal). path:%s rc:%d errno:%d(%s)", tmp, rc, errno, strerror(errno));
       fs_attr->fs_type = hioi_err_errno (errno);
       break;
     }
@@ -449,6 +455,11 @@ int hioi_fs_query_single (hio_context_t context, const char *path, hio_fs_attr_t
 #if defined(LL_SUPER_MAGIC)
     case LL_SUPER_MAGIC:
       hioi_fs_query_lustre (tmp, fs_attr);
+      if (HIO_SUCCESS != rc) {
+        hioi_err_push (rc, &context->c_object, "hioi_fs_query_lustre failed (non-fatal). path:%s rc:%d errno:%d(%s)",
+                       tmp, rc, errno, strerror(errno));
+        fs_attr->fs_type = 0;
+      }
       break;
 #endif
 
@@ -465,7 +476,12 @@ int hioi_fs_query_single (hio_context_t context, const char *path, hio_fs_attr_t
 #endif
 #if HIO_USE_DATAWARP
     case DW_SUPER_MAGIC:
-      hioi_fs_query_datawarp (tmp, fs_attr);
+      rc = hioi_fs_query_datawarp (tmp, fs_attr);
+      if (HIO_SUCCESS != rc) {
+        hioi_err_push (rc, &context->c_object, "hioi_fs_query_datawarp failed (non-fatal). path:%s rc:%d errno:%d(%s)",
+                       tmp, rc, errno, strerror(errno));
+        fs_attr->fs_type = 0;
+      }
       break;
 #endif
     }
@@ -475,7 +491,6 @@ int hioi_fs_query_single (hio_context_t context, const char *path, hio_fs_attr_t
               " stripe unit: %" PRIu64 " stripe size: %" PRIu64 " stripe max size: %" PRIu64, tmp, fs_attr->fs_type,
               fs_attr->fs_flags, fs_attr->fs_bsize, fs_attr->fs_btotal, fs_attr->fs_bavail, fs_attr->fs_scount,
               fs_attr->fs_smax_count, fs_attr->fs_sunit, fs_attr->fs_ssize, fs_attr->fs_smax_size);
-
   } while (0);
 
   if (0 > fs_attr->fs_type) {
