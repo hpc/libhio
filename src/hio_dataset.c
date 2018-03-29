@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -135,11 +135,21 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
                    "dataset_expected_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
                    "Expected global size of this dataset", 0);
 
+  /* default to automatic selection*/
+  new_dataset->ds_data_root = NULL;
+  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_data_root, "dataset_data_root",
+                   NULL, HIO_CONFIG_TYPE_STRING, NULL, "Data root in use on this dataset. When set before "
+                   "opening a dataset this value influences the search path for the dataset. Leave empty to "
+                   "automatically set", 0);
+
   /* default to a megabyte for the buffer size */
   new_dataset->ds_buffer_size = 1 << 20;
   hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_buffer_size,
                    "dataset_buffer_size", NULL, HIO_CONFIG_TYPE_INT64, NULL,
                    "Buffer size to use for aggregating read and write operations", 0);
+
+  hioi_config_add (context, &new_dataset->ds_object, &new_dataset->ds_uri, "dataset_uri",
+                   NULL, HIO_CONFIG_TYPE_STRING, NULL, "Backend-specific URI to the dataset", 0);
 
   /* set up performance variables */
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bread, "bytes_read",
@@ -154,12 +164,15 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rtime, "read_time_usec",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio write calls in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_rcount, "read_count",
+  hioi_perf_add (context, &new_dataset->ds_object, (void *) &new_dataset->ds_stat.s_rcount, "read_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to read APIs in this dataset instance", 0);
 
-  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_wcount, "write_count",
+  hioi_perf_add (context, &new_dataset->ds_object, (void *) &new_dataset->ds_stat.s_wcount, "write_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset instance", 0);
 
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_ctime, "close_time",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Time spent closing file(s)", 0);
 
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_abread, "aggregate_bytes_read",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset", 0);
@@ -178,6 +191,9 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
 
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_awcount, "aggregate_write_count",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of calls to write APIs in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_actime, "aggregate_close_time",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent closing file(s)", 0);
 
   hioi_list_init (new_dataset->ds_elist);
 
@@ -237,6 +253,13 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
             "with backend module %p", dataset->ds_object.identifier, dataset->ds_id, dataset->ds_flags,
             (void *) module);
 
+  /* disable modification of the data root */
+  (void) hioi_config_set_readonly (&dataset->ds_object, "dataset_data_root", true);
+
+  if (NULL == dataset->ds_data_root) {
+    dataset->ds_data_root = strdup (module->data_root);
+  }
+
   /* Several things need to be done here:
    * 1) check if the user is requesting a specific dataset or the newest available,
    * 2) check if the dataset specified already exists in any module,
@@ -246,16 +269,27 @@ int hioi_dataset_open_internal (hio_module_t *module, hio_dataset_t dataset) {
   if (HIO_SUCCESS != rc) {
     hioi_log (module->context, HIO_VERBOSE_DEBUG_LOW, "Failed to open dataset %s::%" PRIu64
               " on data root %s", dataset->ds_object.identifier, dataset->ds_id, module->data_root);
+    /* re-enable modification of the data root */
+    (void) hioi_config_set_readonly (&dataset->ds_object, "dataset_data_root", false);
     return rc;
   }
 
+  /* now lock-down the backend URI. users should not be trying to change this after a dataset is opened */
+  (void) hioi_config_set_readonly (&dataset->ds_object, "dataset_uri", true);
+
+  hioi_module_retain (module);
+  dataset->ds_module = module;
+
   if (NULL == dataset->ds_buffer.b_base) {
-    (void) posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
-    if (NULL != dataset->ds_buffer.b_base) {
+    /* if the backend did not already allocate a buffer then allocate it now */
+    rc = posix_memalign (&dataset->ds_buffer.b_base, 4096, dataset->ds_buffer_size);
+    if (0 != rc || NULL != dataset->ds_buffer.b_base) {
       dataset->ds_buffer.b_size = dataset->ds_buffer_size;
       dataset->ds_buffer.b_remaining = dataset->ds_buffer.b_size;
     }
   }
+
+  hioi_list_init (dataset->ds_buffer.b_reqlist);
 
   dataset->ds_rotime = rotime;
 
@@ -291,6 +325,8 @@ int hioi_dataset_close_internal (hio_dataset_t dataset) {
   free (dataset->ds_buffer.b_base);
   dataset->ds_buffer.b_base = NULL;
 
+  hioi_module_release (dataset->ds_module);
+
   return rc;
 }
 
@@ -320,7 +356,6 @@ int hioi_dataset_gather_manifest (hio_dataset_t dataset, hio_manifest_t *manifes
 
 #if HIO_MPI_HAVE(1)
 int hioi_dataset_gather_manifest_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifest_t *manifest_out, bool simple) {
-  hio_context_t context = hioi_object_context (&dataset->ds_object);
   hio_manifest_t manifest;
   int rc, comm_rank;
 
@@ -418,6 +453,7 @@ int hioi_dataset_scatter_comm (hio_dataset_t dataset, MPI_Comm comm, hio_manifes
   return rc;
 }
 
+#if HIO_MPI_HAVE(1)
 int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest, int rc) {
   hio_context_t context = (hio_context_t) dataset->ds_object.parent;
   int *ranks = NULL, *all_ranks, rank_count = 0, io_leader, mpirc;
@@ -462,10 +498,18 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
 
   free (ranks);
 
+#if defined(HAVE_MPI_REDUCE_SCATTER_BLOCK)
   /* NTH: reduce scatter block should be faster than doing an allreduce on the entire array. this
    * still use a O(n) memory and will likely be changed in a future release to further cut down on
    * the communication time and memory usage. */
   rc = MPI_Reduce_scatter_block (all_ranks, &io_leader, 1, MPI_INT, MPI_MAX, context->c_comm);
+#else
+  /* MPI_Reduce_scatter_block is an MPI-2.2 function. For older MPI installations we have to
+   * fall back to MPI_Allreduce. */
+  rc = MPI_Allreduce (MPI_IN_PLACE, all_ranks, context->c_size, MPI_INT, MPI_MAX, context->c_comm);
+  io_leader = all_ranks[context->c_rank];
+#endif
+
   free (all_ranks);
   if (MPI_SUCCESS != rc) {
     return hioi_err_mpi (rc);
@@ -488,10 +532,15 @@ int hioi_dataset_scatter_unique (hio_dataset_t dataset, hio_manifest_t manifest,
 
   return rc;
 }
+#endif
 
 static int hioi_dataset_header_compare_newest (const void *a, const void *b) {
   const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
   const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
+
+  if (headera->ds_id == headerb->ds_id) {
+    return ((headera->ds_priority < headerb->ds_priority) - (headera->ds_priority > headerb->ds_priority));
+  }
 
   return ((headera->ds_mtime > headerb->ds_mtime) - (headera->ds_mtime < headerb->ds_mtime));
 }
@@ -500,10 +549,57 @@ static int hioi_dataset_header_compare_highest (const void *a, const void *b) {
   const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
   const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
 
+  if (headera->ds_id == headerb->ds_id) {
+    return ((headera->ds_priority < headerb->ds_priority) - (headera->ds_priority > headerb->ds_priority));
+  }
+
   return ((headera->ds_id > headerb->ds_id) - (headera->ds_id < headerb->ds_id));
 }
 
-int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t id) {
+static int hioi_dataset_header_compare_priority (const void *a, const void *b) {
+  const hio_dataset_header_t *headera = (const hio_dataset_header_t *) a;
+  const hio_dataset_header_t *headerb = (const hio_dataset_header_t *) b;
+
+  return ((headera->ds_priority < headerb->ds_priority) - (headera->ds_priority > headerb->ds_priority));
+}
+
+void hioi_dataset_header_cleanup (hio_dataset_header_t *header) {
+  free (header->ds_path);
+  header->ds_path = NULL;
+}
+
+int hioi_dataset_list_resize (hio_dataset_list_t *list, size_t new_count) {
+  hio_dataset_header_t *tmp;
+
+  if (0 != new_count) {
+    /* cleanup any headers we may be deleting */
+    for (size_t i = new_count ; i < list->header_count ; ++i) {
+      hioi_dataset_header_cleanup (list->headers + i);
+    }
+
+    tmp = (hio_dataset_header_t *) realloc (list->headers, new_count * sizeof (*tmp));
+    if (NULL == tmp) {
+      return HIO_ERR_OUT_OF_RESOURCE;
+    }
+
+    if (new_count > list->header_count) {
+      memset (tmp + list->header_count, 0, (new_count - list->header_count) * sizeof (*tmp));
+    }
+
+    list->headers = tmp;
+  } else {
+    /* just release the list as it is not needed */
+    free (list->headers);
+    list->headers = NULL;
+  }
+
+  list->header_count = new_count;
+
+  return HIO_SUCCESS;
+
+}
+
+int hioi_dataset_list_sort (hio_dataset_list_t *list, int64_t id) {
   int (*compar) (const void *, const void *);
 
   if (HIO_DATASET_ID_NEWEST == id) {
@@ -511,10 +607,95 @@ int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t
   } else if (HIO_DATASET_ID_HIGHEST == id) {
     compar = hioi_dataset_header_compare_highest;
   } else {
-    return HIO_ERR_BAD_PARAM;
+    compar = hioi_dataset_header_compare_priority;
   }
 
-  (void) qsort (headers, count, sizeof (headers[0]), compar);
+  (void) qsort (list->headers, list->header_count, sizeof (list->headers[0]), compar);
+  return HIO_SUCCESS;
+}
+
+hio_dataset_list_t *hioi_dataset_list_alloc (void) {
+  hio_dataset_list_t *new_list = calloc (1, sizeof (*new_list));
+  return new_list;
+}
+
+void hioi_dataset_list_release (hio_dataset_list_t *list) {
+  if (NULL == list) {
+    return;
+  }
+
+  /* release list contents and header array */
+  (void) hioi_dataset_list_resize (list, 0);
+
+  free (list);
+}
+
+hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, hio_module_t **modules, size_t module_count,
+                                           const char *dataset_name, const char *uri, int64_t sort_key)
+{
+  hio_dataset_list_t *list;
+  int rc;
+
+  list = hioi_dataset_list_alloc ();
+  if (NULL == list) {
+    return NULL;
+  }
+
+  for (size_t i = 0 ; i < module_count ; ++i) {
+    rc = modules[i]->dataset_list (modules[i], dataset_name, uri, i, list);
+    if (HIO_SUCCESS != rc && HIO_ERR_NOT_FOUND != rc) {
+      hioi_err_push (rc, &context->c_object, "hioi_dataset_get_list: error listing datasets on data root %s",
+                     modules[i]->data_root);
+    }
+  }
+
+
+  /* sort this list using the requested key */
+  hioi_dataset_list_sort (list, sort_key);
+
+  /* debug output */
+  if (0 == context->c_rank && HIO_VERBOSE_DEBUG_MED <= context->c_verbose) {
+    hioi_log (context, HIO_VERBOSE_DEBUG_MED, "found %lu dataset ids across all data roots:",
+              (unsigned long) list->header_count);
+
+    for (int i = 0 ; i < list->header_count ; ++i) {
+      hioi_log (context, HIO_VERBOSE_DEBUG_MED, "dataset %s::%" PRId64 ": mtime = %ld, status = %d, "
+                "data_root = %s", list->headers[i].ds_name, list->headers[i].ds_id, list->headers[i].ds_mtime,
+                list->headers[i].ds_status, list->headers[i].module->data_root);
+    }
+  }
+
+  return list;
+}
+
+int hioi_dataset_aggregate_statistics (hio_dataset_t dataset) {
+  hio_context_t context = hioi_object_context (&dataset->ds_object);
+  uint64_t tmp[7];
+
+  /* collect statistics now so they can be included in the manifest */
+  tmp[0] = dataset->ds_stat.s_bread;
+  tmp[1] = dataset->ds_stat.s_bwritten;
+  tmp[2] = dataset->ds_stat.s_rtime;
+  tmp[3] = dataset->ds_stat.s_wtime;
+  tmp[4] = atomic_load(&dataset->ds_stat.s_rcount);
+  tmp[5] = atomic_load(&dataset->ds_stat.s_wcount);
+  tmp[6] = dataset->ds_stat.s_ctime;
+
+#if HIO_MPI_HAVE(1)
+  if (1 != context->c_size) {
+    MPI_Allreduce (MPI_IN_PLACE, tmp, 7, MPI_UINT64_T, MPI_SUM, context->c_comm);
+  }
+#endif
+
+  /* store global statistics */
+  dataset->ds_stat.s_abread = tmp[0];
+  dataset->ds_stat.s_abwritten = tmp[1];
+  dataset->ds_stat.s_artime = tmp[2];
+  dataset->ds_stat.s_awtime = tmp[3];
+  dataset->ds_stat.s_arcount = tmp[4];
+  dataset->ds_stat.s_awcount = tmp[5];
+  dataset->ds_stat.s_actime = tmp[6];
+
   return HIO_SUCCESS;
 }
 

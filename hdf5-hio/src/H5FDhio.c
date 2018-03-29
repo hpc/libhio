@@ -9,23 +9,51 @@
 /* Interface initialization */
 #define H5_INTERFACE_INIT_FUNC  H5FD_hio_init_interface
 
-#include "H5private.h"    /* Generic Functions      */
-#include "H5Dprivate.h"    /* Dataset functions      */
-#include "H5Eprivate.h"    /* Error handling        */
-#include "H5Fprivate.h"    /* File access        */
-#include "H5FDprivate.h"  /* File drivers        */
-#include "H5Iprivate.h"    /* IDs            */
-#include "H5MMprivate.h"  /* Memory management      */
-#include "H5Pprivate.h"         /* Property lists                       */
+#include <stdlib.h>
+#include <string.h>
+#include "hio_config.h"
+
+#include "H5public.h"    /* Generic Functions      */
+#include "H5Dpublic.h"    /* Dataset functions      */
+#include "H5Epubgen.h"
+#include "H5Epublic.h"    /* Error handling        */
+#include "H5Fpublic.h"    /* File access        */
+#include "H5FDpublic.h"  /* File drivers        */
+#include "H5Ipublic.h"    /* IDs            */
+#include "H5Ppublic.h"         /* Property lists                       */
 #include "H5FDhio.h"
 
 char    *HIO_error_str;
 size_t  HIO_error_str_len = 256;
 
-#define HHIO_GOTO_ERROR(context) {      				\
+#ifndef HDassert
+#define HDassert(a) 
+#endif
+
+#ifndef SUCCEED
+#define SUCCEED 0
+#endif
+
+#ifndef FAIL
+#define FAIL -1
+#endif
+
+#ifndef H5_ATTR_UNUSED
+#define H5_ATTR_UNUSED       __attribute__((unused))
+#endif
+
+#ifdef HERROR
+#define HHIO_GOTO_ERROR(context, error_str) {                           \
   hio_err_get_last ( context, &HIO_error_str );                         \
   HERROR(H5E_INTERNAL, H5E_SYSERRSTR, HIO_error_str);                   \
 }
+#else
+#define HHIO_GOTO_ERROR(context, error_str) {                           \
+  hio_err_print_last( context, stderr, error_str);                      \
+}
+#endif
+
+
 
 /**
  * The driver identification number, initialized at runtime
@@ -64,14 +92,23 @@ static herr_t H5FD_hio_query(const H5FD_t *_f1, unsigned long *flags);
 static haddr_t H5FD_hio_get_eoa(const H5FD_t *_file, H5FD_mem_t type);
 static herr_t H5FD_hio_set_eoa(H5FD_t *_file, H5FD_mem_t type, haddr_t addr);
 static herr_t H5FD_hio_set_eof(H5FD_hio_t *file);
-static haddr_t H5FD_hio_get_eof(const H5FD_t *_file);
 static herr_t  H5FD_hio_get_handle(H5FD_t *_file, hid_t H5_ATTR_UNUSED fapl, void** file_handle);
 static herr_t H5FD_hio_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
             size_t size, void *buf);
 static herr_t H5FD_hio_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
             size_t size, const void *buf);
-static herr_t H5FD_hio_flush(H5FD_t *_file, hid_t dxpl_id, unsigned closing);
 static herr_t H5FD_hio_haddr_to_HIOOff(haddr_t addr, off_t *hio_off);
+#if H5_VERSION_GE(1,10,0)
+static haddr_t H5FD_hio_get_eof(const H5FD_t *_file, H5FD_mem_t type);
+#define GET_DRIVER(a) H5P_peek_driver((a))
+#define GET_DRIVER_INFO(a) H5P_peek_driver_info((a))
+#else
+typedef unsigned hbool_t;
+static haddr_t H5FD_hio_get_eof(const H5FD_t *_file);
+#define GET_DRIVER(a) H5P_get_driver((a))
+#define GET_DRIVER_INFO(a) H5P_get_driver_info((a))
+#endif
+static herr_t H5FD_hio_flush(H5FD_t *_file, hid_t dxpl_id, hbool_t closing);
 
 /** 
  * HIO-specific file access properties 
@@ -87,6 +124,9 @@ static const H5FD_class_t H5FD_hio_g = {
     "hio",                                /*name         */
     HADDR_MAX,                            /*maxaddr      */
     H5F_CLOSE_SEMI,                       /*fc_degree    */
+#if H5_VERSION_GE(1,10,0)
+    NULL,                                 /* terminate   */
+#endif
     NULL,                                 /*sb_size      */
     NULL,                                 /*sb_encode    */
     NULL,                                 /*sb_decode    */
@@ -124,9 +164,7 @@ static const H5FD_class_t H5FD_hio_g = {
 static herr_t
 H5FD_hio_init_interface(void)
 {
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
-
-    FUNC_LEAVE_NOAPI(H5FD_hio_init())
+    H5FD_hio_init();
 } /* H5FD_hio_init_interface() */
 
 
@@ -140,18 +178,16 @@ H5FD_hio_init(void)
 {
     hid_t ret_value;        	/* Return value */
 
-    FUNC_ENTER_NOAPI(FAIL)
-
     /* Register the HIO VFD, if it isn't already */
     if(!H5FD_HIO_g)
-        H5FD_HIO_g = H5FD_register((const H5FD_class_t *)&H5FD_hio_g, sizeof(H5FD_class_t), FALSE);
+        H5FD_HIO_g = H5FDregister((const H5FD_class_t *)&H5FD_hio_g);
 
     HIO_error_str = (char *) malloc(HIO_error_str_len);
     /* Set return value */
     ret_value = H5FD_HIO_g;
 
 done:
-    FUNC_LEAVE_NOAPI(ret_value)
+    return ret_value;
 } /* end H5FD_hio_init() */
 
 
@@ -167,13 +203,11 @@ done:
 void
 H5FD_hio_term(void)
 {
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
 
     /* Reset VFL ID */
     H5FD_HIO_g=0;
     free(HIO_error_str);
 
-    FUNC_LEAVE_NOAPI_VOID
 } /* end H5FD_hio_term() */
 
 
@@ -190,27 +224,23 @@ herr_t
 H5Pset_fapl_hio(hid_t fapl_id, hio_settings_t *settings)
 {
     H5FD_hio_fapl_t  fa;
-    H5P_genplist_t *plist;      /* Property list pointer */
     herr_t ret_value;
 
-    FUNC_ENTER_API(FAIL)
-
-    if(fapl_id == H5P_DEFAULT)
-        HGOTO_ERROR(H5E_PLIST, H5E_BADVALUE, FAIL, "can't set values in default property list")
-
-    /* Check arguments */
-    if(NULL == (plist = H5P_object_verify(fapl_id, H5P_FILE_ACCESS)))
-        HGOTO_ERROR(H5E_PLIST, H5E_BADTYPE, FAIL, "not a file access list")
+    if(fapl_id == H5P_DEFAULT) {
+        ret_value = H5E_BADVALUE;
+        HHIO_GOTO_ERROR(NULL, "can't set values in default property list");
+        goto done;
+    }
 
     if (settings) {
 	fa.settings = settings;
     }
 
     /* duplication is done during driver setting. */
-    ret_value= H5P_set_driver(plist, H5FD_HIO_g, &fa);
+    ret_value= H5Pset_driver(fapl_id, H5FD_HIO_g, (const void *)&fa);
 
 done:
-    FUNC_LEAVE_API(ret_value)
+    return ret_value;
 }
 
 
@@ -227,23 +257,25 @@ herr_t
 H5Pget_fapl_hio(hid_t fapl_id, hio_settings_t *settings/*out*/)
 {
     H5FD_hio_fapl_t  *fa;
-    H5P_genplist_t *plist;      /* Property list pointer */
     herr_t      ret_value=SUCCEED;      /* Return value */
 
-    FUNC_ENTER_API(FAIL)
+    if(H5FD_HIO_g != H5Pget_driver(fapl_id)) {
+        ret_value = H5E_BADVALUE;
+        HHIO_GOTO_ERROR(NULL, "failed to get driver from access list");
+        goto done;
+    }
 
-    if(NULL == (plist = H5P_object_verify(fapl_id, H5P_FILE_ACCESS)))
-        HGOTO_ERROR(H5E_PLIST, H5E_BADTYPE, FAIL, "not a file access list")
-    if(H5FD_HIO_g != H5P_get_driver(plist))
-        HGOTO_ERROR(H5E_PLIST, H5E_BADVALUE, FAIL, "incorrect VFL driver")
-    if(NULL == (fa = (H5FD_hio_fapl_t *)H5P_get_driver_info(plist)))
-        HGOTO_ERROR(H5E_PLIST, H5E_BADVALUE, FAIL, "bad VFL driver info")
+    if(NULL == (fa = (H5FD_hio_fapl_t *) H5Pget_driver_info(fapl_id))) {
+        ret_value = H5E_BADVALUE;
+        HHIO_GOTO_ERROR(NULL, "H5Pget_driver_info returned error");
+        goto done;
+    }
 
     *settings = *fa->settings;
 
 done:
 
-    FUNC_LEAVE_API(ret_value)
+     return ret_value;
 }
 
 /**-------------------------------------------------------------------------                                                                                
@@ -265,19 +297,19 @@ H5FD_hio_fapl_get(H5FD_t *_file)
   H5FD_hio_fapl_t  *fa = NULL;
   void      *ret_value;       /* Return value */
   
-  FUNC_ENTER_NOAPI_NOINIT
-    
   HDassert(file);
   HDassert(H5FD_HIO_g == file->pub.driver_id);
   
-  if(NULL == (fa = (H5FD_hio_fapl_t *)H5MM_calloc(sizeof(H5FD_hio_fapl_t))))
-    HGOTO_ERROR(H5E_RESOURCE, H5E_NOSPACE, NULL, "memory allocation failed")
+  if(NULL == (fa = (H5FD_hio_fapl_t *)calloc(1,sizeof(H5FD_hio_fapl_t)))) {
+    ret_value = NULL;
+    goto done;
+  }
       
   /* Set return value */
   ret_value = fa;
 
  done:
-  FUNC_LEAVE_NOAPI(ret_value)
+   return ret_value;
 }
 
 /*-------------------------------------------------------------------------                                                                                 
@@ -298,23 +330,18 @@ H5FD_hio_fapl_copy(const void *_old_fa)
   const H5FD_hio_fapl_t *old_fa = (const H5FD_hio_fapl_t*)_old_fa;
   H5FD_hio_fapl_t  *new_fa = NULL;
 
-  FUNC_ENTER_NOAPI_NOINIT
-
-    if(NULL == (new_fa = (H5FD_hio_fapl_t *)H5MM_malloc(sizeof(H5FD_hio_fapl_t))))
-      HGOTO_ERROR(H5E_RESOURCE, H5E_NOSPACE, NULL, "memory allocation failed")
+    if(NULL == (new_fa = (H5FD_hio_fapl_t *)malloc(sizeof(H5FD_hio_fapl_t)))) {
+        HHIO_GOTO_ERROR(NULL, "memory allocation failed");
+        goto done;
+    }
 
     /* Copy the general information */
-    HDmemcpy(new_fa, old_fa, sizeof(H5FD_hio_fapl_t));
+    memcpy(new_fa, old_fa, sizeof(H5FD_hio_fapl_t));
     ret_value = new_fa;
 
  done:
-    if (NULL == ret_value){
-      /* cleanup */
-      if (new_fa)
-	H5MM_xfree(new_fa);
-    }
+    return ret_value;
 
-    FUNC_LEAVE_NOAPI(ret_value)
 } /* end H5FD_hio_fapl_copy() */
 
 /*-------------------------------------------------------------------------                                                                                 
@@ -334,13 +361,11 @@ H5FD_hio_fapl_free(void *_fa)
     herr_t    ret_value = SUCCEED;
     H5FD_hio_fapl_t  *fa = (H5FD_hio_fapl_t*)_fa;
     
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
-
     HDassert(fa);
     
-    H5MM_xfree(fa);
+    free(fa);
     
-    FUNC_LEAVE_NOAPI(ret_value)
+    return ret_value;
 } /* end H5FD_hio_fapl_free() */
 
 
@@ -464,7 +489,7 @@ hio_return_t hio_open(const char *name, const char *element_name,
 
     if(HIO_SUCCESS != (ret = hio_dataset_alloc (*context, dataset, "hdf5hio", set_id, 
 						new_flags, dataset_mode))) {
-        HHIO_GOTO_ERROR(*context)
+        HHIO_GOTO_ERROR(*context, "hio_dataset_alloc");
         goto error;
     }
 
@@ -474,14 +499,14 @@ hio_return_t hio_open(const char *name, const char *element_name,
 	  ret = hio_dataset_open (*dataset);
     }
     if(HIO_SUCCESS != ret) {
-        HHIO_GOTO_ERROR(*context)
         hio_dataset_free(dataset);
+        HHIO_GOTO_ERROR(*context, "hio_dataset_open");
 	goto error;
     }
     if (HIO_SUCCESS != (ret = hio_element_open(*dataset, elem, element_name, hio_flags))) {
-	HHIO_GOTO_ERROR(*context)
         hio_dataset_close(*dataset);
         hio_dataset_free(dataset);
+        HHIO_GOTO_ERROR(*context, "hio_elemet_open");
 	goto error;
     }
 
@@ -491,40 +516,50 @@ hio_return_t hio_open(const char *name, const char *element_name,
     return HIO_ERROR;
 }
 
-hio_return_t hio_reopen(H5FD_t *_file, int flag) {
-  H5FD_hio_t  *file = (H5FD_hio_t*)_file;
-  hio_return_t hio_code = HIO_SUCCESS;
+hio_return_t hio_reopen(H5FD_t *_file, int flag) 
+{
+    H5FD_hio_t  *file = (H5FD_hio_t *)_file;
+    hio_return_t hio_code = HIO_SUCCESS;
 
-  HDassert(file);
+    HDassert(file);
   
-  if (file->settings->flags & flag)
-      goto done;
+    if (file->settings->flags & flag)
+        goto done;
 
-  if (flag == HIO_FLAG_WRITE) {
-      file->settings->flags = HIO_FLAG_WRITE;
-  } else {
-      file->settings->flags = HIO_FLAG_READ;
-  }
-  /* Close the element if it exists */
-  if (file->element != HIO_OBJECT_NULL &&
-      HIO_SUCCESS != (hio_code=hio_element_close(&(file->element)/*in,out*/)))
-      HHIO_GOTO_ERROR(file->context)
+    if (flag == HIO_FLAG_WRITE) {
+        file->settings->flags = HIO_FLAG_WRITE;
+    } else {
+        file->settings->flags = HIO_FLAG_READ;
+    }
+    /* Close the element if it exists */
+    if (file->element != HIO_OBJECT_NULL &&
+        HIO_SUCCESS != (hio_code=hio_element_close(&(file->element)/*in,out*/))) {
+        HHIO_GOTO_ERROR(file->context, "hio_elemet_close");
+        goto error;
+    }
 
-  if (HIO_SUCCESS != (hio_code=hio_dataset_close(file->dataset/*in,out*/)))
-      HHIO_GOTO_ERROR(file->context)
-  if (HIO_SUCCESS != (hio_code=hio_dataset_free(&(file->dataset)/*in,out*/)))
-      HHIO_GOTO_ERROR(file->context)
+    if (HIO_SUCCESS != (hio_code=hio_dataset_close(file->dataset/*in,out*/))) {
+        HHIO_GOTO_ERROR(file->context, "hio_dataset_close");
+        goto error;
+    }
 
-  hio_code = hio_open(file->settings->name, file->settings->element_name, 
-		      file->settings->flags, file->settings->dataset_mode, 
-		      file->settings->setid, &file->context, 
-		      &file->dataset, &file->element);
+    if (HIO_SUCCESS != (hio_code=hio_dataset_free(&(file->dataset)/*in,out*/))) {
+        HHIO_GOTO_ERROR(file->context, "hio_dataset_free");
+        goto error;
+    }
 
-  /* Set the size of the file */
-  H5FD_hio_set_eof(file);
+    hio_code = hio_open(file->settings->name, file->settings->element_name, 
+  		        file->settings->flags, file->settings->dataset_mode, 
+		        file->settings->setid, &file->context, 
+		        &file->dataset, &file->element);
+
+    /* Set the size of the file */
+    H5FD_hio_set_eof(file);
 
  done:
-  return hio_code;
+    return hio_code;
+ error:
+    return HIO_ERROR;
 }
 
 /*-------------------------------------------------------------------------
@@ -545,7 +580,7 @@ hio_return_t hio_reopen(H5FD_t *_file, int flag) {
  */
 static H5FD_t *
 H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
-	       haddr_t H5_ATTR_UNUSED maxaddr)
+	       haddr_t  maxaddr)
 {
     H5FD_hio_t      *file=NULL;
     hio_dataset_t   dataset;
@@ -555,7 +590,6 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
     unsigned        file_opened=0;  /* Flag to indicate that the file was successfully opened */
     const H5FD_hio_fapl_t  *fa=NULL;
     H5FD_hio_fapl_t    _fa;
-    H5P_genplist_t *plist;      /* Property list pointer */
     H5FD_t      *ret_value=NULL;     /* Return value */
     hio_return_t rc;
     char *config_file;
@@ -563,16 +597,13 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
     hio_context_t context;
     int dataset_mode;
 
-    FUNC_ENTER_NOAPI_NOINIT
-
-    /* Obtain a pointer to hio-specific file access properties */
-    if(NULL == (plist = H5P_object_verify(fapl_id, H5P_FILE_ACCESS)))
-        HGOTO_ERROR(H5E_ARGS, H5E_BADTYPE, NULL, "not a file access property list")
-    if(H5P_FILE_ACCESS_DEFAULT == fapl_id || H5FD_HIO_g != H5P_get_driver(plist)) {
+    if(H5P_FILE_ACCESS_DEFAULT == fapl_id || H5FD_HIO_g != H5Pget_driver(fapl_id)) {
         fa = &_fa;
     } else {
-        if(NULL == (fa = (const H5FD_hio_fapl_t *)H5P_get_driver_info(plist)))
-	    HGOTO_ERROR(H5E_PLIST, H5E_BADVALUE, NULL, "bad VFL driver info")
+        if(NULL == (fa = (const H5FD_hio_fapl_t *)H5Pget_driver_info(fapl_id))) {
+            ret_value = NULL;
+            goto done;
+        }
     }
 
     if (strlen(fa->settings->config_file) && strlen(fa->settings->config_prefix)) {
@@ -588,16 +619,22 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
       MPI_Barrier(fa->settings->comm);
       if (HIO_SUCCESS != (rc = hio_init_mpi(&context, &fa->settings->comm, 
 					    config_file, config_prefix, name))) {
-	    HGOTO_ERROR(H5E_RESOURCE, H5E_BADVALUE, NULL, "Error intitializing hio")
+            ret_value = NULL;
+            HHIO_GOTO_ERROR(NULL, "Error intitializing hio");
+            goto done;
       }
     } else if (HIO_SUCCESS != (rc = hio_init_single(&context, 
 						    config_file, config_prefix, name))) {
-	    HGOTO_ERROR(H5E_RESOURCE, H5E_BADVALUE, NULL, "Error intitializing hio")
+            ret_value = NULL;
+            HHIO_GOTO_ERROR(NULL, "Error intitializing hio");
+            goto done;
     }
 #else
     if (HIO_SUCCESS != (rc = hio_init_single(&context, 
 					    config_file, config_prefix, name))) {
-	    HGOTO_ERROR(H5E_RESOURCE, H5E_BADVALUE, NULL, "Error intitializing hio")
+            ret_value = NULL;
+            HHIO_GOTO_ERROR(NULL, "Error intitializing hio");
+            goto done;
     }
 #endif
 
@@ -633,8 +670,12 @@ H5FD_hio_open(const char *name, unsigned flags, hid_t fapl_id,
     file_opened=1;
 
     /* Build the return value and initialize it */
-    if(NULL == (file = (H5FD_hio_t *)H5MM_calloc(sizeof(H5FD_hio_t))))
-        HGOTO_ERROR(H5E_RESOURCE, H5E_NOSPACE, NULL, "memory allocation failed")
+    if(NULL == (file = (H5FD_hio_t *)calloc(1,sizeof(H5FD_hio_t)))) {
+        ret_value = NULL;
+        HHIO_GOTO_ERROR(NULL, "memory allocation failed");
+        goto done;
+    }
+
     file->dataset = dataset;
     file->element = element;
     file->context = context;
@@ -656,10 +697,10 @@ done:
             hio_element_close(&element);
 	}
 	if (file)
-	    H5MM_xfree(file);
+	    free(file);
     } /* end if */
 
-    FUNC_LEAVE_NOAPI(ret_value)
+    return ret_value;
 }
 
 /*-------------------------------------------------------------------------
@@ -680,27 +721,41 @@ H5FD_hio_close(H5FD_t *_file)
     hio_return_t    hio_code;          /* HIO return code */
     herr_t      ret_value=SUCCEED;      /* Return value */
 
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
-
     HDassert(file);
     HDassert(H5FD_HIO_g == file->pub.driver_id);
 
     /* Close the element if it exists */
     if (file->element != HIO_OBJECT_NULL &&
-	HIO_SUCCESS != (hio_code=hio_element_close(&(file->element)/*in,out*/)))
-        HHIO_GOTO_ERROR(file->context)
+	HIO_SUCCESS != (hio_code=hio_element_close(&(file->element)/*in,out*/))) {
+        HHIO_GOTO_ERROR(file->context, "hio_element_close");
+        ret_value = FAIL;
+        goto error;
+    }
 
-    if (HIO_SUCCESS != (hio_code=hio_dataset_close(file->dataset/*in,out*/)))
-        HHIO_GOTO_ERROR(file->context)
-    if (HIO_SUCCESS != (hio_code=hio_dataset_free(&(file->dataset)/*in,out*/)))
-        HHIO_GOTO_ERROR(file->context)
+    if (HIO_SUCCESS != (hio_code=hio_dataset_close(file->dataset/*in,out*/))) {
+        HHIO_GOTO_ERROR(file->context, "hio_dataset_close");
+        ret_value = FAIL;
+        goto error;
+    }
 
-    if (HIO_SUCCESS != (hio_fini (&file->context)))
-        HHIO_GOTO_ERROR(file->context)
+    if (HIO_SUCCESS != (hio_code=hio_dataset_free(&(file->dataset)/*in,out*/))) {
+        HHIO_GOTO_ERROR(file->context, "hio_dataset_free");
+        ret_value = FAIL;
+        goto error;
+    }
 
-    H5MM_xfree(file);
+    if (HIO_SUCCESS != (hio_fini (&file->context))) {
+        HHIO_GOTO_ERROR(file->context, "hio_fini");
+        ret_value = FAIL;
+        goto error;
+    }
 
-    FUNC_LEAVE_NOAPI(ret_value)
+    free(file);
+
+    return ret_value;
+
+ error:
+    return ret_value;
 }
 
 /*-------------------------------------------------------------------------
@@ -716,10 +771,8 @@ H5FD_hio_close(H5FD_t *_file)
  *-------------------------------------------------------------------------
  */
 static herr_t
-H5FD_hio_query(const H5FD_t H5_ATTR_UNUSED *_file, unsigned long *flags /* out */)
+H5FD_hio_query(const H5FD_t  *_file, unsigned long *flags /* out */)
 {
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
-
     /* Set the VFL feature flags that this driver supports */
     if(flags) {
         *flags=0;
@@ -728,7 +781,7 @@ H5FD_hio_query(const H5FD_t H5_ATTR_UNUSED *_file, unsigned long *flags /* out *
         *flags|=H5FD_FEAT_ALLOCATE_EARLY;      /* Allocate space early instead of late */
     } /* end if */
 
-    FUNC_LEAVE_NOAPI(SUCCEED)
+    return SUCCEED;
 }
 
 /*-------------------------------------------------------------------------
@@ -745,16 +798,14 @@ H5FD_hio_query(const H5FD_t H5_ATTR_UNUSED *_file, unsigned long *flags /* out *
  *-------------------------------------------------------------------------
  */
 static haddr_t
-H5FD_hio_get_eoa(const H5FD_t *_file, H5FD_mem_t H5_ATTR_UNUSED type)
+H5FD_hio_get_eoa(const H5FD_t *_file, H5FD_mem_t  type)
 {
     const H5FD_hio_t  *file = (const H5FD_hio_t*)_file;
-
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
 
     HDassert(file);
     HDassert(H5FD_HIO_g == file->pub.driver_id);
 
-    FUNC_LEAVE_NOAPI(file->eoa)
+    return file->eoa;
 }
 
 /*-------------------------------------------------------------------------
@@ -771,18 +822,16 @@ H5FD_hio_get_eoa(const H5FD_t *_file, H5FD_mem_t H5_ATTR_UNUSED type)
  *-------------------------------------------------------------------------
  */
 static herr_t
-H5FD_hio_set_eoa(H5FD_t *_file, H5FD_mem_t H5_ATTR_UNUSED type, haddr_t addr)
+H5FD_hio_set_eoa(H5FD_t *_file, H5FD_mem_t  type, haddr_t addr)
 {
     H5FD_hio_t  *file = (H5FD_hio_t*)_file;
-
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
 
     HDassert(file);
     HDassert(H5FD_HIO==file->pub.driver_id);
 
     file->eoa = addr;
 
-    FUNC_LEAVE_NOAPI(SUCCEED)
+    return SUCCEED;
 }
 
 static herr_t
@@ -796,10 +845,11 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
     herr_t ret_value=SUCCEED;
     int mpi_code, i;
 
-    FUNC_ENTER_NOAPI_NOINIT
-
-    if (HIO_SUCCESS != (hio_code = hio_element_size(file->element, &elem_size)))
-        HHIO_GOTO_ERROR(file->context)
+    if (HIO_SUCCESS != (hio_code = hio_element_size(file->element, &elem_size))) {
+        HHIO_GOTO_ERROR(file->context, "hio_element_size");
+        ret_value = FAIL;
+        goto done;
+    }
 
 #if HIO_USE_MPI
     if (file->settings->comm != MPI_COMM_NULL) {
@@ -808,19 +858,22 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
 	    if ((mpi_code = 
 		 MPI_Allreduce(&elem_size, &total_size, 1, MPI_LONG_LONG_INT, MPI_MAX, 
 			       file->settings->comm)) != MPI_SUCCESS) {
-		HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, FAIL, "Did not receive a valid element size from all ranks")
-		    ret_value = FAIL;
+		HHIO_GOTO_ERROR(NULL, "Did not receive a valid element size from all ranks");
+                ret_value = FAIL;
 		goto done;
 	    }
 	} else {
 	    recvsize = num_ranks * sizeof(int64_t);
-	    if (NULL == (recvbuf = (int64_t *)H5MM_calloc(recvsize)))
-		HGOTO_ERROR(H5E_RESOURCE, H5E_NOSPACE, FAIL, "memory allocation failed")
+	    if (NULL == (recvbuf = (int64_t *)calloc(1,recvsize))) {
+		HHIO_GOTO_ERROR(NULL, "memory allocation failed")
+                ret_value = FAIL;
+                goto done;
+            }
 		    
 	    if ((mpi_code = MPI_Allgather(&elem_size, 1, MPI_LONG_LONG_INT, recvbuf, 1,
 					  MPI_LONG_LONG_INT, file->settings->comm)) != MPI_SUCCESS) {
-		HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, FAIL, "Did not receive a valid element size from all ranks")
-		    ret_value = FAIL;
+		HHIO_GOTO_ERROR(NULL, "Did not receive a valid element size from all ranks");
+                ret_value = FAIL;
 		goto done;
 	    }
 
@@ -829,7 +882,7 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
 		total_size += recvbuf[i];
 	    }
     
-	    H5MM_xfree(recvbuf);
+	    free(recvbuf);
 	}
 
 	file->eof = total_size;
@@ -842,7 +895,7 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
 
  done:
 
-    FUNC_LEAVE_NOAPI(ret_value)
+    return ret_value;
 }
 
 /*-------------------------------------------------------------------------
@@ -869,17 +922,20 @@ H5FD_hio_set_eof(H5FD_hio_t *file)
  *
  *-------------------------------------------------------------------------
  */
+#if H5_VERSION_GE(1,10,0)
+static haddr_t
+H5FD_hio_get_eof(const H5FD_t *_file, H5FD_mem_t type)
+#else
 static haddr_t
 H5FD_hio_get_eof(const H5FD_t *_file)
+#endif
 {
     const H5FD_hio_t  *file = (const H5FD_hio_t*)_file;
-
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
 
     HDassert(file);
     HDassert(H5FD_HIO_g == file->pub.driver_id);
 
-    FUNC_LEAVE_NOAPI(file->eof)
+    return file->eof;
 }
 
 /*-------------------------------------------------------------------------
@@ -893,20 +949,21 @@ H5FD_hio_get_eof(const H5FD_t *_file)
 */
 
 static herr_t
-H5FD_hio_get_handle(H5FD_t *_file, hid_t H5_ATTR_UNUSED fapl, void** file_handle)
+H5FD_hio_get_handle(H5FD_t *_file, hid_t  fapl, void** file_handle)
 {
     H5FD_hio_t         *file = (H5FD_hio_t *)_file;
     herr_t              ret_value = SUCCEED;
 
-    FUNC_ENTER_NOAPI_NOINIT
-
-    if(!file_handle)
-        HGOTO_ERROR(H5E_ARGS, H5E_BADVALUE, FAIL, "file handle not valid")
+    if(!file_handle) {
+        ret_value = FAIL;
+        HHIO_GOTO_ERROR(NULL, "file handle not valid");
+        goto done;
+     }
 
     *file_handle = &(file->element);
 
 done:
-    FUNC_LEAVE_NOAPI(ret_value)
+    return ret_value;
 }
 
 /*-------------------------------------------------------------------------
@@ -924,8 +981,6 @@ H5FD_hio_haddr_to_HIOOff(haddr_t addr, off_t *hio_off/*out*/)
 {
     herr_t ret_value=FAIL;
 
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
-
     HDassert(hio_off);
 
     /* Convert the HDF5 address into an HIO offset */
@@ -936,7 +991,7 @@ H5FD_hio_haddr_to_HIOOff(haddr_t addr, off_t *hio_off/*out*/)
     else
         ret_value=SUCCEED;
 
-    FUNC_LEAVE_NOAPI(ret_value)
+    return ret_value;
 }
 
 /*-------------------------------------------------------------------------
@@ -954,7 +1009,7 @@ H5FD_hio_haddr_to_HIOOff(haddr_t addr, off_t *hio_off/*out*/)
  *-------------------------------------------------------------------------
  */
 static herr_t
-H5FD_hio_read(H5FD_t *_file, H5FD_mem_t H5_ATTR_UNUSED type, hid_t dxpl_id, haddr_t addr, size_t size,
+H5FD_hio_read(H5FD_t *_file, H5FD_mem_t  type, hid_t dxpl_id, haddr_t addr, size_t size,
          void *buf/*out*/)
 {
     H5FD_hio_t      *file = (H5FD_hio_t*)_file;
@@ -963,57 +1018,74 @@ H5FD_hio_read(H5FD_t *_file, H5FD_mem_t H5_ATTR_UNUSED type, hid_t dxpl_id, hadd
     herr_t                ret_value = SUCCEED;
     off_t hio_off;
 
-    FUNC_ENTER_NOAPI_NOINIT
-
     HDassert(file);
     HDassert(H5FD_HIO_g == file->pub.driver_id);
     /* Make certain we have the correct type of property list */
-    HDassert(H5I_GENPROP_LST==H5I_get_type(dxpl_id));
     HDassert(TRUE==H5P_isa_class(dxpl_id,H5P_DATASET_XFER));
     HDassert(buf);
 
     hio_reopen(_file, HIO_FLAG_READ);
     /* some numeric conversions */
     hio_off = (off_t) addr;
-    if (H5FD_hio_haddr_to_HIOOff(addr, &hio_off/*out*/)<0)
-        HGOTO_ERROR(H5E_INTERNAL, H5E_BADRANGE, FAIL, "can't convert from haddr to HIO off")
+    if (H5FD_hio_haddr_to_HIOOff(addr, &hio_off/*out*/)<0) {
+        ret_value = FAIL;
+        HHIO_GOTO_ERROR(file->context, "can't convert from haddr to HIO off");
+        goto done;
+    }
+
     size_i = (int)size;
-    if ((hsize_t)size_i != size)
-        HGOTO_ERROR(H5E_INTERNAL, H5E_BADRANGE, FAIL, "can't convert from size to size_i")
+    if ((hsize_t)size_i != size) {
+        ret_value = FAIL;
+        HHIO_GOTO_ERROR(file->context, "can't convert from size to size_i");
+        goto done;
+    }
 
     if (file->settings->read_blocking == H5FD_HIO_BLOCKING) {
 	if (file->settings->read_io_mode == H5FD_HIO_CONTIGUOUS && 
 	    (bytes_read=hio_element_read(file->element, hio_off, 0, buf, 1, size)) < 0) {
-	    HHIO_GOTO_ERROR(file->context)
+	    HHIO_GOTO_ERROR(file->context, "hio_element_read");
+            ret_value = FAIL;
+            goto done;
 	} else if (file->settings->read_io_mode == H5FD_HIO_STRIDED && 
 		   (bytes_read=hio_element_read_strided(file->element, hio_off, 0, buf, 1, 
 							size, file->settings->stride_size)) < 0) {
-	    HHIO_GOTO_ERROR(file->context)
+	    HHIO_GOTO_ERROR(file->context, "hio_element_read_strided");
+            ret_value = FAIL;
+            goto done;
       }
     } else {
 	if (file->settings->read_io_mode == H5FD_HIO_CONTIGUOUS && 
 	    file->settings->request && 
 	    (bytes_read = 
 	     hio_element_read_nb(file->element, file->settings->request, hio_off, 0, buf, 1, size)) < 0) {
-	    HHIO_GOTO_ERROR(file->context)
+	    HHIO_GOTO_ERROR(file->context, "hio_element_read_nb");
+            ret_value = FAIL;
+            goto done;
 	} else if (file->settings->read_io_mode == H5FD_HIO_STRIDED && 
 		   file->settings->request && 
 		   (bytes_read = 
 		    hio_element_read_strided_nb(file->element, file->settings->request, hio_off, 0, buf, 1, size, 
 						file->settings->stride_size)) < 0) {
-	    HHIO_GOTO_ERROR(file->context)
+	    HHIO_GOTO_ERROR(file->context, "hio_element_read_strided_nb");
+            ret_value = FAIL;
+            goto done;
 	} else if (!file->settings->request) {
-	    HGOTO_ERROR(H5E_INTERNAL, H5E_BADRANGE, FAIL, "HIO Request not set")
+	    HHIO_GOTO_ERROR(file->context, "HIO Request not set")
+            ret_value = FAIL;
+            goto done;
 	}
     }
 
     /* Check for read failure */
-    if (bytes_read<0)
-        HGOTO_ERROR(H5E_IO, H5E_READERROR, FAIL, "file read failed")
+    if (bytes_read<0) {
+	    HHIO_GOTO_ERROR(file->context, "file read failed");
+            ret_value = FAIL;
+            goto done;
+    }
 
 done:
 
-    FUNC_LEAVE_NOAPI(ret_value)
+    return ret_value;
 }
 
 /*-------------------------------------------------------------------------
@@ -1040,37 +1112,43 @@ H5FD_hio_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
     ssize_t         bytes_written;
     herr_t          ret_value = SUCCEED;
 
-    FUNC_ENTER_NOAPI_NOINIT
-
     HDassert(file);
     HDassert(H5FD_HIO_g == file->pub.driver_id);
     /* Make certain we have the correct type of property list */
-    HDassert(H5I_GENPROP_LST==H5I_get_type(dxpl_id));
     HDassert(TRUE==H5P_isa_class(dxpl_id,H5P_DATASET_XFER));
     HDassert(buf);
 
     hio_reopen(_file, HIO_FLAG_WRITE);
     /* some numeric conversions */
-    if(H5FD_hio_haddr_to_HIOOff(addr, &hio_off) < 0)
-        HGOTO_ERROR(H5E_INTERNAL, H5E_BADRANGE, FAIL, "can't convert from haddr to HIO off")
+    if(H5FD_hio_haddr_to_HIOOff(addr, &hio_off) < 0) {
+        HHIO_GOTO_ERROR(file->context, "can't convert from haddr to HIO off");
+        ret_value = FAIL;
+        goto done;
+    }
 
     if (file->settings->write_blocking == H5FD_HIO_BLOCKING) {
-      if ((bytes_written=hio_element_write(file->element, hio_off, 0, buf, 1, size)) < 0) {
-	  HHIO_GOTO_ERROR(file->context)
+        if ((bytes_written=hio_element_write(file->element, hio_off, 0, buf, 1, size)) < 0) {
+	    HHIO_GOTO_ERROR(file->context, "hio_element_write");
+            ret_value = FAIL;
+            goto done;
 	}
     } else {
 	if (file->settings->request && 
 	    (bytes_written = 
 	     hio_element_write_nb(file->element, file->settings->request, hio_off, 0, buf, 1, size)) < 0) {
-	      HHIO_GOTO_ERROR(file->context)
+	      HHIO_GOTO_ERROR(file->context, "hio_element_write_nb");
+              ret_value = FAIL;
+              goto done;
 	} else if (!file->settings->request) {
-	  HGOTO_ERROR(H5E_INTERNAL, H5E_BADRANGE, FAIL, "HIO Request not set")
+            HHIO_GOTO_ERROR(file->context, "HIO Request not set");
+            ret_value = FAIL;
+            goto done;
 	}
     }
       
 done:
 
-    FUNC_LEAVE_NOAPI(ret_value)
+     return ret_value;
 } /* end H5FD_hio_write() */
 
 /*-------------------------------------------------------------------------
@@ -1085,23 +1163,28 @@ done:
  *-------------------------------------------------------------------------
  */
 static herr_t
-H5FD_hio_flush(H5FD_t *_file, hid_t H5_ATTR_UNUSED dxpl_id, unsigned closing)
+H5FD_hio_flush(H5FD_t *_file, hid_t  dxpl_id, hbool_t closing)
 {
     H5FD_hio_t    *file = (H5FD_hio_t*)_file;
     herr_t              ret_value = SUCCEED;
     hio_return_t        hio_code;
-
-    FUNC_ENTER_NOAPI_NOINIT_NOERR
 
     HDassert(file);
     HDassert(H5FD_HIO_g == file->pub.driver_id);
 
     hio_reopen(_file, HIO_FLAG_WRITE);
 
-    if(HIO_SUCCESS != (hio_code = hio_element_flush(file->element, HIO_FLUSH_MODE_COMPLETE)))
-	HHIO_GOTO_ERROR(file->context)
-    if(HIO_SUCCESS != (hio_code = hio_dataset_flush (file->dataset, HIO_FLUSH_MODE_COMPLETE )))
-	HHIO_GOTO_ERROR(file->context)
+    if(HIO_SUCCESS != (hio_code = hio_element_flush(file->element, HIO_FLUSH_MODE_COMPLETE))) {
+	HHIO_GOTO_ERROR(file->context, "hio_element_flush");
+        ret_value = FAIL;
+        goto done;
+    }
+    if(HIO_SUCCESS != (hio_code = hio_dataset_flush (file->dataset, HIO_FLUSH_MODE_COMPLETE ))) {
+	HHIO_GOTO_ERROR(file->context, "hio_dataset_flush");
+        ret_value = FAIL;
+        goto done;
+    }
 
-    FUNC_LEAVE_NOAPI(ret_value)
+done:
+    return ret_value;
 } /* end H5FD_hio_flush() */

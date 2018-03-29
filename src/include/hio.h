@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -270,6 +270,34 @@
  *
  * @subsubsection subsubsec_configuration_dataset Dataset Specific Variables
  *
+ * - @b data_root - Currently active data root for this dataset. This variable is read-only and is only
+ *   valid after a dataset has been opened.
+ *
+ * - @b posix_simple_layout - Boolean - Read/write POSIX file(s). This variable is only valid when
+ *   using basic mode (dataset_file_mode=basic). This variable forces libhio to write data files
+ *   directly in the data root (not in the directory structure). The file name(s) used are taken
+ *   from the posix_simple_filename configuration variable.
+ *
+ * - @b dataset_posix_directory_mode - Directory structure to use when creating a new dataset. The
+ *   valid values are hierarchical and single. The hierarchical structure stores new datasets in
+ *   the context.hio/dataset/id directory. The single format stores new datasets in the
+ *   context.dataset.id.hiod directory. The current default is the use the hierarchical structure
+ *   but this may change in a future release.
+ *
+ * - @b posix_simple_filename - File names(s) to use when reading/writing POSIX files in simple mode.
+ *   The file name can be a single POSIX file or can include any of %c, %d, %i, %e, or %r. These expand
+ *   to context name, dataset name, dataset identifier, element name, and rank respectively. Both rank
+ *   and identifier can take additional formatting ala printf to specify the number of digits, leading 0s,
+ *   etc. The default value in unique mode is @r %c_%d_%016i_%e.%08r and the default in shared mode is
+ *   @i %c_%d_%016i_%e.
+ *
+ * - @b posix_simple_omit_directory - Boolean - Suppress the creation of the libhio directory structure
+ *   when using simple output mode. Default is false.
+ *
+ * - @b posix_simple_import - Boolean - Enable the importing of simple POSIX files. This option
+ *   differs from @i posix_simple_layout in that it does not use simple mode when create a new
+ *   dataset. When this option is used some errors may be delayed until hio_element_open().
+ *
  * - @b datawarp_stage_mode - Mode to use for staging datasets to more permanent data stores (ex: DW \-\> PFS).
  *   Available modes: disable (do not stage), auto (stage most recent id at end of job), end_of_job
  *   (stage at end of job), immediate (stage when the dataset is closed). Note: @b datawarp_stage_mode 
@@ -428,6 +456,19 @@ typedef struct hio_object *hio_object_t;
  * @brief Most recently modified dataset id
  */
 #define HIO_DATASET_ID_NEWEST (int64_t) -0x10000002
+
+/**
+ * @ingroup API
+ * @brief Any dataset id
+ */
+#define HIO_DATASET_ID_ANY (int64_t) -0x10000004
+
+/**
+ * @ingroup API
+ * @bried Maximum length of a context name including the
+ *        terminator
+ */
+#define HIO_CONTEXT_NAME_MAX 256
 
 /**
  * @ingroup API

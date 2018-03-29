@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -26,6 +26,15 @@ typedef enum builtin_posix_dataset_fmode {
   /** write block across multiple files */
   HIO_FILE_MODE_STRIDED,
 } builtin_posix_dataset_fmode_t;
+
+typedef enum builtin_posix_dataset_dmode {
+  /** use a hierarchical directory structure (context.hio/dataset/id) */
+  HIO_DIR_MODE_HIERARCHICAL,
+  /** use a single directory structure (context.dataset.id.hiod) */
+  HIO_DIR_MODE_SINGLE,
+  /** use a single directory but let the user specify the path */
+  HIO_DIR_MODE_USER_SPECIFIED,
+} builtin_posix_dataset_dmode_t;
 
 /* data types */
 typedef struct builtin_posix_module_t {
@@ -74,11 +83,33 @@ typedef struct builtin_posix_module_dataset_t {
 
   /** API to use to read/write files */
   int                 ds_file_api;
+
+  /* the following apply to basic mode only */
+
+  /** use a simple file layout for data (manifest optional) */
+  bool                ds_simple_layout;
+
+  /** regex for simple file names */
+  char               *ds_simple_filename;
+
+  /** suppress the creation of hio dataset path and manifest files */
+  bool                ds_simple_omit_directory;
+
+  /** attempt to import POSIX file(s) if no HIO dataset is found */
+  bool                ds_simple_import;
+
+  /** directory structure mode */
+  builtin_posix_dataset_dmode_t ds_dmode;
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;
 
-int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name,
-                                                hio_dataset_header_t **headers, int *count);
+int builtin_posix_unlink_dir (hio_context_t context, const hio_dataset_header_t *header);
+
+int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name, const char *uri,
+                                                int priority, hio_dataset_list_t *list);
+
+int builtin_posix_dataset_path_data_root (builtin_posix_module_dataset_t *posix_dataset, char **path,
+                                          const char *data_root);
 
 #endif /* BUILTIN_POSIX_COMPONENT_H */

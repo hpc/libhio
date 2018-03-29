@@ -1,9 +1,9 @@
 # -*- mode: shell-script -*-
-# Copyright 2015-2016 Los Alamos National Security, LLC. All rights
+# Copyright 2015-2018 Los Alamos National Security, LLC. All rights
 #                     reserved.
 
 AC_DEFUN([HIO_CHECK_BZ2],[
-    AC_ARG_WITH(bz2, [AS_HELP_STRING([--with-external-bz2=PATH],
+    AC_ARG_WITH(external-bz2, [AS_HELP_STRING([--with-external_bz2=PATH],
                                      [use external bzip2. pass yes to use default version @<:@default=no@:>@])],
                 [], [with_external_bz2=no])
 
@@ -14,6 +14,7 @@ AC_DEFUN([HIO_CHECK_BZ2],[
             else
                 LDFLAGS="$LDFLAGS -L$with_external_bz2/lib64"
             fi
+            LIBS="$LIBS -lbz2"
         fi
 
         AC_CHECK_LIB([bz2],[BZ2_bzBuffToBuffCompress],[hio_have_bz2=1])

@@ -1,6 +1,6 @@
 # -*- Makefile.am -*-
 #
-# Copyright (c) 2014-2016 Los Alamos National Security, LLC. All rights
+# Copyright (c) 2014-2018 Los Alamos National Security, LLC. All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -11,7 +11,7 @@
 
 ACLOCAL_AMFLAGS=-I m4
 
-SUBDIRS = src test doc
+SUBDIRS = src test
 
 EXTRA_DIST =
 DISTCLEANFILES =

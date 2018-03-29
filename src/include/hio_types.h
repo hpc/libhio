@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -12,13 +12,13 @@
 #if !defined(HIO_TYPES_H)
 #define HIO_TYPES_H
 
+#include "hio_config.h"
+
 #if HIO_USE_MPI
 #include <mpi.h>
 #endif
 
 #include "hio.h"
-
-#include "hio_component.h"
 
 #define HIO_MPI_HAVE(v) (defined(MPI_VERSION) && MPI_VERSION >= (v))
 
@@ -30,12 +30,17 @@
 #include <pthread.h>
 #endif
 
+#if defined(HAVE_STDINT_H)
+#include <stdint.h>
+#endif
+
+#include <inttypes.h>
+
 #if HIO_ATOMICS_C11
 
 #include <stdatomic.h>
 
 #elif HIO_ATOMICS_BUILTIN
-
 
 typedef volatile unsigned long atomic_ulong;
 
@@ -53,12 +58,20 @@ typedef volatile unsigned long atomic_ulong;
 #define atomic_fetch_or(p, v) __sync_fetch_and_or(p, v)
 #define atomic_load(v) (*(v))
 
+#else
+
+#error "Noooooooooooooooooooooooooooooooooooooooo"
+
 #endif
 
 /**
  * Maximum number of data roots.
  */
 #define HIO_MAX_DATA_ROOTS   64
+
+#if !defined(PATH_MAX)
+#define PATH_MAX 4096
+#endif
 
 /**
  * Simple lists
@@ -119,6 +132,8 @@ static inline size_t hioi_list_length (hio_list_t *list) {
 
   return count;
 }
+
+struct hio_module_t;
 
 /* dataset function types */
 
@@ -264,6 +279,8 @@ enum {
   HIO_VAR_FLAG_READONLY = 1,
   /** variable value will never change (informational) */
   HIO_VAR_FLAG_CONSTANT = 2,
+  /** variable value is set to the default value (not set by the user) */
+  HIO_VAR_FLAG_DEFAULT_VALUE = 4,
 };
 
 typedef union hio_var_value_t {
@@ -405,7 +422,7 @@ struct hio_context {
   hio_config_kv_list_t c_fconfig;
 
   /** io modules (one for each data root) */
-  hio_module_t      *c_modules[HIO_MAX_DATA_ROOTS];
+  struct hio_module_t  *c_modules[HIO_MAX_DATA_ROOTS];
   /** number of data roots */
   int                c_mcount;
   /** current active data root */
@@ -498,8 +515,9 @@ struct hio_fs_attr_t;
 
 typedef int (*hio_fs_open_fn_t) (hio_context_t context, const char *path, struct hio_fs_attr_t *fs_attr, int flags, int mode);
 
-#define HIO_FS_SUPPORTS_STRIPING 1
-#define HIO_FS_SUPPORTS_RAID     2
+#define HIO_FS_SUPPORTS_STRIPING      1
+#define HIO_FS_SUPPORTS_RAID          2
+#define HIO_FS_SUPPORTS_BLOCK_LOCKING 4
 
 enum {
   HIO_FS_TYPE_DEFAULT,
@@ -516,6 +534,8 @@ enum {
   HIO_FS_LOCK_GROUP,
   /** disable locking entirely */
   HIO_FS_LOCK_DISABLE,
+  /** do not expand locks */
+  HIO_FS_LOCK_NOEXPAND,
 };
 
 struct hio_fs_attr_t {
@@ -620,7 +640,7 @@ struct hio_dataset {
   hio_dataset_mode_t  ds_mode;
 
   /** module in use */
-  hio_module_t       *ds_module;
+  struct hio_module_t *ds_module;
 
   /** list of elements */
   hio_list_t          ds_elist;
@@ -647,6 +667,9 @@ struct hio_dataset {
     /** total number of read operations */
     atomic_ulong        s_rcount;
 
+    /** total time spent closing file(s) */
+    uint64_t            s_ctime;
+
     /** aggregate number of bytes read */
     uint64_t            s_abread;
     /** aggregate read time */
@@ -661,6 +684,9 @@ struct hio_dataset {
     uint64_t            s_awcount;
     /** total number of read operations */
     uint64_t            s_arcount;
+
+    /** total time spent closing file(s) */
+    uint64_t            s_actime;
   } ds_stat;
 
   /** data associated with this dataset */
@@ -682,7 +708,17 @@ struct hio_dataset {
   hio_dataset_map_t   ds_map;
 #endif
 
+  /** data root in use */
+  char               *ds_data_root;
+
+  /** backend-specific dataset location. on POSIX filesystems
+   * this is the dataset directory path */
+  char               *ds_uri;
+
+  /** pointer to dataset shared control data */
   hio_shared_control_t *ds_shared_control;
+  /** size of shared memory region */
+  size_t                ds_shared_region_size;
 
   /** close the dataset and free any internal resources */
   hio_dataset_close_fn_t ds_close;
@@ -806,8 +842,12 @@ struct hio_element {
 struct hio_dataset_header_t {
   /** associated module */
   struct hio_module_t *module;
+  /** context name */
+  char     ds_context_name[HIO_CONTEXT_NAME_MAX];
   /** dataset name */
   char     ds_name[HIO_DATASET_NAME_MAX];
+  /** priority (to break ties) */
+  int      ds_priority;
   /** dataset identifier */
   int64_t  ds_id;
   /** dataset modification time */
@@ -816,8 +856,16 @@ struct hio_dataset_header_t {
   int      ds_mode;
   /** dataset status (set at close time) */
   int      ds_status;
+  /** dataset path */
+  char    *ds_path;
 };
 typedef struct hio_dataset_header_t hio_dataset_header_t;
+
+struct hio_dataset_list_t {
+  hio_dataset_header_t *headers;
+  size_t header_count;
+};
+typedef struct hio_dataset_list_t hio_dataset_list_t;
 
 /**
  * Compare two headers

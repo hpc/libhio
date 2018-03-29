@@ -710,14 +710,15 @@ int hioi_file_flush (hio_file_t *file) {
   return ret ? hioi_err_errno (errno) : HIO_SUCCESS;
 }
 
-int hioi_file_open (hio_file_t *file, const char *filename, int flags, hio_file_api_t api, int access_mode)
+int hioi_file_open (hio_context_t context, hio_file_t *file, hio_fs_attr_t *fs_attr, const char *filename, int flags,
+                    hio_file_api_t api, int access_mode)
 {
   char *file_mode;
   int fd;
 
   /* it is not possible to get open with create without truncation using fopen so use a
    * combination of open and fdopen to get the desired effect */
-  fd = open (filename, flags, access_mode);
+  fd = fs_attr->fs_open (context, filename, fs_attr, flags, access_mode);
   if (fd < 0) {
     return hioi_err_errno (errno);
   }

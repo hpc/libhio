@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -17,12 +17,11 @@
 #if !defined(HIO_INTERNAL_H)
 #define HIO_INTERNAL_H
 
-#include "hio_config.h"
 #include "hio_types.h"
+#include "hio_component.h"
 #include "hio_var.h"
 
 #include <stddef.h>
-#include <inttypes.h>
 
 #if defined(HAVE_SYS_TIME_H)
 #include <sys/time.h>
@@ -145,6 +144,14 @@ int hioi_err_errno (int err);
  * @returns hio error code
  */
 int hioi_context_create_modules (hio_context_t context);
+
+/**
+ * Add an additional data root to an hio context
+ *
+ * @param[in] context   hio context
+ * @param[in] data_root new data root
+ */
+int hioi_context_add_data_root (hio_context_t context, const char *data_root);
 
 /**
  * Get the current time (relative to system boot) in usec
@@ -324,6 +331,18 @@ void hioi_dataset_add_element (hio_dataset_t dataset, hio_element_t element);
  */
 int hioi_dataset_data_lookup (hio_context_t context, const char *name, hio_dataset_data_t **data);
 
+/**
+ * Aggregate performance statistics on all processes
+ *
+ * @param[in] dataset      hio dataset
+ *
+ * This is a collective routine which aggregates all the statistics for the dataset. It
+ * should be called after all IO has completed (including flush and close) but before
+ * the dataset is serialized.
+ */
+int hioi_dataset_aggregate_statistics (hio_dataset_t dataset);
+
+
 /* context dataset persistent data functions */
 
 /**
@@ -352,7 +371,56 @@ hio_dataset_backend_data_t *hioi_dbd_lookup_backend_data (hio_dataset_data_t *da
  *
  * This function is used internally for sorting header arrays.
  */
-int hioi_dataset_headers_sort (hio_dataset_header_t *headers, int count, int64_t id);
+int hioi_dataset_list_sort (hio_dataset_list_t *list, int64_t id);
+
+/**
+ * Allocates an hio dataset list structure
+ */
+hio_dataset_list_t *hioi_dataset_list_alloc (void);
+
+/**
+ * Release an hio dataset list structure
+ *
+ * @param[in] list        list to release
+ *
+ * After this call all the memory associated with a dataset listing will be released. The
+ * memory pointed to by list will no longer be valid.
+ */
+void hioi_dataset_list_release (hio_dataset_list_t *list);
+
+/**
+ * Resize a dataset list array
+ *
+ * @param[in] list        list to resize
+ * @param[in] new_count   new size for list array
+ */
+int hioi_dataset_list_resize (hio_dataset_list_t *list, size_t new_count);
+
+/**
+ * Clean up the memory associated with a dataset header
+ *
+ * @param[in] header   dataset header pointer
+ */
+void hioi_dataset_header_cleanup (hio_dataset_header_t *header);
+
+/**
+ * Get a list of datasets from all data roots
+ *
+ * @param[in] context      libhio context object
+ * @param[in] modules      array of pointers to libhio modules
+ * @param[in] module_count number of modules in the module array
+ * @param[in] dataset_name data set name to list (may be NULL)
+ * @param[in] uri          backend specific uri (may be NULL)
+ * @param[in] sort_key     sort key to use (see hio.h)
+ *
+ * @returns hio list object on success
+ * @returns NULL on failure
+ *
+ * This functions lists all the available (and no so available) datasets on the current
+ * context. The returned list must be freed using hioi_dataset_list_release().
+ */
+hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, hio_module_t **modules, size_t module_count,
+                                           const char *dataset_name, const char *uri, int64_t sort_key);
 
 /* element functions */
 
@@ -389,7 +457,7 @@ int hioi_context_generate_leader_list (hio_context_t context);
 #endif
 
 /**
- * @brief Query filesystem attributes
+ * @brief Query filesystem attributes from all ranks
  *
  * @param[in]  context    hio context
  * @param[in]  path       path on the filesystem to query (directory/file ok)
@@ -405,6 +473,24 @@ int hioi_context_generate_leader_list (hio_context_t context);
  * will be retreived from this function.
  */
 int hioi_fs_query (hio_context_t context, const char *path, hio_fs_attr_t *attributes);
+
+/**
+ * @brief Query filesystem attributes from a single rank
+ *
+ * @param[in]  context    hio context
+ * @param[in]  path       path on the filesystem to query (directory/file ok)
+ * @param[out] attributes filesystem path attributes
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns hio error code on error
+ *
+ * This function queries a filesystem path and returns the attributes of that
+ * path (block count, stripe count, etc). The query function also returns an
+ * open function that should be used to open/create data files. The open function
+ * takes an attributes structure as an extra argument. Any striping information
+ * will be retreived from this function.
+ */
+int hioi_fs_query_single (hio_context_t context, const char *path, hio_fs_attr_t *fs_attr);
 
 /**
  * @brief Set filesystem striping attributes on a path
@@ -480,13 +566,16 @@ static inline bool hioi_dataset_doing_io (hio_dataset_t dataset) {
 /**
  * Helper function to open an hio backing file
  *
+ * @param[in] context     HIO context object
  * @param[in] file        HIO file structure to fill
+ * @param[in] fs_attr     HIO filesystem attributes structure
  * @param[in] filename    file to open
  * @param[in] flags       flags to pass to open()
  * @param[in] api         api to use
  * @param[in] access_mode UNIX permissions
  */
-int hioi_file_open (hio_file_t *file, const char *filename, int flags, hio_file_api_t api, int access_mode);
+int hioi_file_open (hio_context_t context, hio_file_t *file, hio_fs_attr_t *fs_attr, const char *filename, int flags,
+                    hio_file_api_t api, int access_mode);
 
 /**
  * Helper function to close an hio backing file

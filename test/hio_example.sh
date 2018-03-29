@@ -26,8 +26,8 @@ else
   echo "Error: OSTYPE \"$OSTYPE\" not recognized"
 fi
 
-# Create input deck specifyng data root
-echo "#HIO.data_roots = posix:$PWD" > hio_example.input.deck
+# Create input deck specifying data root
+echo "#HIO data_roots = posix:$PWD" > hio_example.input.deck
 
 # Configuration can also be specified via the environment
 export HIO_verbose=20

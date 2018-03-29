@@ -110,7 +110,6 @@ void checkpoint (void *data, size_t count, size_t stride, int timestep) {
              (void *)((intptr_t) data + sizeof (float)),
               count, sizeof (int), stride);
   IF_PRT_X( bw < 0, "hio_element_write_strided bw: %zd", bw);
-  offset += bw;
 
   /* flush all data locally (not really needed here since the close will flush everything) */
   hrc = hio_element_flush (hio_element, HIO_FLUSH_MODE_LOCAL);

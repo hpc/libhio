@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2016-2017 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2016-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
  * $COPYRIGHT$
  *
@@ -40,7 +40,7 @@ static void print_version (void) {
 int main (int argc, char *argv[]) {
   const char *data_root, *context = NULL, *dataset = NULL;
   int opt, opt_index, list_rank = -1;
-  int64_t dataset_id = -1;
+  int64_t dataset_id = HIO_DATASET_ID_ANY;
   uint32_t flags = 0;
 
   struct option long_options[] = {

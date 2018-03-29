@@ -128,6 +128,7 @@ build_r() {
       cmd "make dist"
       gotdist=1;
     fi
+    cmd "ssh $dest_ssh uptime"    # Sometime first ssh hangs, make it innocuous
     cmd "ssh $dest_ssh \"mkdir -p $dir; rm -fR $dir/*\""
     cmd "ssh $dest_ssh \"ls -altr $dir\""
     cmd "scp $tarname.tar.gz \"$dest_scp:$dir\""
@@ -209,15 +210,15 @@ for v in $vers; do
     wf-gnu      ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l gcc   -l openmpi ;;
     wf-intel    ) build_r none    wf-fey     "$rmt_dir/$vs" $tarname -n $vs  -l intel -l openmpi ;;
 
-    ga-gnu      ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
-    ga-gnuk     ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;
-    ga-cray     ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
-    ga-crayk    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-cray ;;
-    ga-intel    ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs                              ;;
-    ga-intel17  ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs -l friendly-testing -s PrgEnv-intel,PrgEnv-intel/17.0.1      ;;
-    ga-intelk   ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
-    ga-intel17k ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
-    ga-pgi      ) build_r vl-gate ga-login1  "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
+    ga-gnu      ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
+    ga-gnuk     ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-gnu  ;;
+    ga-cray     ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-cray ;;
+    ga-crayk    ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl -s PrgEnv-intel,PrgEnv-cray ;;
+    ga-intel    ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
+    ga-intel17  ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -l friendly-testing -s PrgEnv-intel,PrgEnv-intel/17.0.1      ;;
+    ga-intelk   ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
+    ga-intel17k ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s craype-haswell,craype-mic-knl ;;
+    ga-pgi      ) build_r vl-gate ga-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-pgi  ;;
 
     t2-gnuk     ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
     t2-intelk   ) build_r ae-gate tr2-fe1    "$rmt_dir/$vs" $tarname -n $vs   ;;
@@ -233,8 +234,9 @@ for v in $vers; do
     tr-gnu      ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu  ;;
     tr-intel    ) build_r none    tr-fe1     "$rmt_dir/$vs" $tarname -n $vs                              ;;
 
-    bu-gnu      ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-cray,PrgEnv-gnu  -l craype-sandybridge ;;
-    bu-cray     ) build_r vl-gate bu-fe      "$rmt_dir/$vs" $tarname -n $vs                             -l craype-sandybridge ;;
+    bu-gnu      ) build_r vl-gate bu-login   "$rmt_dir/$vs" $tarname -n $vs  -s PrgEnv-intel,PrgEnv-gnu ;;
+    bu-intel    ) build_r vl-gate bu-login   "$rmt_dir/$vs" $tarname -n $vs  ;;
+ 
 
     *           ) msg "Error: version \"$v\" not recognized"
   esac

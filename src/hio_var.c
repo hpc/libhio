@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -209,6 +209,9 @@ static int hioi_var_set_value_internal (hio_context_t context, hio_object_t obje
     var->var_cb (object, var);
   }
 
+  /* the user modified this value so remove the default flag */
+  var->var_flags &= !HIO_VAR_FLAG_DEFAULT_VALUE;
+
   return HIO_SUCCESS;
 }
 
@@ -224,7 +227,7 @@ static int hioi_var_set_value_internal (hio_context_t context, hio_object_t obje
  * similar structure.
  */
 static int hioi_config_set_from_kv_list (hio_config_kv_list_t *list, hio_object_t object,
-                                         hio_var_t *var) {
+                                         hio_var_t *var, const char *source) {
   hio_context_t context = hioi_object_context (object);
 
   for (int i = 0 ; i < list->kv_list_count ; ++i) {
@@ -232,8 +235,8 @@ static int hioi_config_set_from_kv_list (hio_config_kv_list_t *list, hio_object_
     if ((HIO_OBJECT_TYPE_ANY == kv->object_type || object->type == kv->object_type) &&
         (NULL == kv->object_identifier || !strcmp (object->identifier, kv->object_identifier)) &&
         !strcmp (var->var_name, kv->key)) {
-      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from file",
-                var->var_name, kv->value);
+      hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "Setting value for %s to %s from %s",
+                var->var_name, kv->value, source);
       return hioi_var_set_value_internal (context, object, var, kv->value);
     }
   }
@@ -329,15 +332,17 @@ int hioi_config_add (hio_context_t context, hio_object_t object, void *addr, con
 
   new_var->var_type        = type;
   new_var->var_description = description;
-  new_var->var_flags       = flags;
+  new_var->var_flags       = flags | HIO_VAR_FLAG_DEFAULT_VALUE;
   new_var->var_storage     = (hio_var_value_t *) addr;
   new_var->var_enum        = var_enum;
   new_var->var_cb          = notify_cb;
 
-  hioi_config_set_from_kv_list (&context->c_fconfig, object, new_var);
-  hioi_config_set_from_env (context, object, new_var);
-  /* check if any variables were set by hio_config_set_value */
-  hioi_config_set_from_kv_list (&object->config_set, object, new_var);
+  if (!(flags & HIO_VAR_FLAG_READONLY)) {
+    hioi_config_set_from_kv_list (&context->c_fconfig, object, new_var, "file");
+    hioi_config_set_from_env (context, object, new_var);
+    /* check if any variables were set by hio_config_set_value */
+    hioi_config_set_from_kv_list (&object->config_set, object, new_var, "API");
+  }
 
   return HIO_SUCCESS;
 }
@@ -429,7 +434,7 @@ static int hioi_config_list_kv_lookup (hio_config_kv_list_t *list, const char *k
 
 int hioi_config_parse (hio_context_t context, const char *config_file, const char *config_file_prefix) {
   char *key, *value, *default_file = NULL, *buffer, *line, *lastl;
-  int data_size = 0, fd, rc = HIO_SUCCESS;
+  int data_size = 0, fd = -1, rc = HIO_SUCCESS;
   struct stat statinfo;
   int ret;
 
@@ -460,9 +465,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
       return HIO_ERR_NOT_FOUND;
     }
 
-    if (default_file) {
-      free (default_file);
-    }
+    free (default_file);
   }
 
 #if HIO_MPI_HAVE(1)
@@ -486,8 +489,7 @@ int hioi_config_parse (hio_context_t context, const char *config_file, const cha
   if (!hioi_context_using_mpi (context) || 0 == context->c_rank) {
     rc = read (fd, buffer, data_size);
     if (data_size != rc) {
-      hioi_err_push (HIO_ERR_TRUNCATE, &context->c_object, "Read from configuration file %s trucated",
-                    config_file);
+      hioi_err_push (HIO_ERR_TRUNCATE, &context->c_object, "Read from configuration file trucated");
     }
 
     close (fd);
@@ -544,6 +546,34 @@ int hioi_var_init (hio_object_t object) {
 void hioi_var_fini (hio_object_t object) {
   hioi_var_array_fini (&object->configuration);
   hioi_var_array_fini (&object->performance);
+}
+
+bool hioi_config_value_is_default (hio_object_t object, const char *variable) {
+  int config_index = hioi_var_lookup (&object->configuration, variable);
+
+  if (config_index < 0) {
+    /* doesn't exist */
+    return false;
+  }
+
+  return !!(object->configuration.vars[config_index].var_flags & HIO_VAR_FLAG_DEFAULT_VALUE);
+}
+
+int hioi_config_set_readonly (hio_object_t object, const char *variable, bool value) {
+  int config_index = hioi_var_lookup (&object->configuration, variable);
+
+  if (config_index < 0) {
+    /* doesn't exist */
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  if (value) {
+    object->configuration.vars[config_index].var_flags |= HIO_VAR_FLAG_READONLY;
+  } else {
+    object->configuration.vars[config_index].var_flags &= ~HIO_VAR_FLAG_READONLY;
+  }
+
+  return HIO_SUCCESS;
 }
 
 int hioi_config_set_value (hio_object_t object, const char *variable, const char *value) {
@@ -637,7 +667,7 @@ int hio_config_get_value (hio_object_t object, char *variable, char **value) {
       rc = asprintf (value, "%s", var->var_storage->boolval ? "true" : "false");
       break;
     case HIO_CONFIG_TYPE_STRING:
-      *value = strdup (var->var_storage->strval);
+      *value = strdup (var->var_storage->strval ? var->var_storage->strval : "");
       if (NULL == *value) {
         rc = -1;
       }
@@ -738,7 +768,7 @@ int hio_perf_get_count (hio_object_t object, int *count) {
   return HIO_SUCCESS;
 }
 
-int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type) {
+static int hioi_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type) {
   hio_var_t *var;
 
   if (NULL == object || index < 0) {
@@ -752,11 +782,24 @@ int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_t
   var = object->performance.vars + index;
 
   if (name) {
-    *name = strdup (var->var_name);
+    *name = var->var_name;
   }
 
   if (type) {
     *type = var->var_type;
+  }
+
+  return HIO_SUCCESS;
+}
+
+int hio_perf_get_info (hio_object_t object, int index, char **name, hio_config_type_t *type) {
+  int rc = hioi_perf_get_info (object, index, name, type);
+  if (HIO_SUCCESS != rc) {
+    return rc;
+  }
+
+  if (NULL != name && NULL != *name) {
+    *name = strdup (*name);
   }
 
   return HIO_SUCCESS;
@@ -931,7 +974,7 @@ static hio_return_t pr_cfg(hio_object_t object, regex_t * nprx, char * ctxt, cha
     bool ro;
     char * value = NULL;
 
-    hrc = hio_config_get_info((hio_object_t) object, i, &name, &type, &ro);
+    hrc = hioi_config_get_info((hio_object_t) object, i, &name, &type, &ro);
     if (HIO_SUCCESS != hrc) return hrc;
     if (!regexec(nprx, name, 0, NULL, 0)) {
       hrc = hio_config_get_value((hio_object_t) object, name, &value);
@@ -970,7 +1013,7 @@ static hio_return_t pr_perf(hio_object_t object, regex_t * nprx, char * ctxt, ch
 
     hio_config_type_t type;
 
-    hrc = hio_perf_get_info((hio_object_t) object, i, &name, &type);
+    hrc = hioi_perf_get_info((hio_object_t) object, i, &name, &type);
     if (HIO_SUCCESS != hrc) return hrc;
 
     if (!regexec(nprx, name, 0, NULL, 0)) {

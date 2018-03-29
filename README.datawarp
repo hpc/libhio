@@ -347,10 +347,6 @@ default to Python 3, possibly via a "module load python" command will cause
 problems. Additionally, having a file or directory named "python" on the
 current PATH (particularly if the PATH contains ".") will also cause problems.  
 
-
-9) Using dwcli to stage in or out from the job script
------------------------------------------------------
-
 --- end of README.datawarp ---
 
 

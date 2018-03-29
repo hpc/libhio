@@ -867,6 +867,7 @@ mpi_rank = 0;
 	goto finish;
 
 
+    H5FD_hio_init();
     H5FD_hio_settings_init(&settings);
     H5FD_hio_set_elem_name(&settings, "elem");
     H5FD_hio_set_setid(&settings, 23888221L);

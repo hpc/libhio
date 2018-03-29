@@ -1,6 +1,6 @@
 # -*- mode: shell-script-mode -*-
 #
-# Copyright (c) 2014-2017 Los Alamos National Security, LLC. All rights
+# Copyright (c) 2014-2018 Los Alamos National Security, LLC. All rights
 #                         reserved.
 # $COPYRIGHT$
 #
@@ -10,7 +10,7 @@
 #
 
 AC_PREREQ([2.69])
-AC_INIT([libhio], [1.4.0], [hjelmn@lanl.gov])
+AC_INIT([libhio], [1.4.1.0], [hjelmn@lanl.gov])
 AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -96,6 +96,7 @@ AC_CHECK_HEADERS_ONCE([strings.h sys/types.h sys/time.h pthread.h dlfcn.h sys/st
 AC_CHECK_FUNCS_ONCE([access gettimeofday stat statfs MPI_Win_allocate_shared \
                      MPI_Comm_split_type MPI_Win_flush clock_gettime])
 AC_SEARCH_LIBS([dlopen],[dl],[hio_dynamic_component=1],[hio_dynamic_component=0])
+AC_SEARCH_LIBS([floor],[m],[],[AC_ERROR([Could not find math libraries])])
 
 AX_PTHREAD([])
 
