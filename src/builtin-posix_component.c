@@ -2262,28 +2262,34 @@ static int builtin_posix_module_process_reqs (hio_dataset_t dataset, hio_interna
 static int builtin_posix_module_element_flush (hio_element_t element, hio_flush_mode_t mode) {
   builtin_posix_module_dataset_t *posix_dataset =
     (builtin_posix_module_dataset_t *) hioi_element_dataset (element);
+  uint64_t start, stop;
+  int ret;
 
   if (!(posix_dataset->base.ds_flags & HIO_FLAG_WRITE)) {
     return HIO_ERR_PERM;
   }
 
-  if (HIO_FLUSH_MODE_COMPLETE != mode) {
-    /* nothing to do at this time */
-    return HIO_SUCCESS;
-  }
+  start = hioi_gettime ();
 
   if (HIO_FILE_MODE_BASIC != posix_dataset->ds_fmode) {
     for (int i = 0 ; i < HIO_POSIX_MAX_OPEN_FILES ; ++i) {
-      int ret = hioi_file_flush (posix_dataset->files + i);
+      POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_flush (posix_dataset->files + i, mode), "hioi_file_flush", mode, 0);
       if (0 != ret) {
         return ret;
       }
     }
 
+    stop = hioi_gettime ();
+    posix_dataset->base.ds_stat.s_ftime += stop - start;
+
     return HIO_SUCCESS;
   }
 
-  return hioi_file_flush (&element->e_file);
+  POSIX_TRACE_CALL(posix_dataset, ret = hioi_file_flush (&element->e_file, mode), "hioi_file_flush", mode, 0);
+  stop = hioi_gettime ();
+  posix_dataset->base.ds_stat.s_ftime += stop - start;
+
+  return ret;
 }
 
 static int builtin_posix_module_element_complete (hio_element_t element) {

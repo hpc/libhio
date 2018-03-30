@@ -158,6 +158,12 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_bwritten, "bytes_written",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset instance", 0);
 
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_aftime, "flush_time",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio flush calls in this dataset instance", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_afcount, "flush_count",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of times flush was called on this dataset instance", 0);
+
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_wtime, "write_time_usec",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio read callc in this dataset instance", 0);
 
@@ -177,11 +183,17 @@ hio_dataset_t hioi_dataset_alloc (hio_context_t context, const char *name, int64
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_abread, "aggregate_bytes_read",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes read in this dataset", 0);
 
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_aftime, "aggregate_flush_time",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio flush calls in this dataset", 0);
+
+  hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_afcount, "aggregate_flush_count",
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total number of times flush was called on this dataset", 0);
+
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_abwritten, "aggregate_bytes_written",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total number of bytes written in this dataset", 0);
 
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_awtime, "aggregate_write_time_usec",
-                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio read callc in this dataset", 0);
+                 HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio read calls in this dataset", 0);
 
   hioi_perf_add (context, &new_dataset->ds_object, &new_dataset->ds_stat.s_artime, "aggregate_read_time_usec",
                  HIO_CONFIG_TYPE_UINT64, NULL, "Total time spent in hio write calls in this dataset", 0);
@@ -680,10 +692,12 @@ int hioi_dataset_aggregate_statistics (hio_dataset_t dataset) {
   tmp[4] = atomic_load(&dataset->ds_stat.s_rcount);
   tmp[5] = atomic_load(&dataset->ds_stat.s_wcount);
   tmp[6] = dataset->ds_stat.s_ctime;
+  tmp[7] = dataset->ds_stat.s_ftime;
+  tmp[8] = atomic_load(&dataset->ds_stat.s_fcount);
 
 #if HIO_MPI_HAVE(1)
   if (1 != context->c_size) {
-    MPI_Allreduce (MPI_IN_PLACE, tmp, 7, MPI_UINT64_T, MPI_SUM, context->c_comm);
+    MPI_Allreduce (MPI_IN_PLACE, tmp, 9, MPI_UINT64_T, MPI_SUM, context->c_comm);
   }
 #endif
 
@@ -695,6 +709,8 @@ int hioi_dataset_aggregate_statistics (hio_dataset_t dataset) {
   dataset->ds_stat.s_arcount = tmp[4];
   dataset->ds_stat.s_awcount = tmp[5];
   dataset->ds_stat.s_actime = tmp[6];
+  dataset->ds_stat.s_aftime = tmp[7];
+  dataset->ds_stat.s_afcount = tmp[8];
 
   return HIO_SUCCESS;
 }

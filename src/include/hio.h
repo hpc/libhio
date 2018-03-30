@@ -543,9 +543,11 @@ typedef enum hio_flags_t {
 typedef enum hio_flush_mode_t {
   /** Locally flush data. This mode ensures that the user buffers can
    * be reused by the application. It does not ensure the data has
-   * been written out to the backing store. */
+   * been written out to the backing store. This is the equivalent of
+   * the fflush() call from streaming IO. */
   HIO_FLUSH_MODE_LOCAL    = 0,
-  /** Ensure all data has been written out to the backing store. */
+  /** Ensure all data has been written out to the backing store. On
+   * posix this is the equivalent of fsync(). */
   HIO_FLUSH_MODE_COMPLETE = 1
 } hio_flush_mode_t;
 

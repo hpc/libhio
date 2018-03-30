@@ -657,6 +657,11 @@ struct hio_dataset {
     /** aggregate read time */
     uint64_t            s_rtime;
 
+    /** time spent in flush */
+    uint64_t            s_ftime;
+    /** number of times flush was called */
+    atomic_ulong        s_fcount;
+
     /** aggregate number of bytes written */
     uint64_t            s_bwritten;
     /** aggregate write time */
@@ -674,6 +679,11 @@ struct hio_dataset {
     uint64_t            s_abread;
     /** aggregate read time */
     uint64_t            s_artime;
+
+    /** aggregate flush time */
+    uint64_t            s_aftime;
+    /** aggregate number of times flush was called */
+    uint64_t            s_afcount;
 
     /** aggregate number of bytes written */
     uint64_t            s_abwritten;
