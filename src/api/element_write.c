@@ -155,6 +155,8 @@ int hio_element_flush (hio_element_t element, hio_flush_mode_t mode) {
   hio_dataset_t dataset = hioi_element_dataset (element);
   int rc;
 
+  (void) atomic_fetch_add (&dataset->ds_stat.s_fcount, 1);
+
   rc = hioi_dataset_buffer_flush (dataset);
   if (HIO_SUCCESS != rc) {
     return rc;
@@ -166,6 +168,8 @@ int hio_element_flush (hio_element_t element, hio_flush_mode_t mode) {
 int hio_dataset_flush (hio_dataset_t dataset, hio_flush_mode_t mode) {
   hio_element_t element;
   int rc;
+
+  (void) atomic_fetch_add (&dataset->ds_stat.s_fcount, 1);
 
   /* flush buffers to the backing store */
   rc = hioi_dataset_buffer_flush (dataset);

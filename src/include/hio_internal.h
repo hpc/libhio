@@ -627,8 +627,9 @@ ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count);
  * Flush file data to backing file
  *
  * @param[in] file hio file pointer
+ * @param[in] mode flush mode
  */
-int hioi_file_flush (hio_file_t *file);
+int hioi_file_flush (hio_file_t *file, hio_flush_mode_t mode);
 
 #if defined(DEBUG)
 #define hioi_timed_call(fn) {                   \

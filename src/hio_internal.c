@@ -1,6 +1,6 @@
 /* -*- Mode: C; c-basic-offset:2 ; indent-tabs-mode:nil -*- */
 /*
- * Copyright (c) 2014-2016 Los Alamos National Security, LLC.  All rights
+ * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
  * $COPYRIGHT$
  * 
@@ -686,8 +686,8 @@ ssize_t hioi_file_read (hio_file_t *file, void *ptr, size_t count) {
   return (actual < 0) ? actual: total;
 }
 
-int hioi_file_flush (hio_file_t *file) {
-  int ret;
+int hioi_file_flush (hio_file_t *file, hio_flush_mode_t mode) {
+  int ret = 0;
 
   if (!file->f_is_open) {
     return HIO_SUCCESS;
@@ -696,12 +696,14 @@ int hioi_file_flush (hio_file_t *file) {
   switch (file->f_api) {
   case HIO_FAPI_POSIX:
   case HIO_FAPI_PPOSIX:
-    ret = fsync (file->f_fd);
+    if (HIO_FLUSH_MODE_COMPLETE == mode) {
+      ret = fsync (file->f_fd);
+    }
     break;
   case HIO_FAPI_STDIO:
     assert (NULL != file->f_hndl);
     ret = fflush (file->f_hndl);
-    if (0 == ret) {
+    if (0 == ret && HIO_FLUSH_MODE_COMPLETE == mode) {
       ret = fsync (fileno (file->f_hndl));
     }
     break;
