@@ -1,7 +1,11 @@
 HIO NEWS
 ========
 
-Last updated 2018-03-29
+Last updated 2018-05-16
+
+Release hio.1.4.1.2
+
+Fix build error in v1.4.1.1 release tarball.
 
 Release hio.1.4.1.1-rc1
 
