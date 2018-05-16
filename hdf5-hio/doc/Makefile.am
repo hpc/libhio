@@ -5,7 +5,7 @@ if HAVE_PDFLATEX
 EXTRA_DIST += libhdf5hio_api.pdf
 endif
 
-all: libhdf5hio_api.pdf
+docs: libhdf5hio_api.pdf
 
 libhdf5hio_api.pdf:latex/refman.pdf
 	cp latex/refman.pdf libhdf5hio_api.pdf

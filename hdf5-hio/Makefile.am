@@ -11,7 +11,7 @@
 
 ACLOCAL_AMFLAGS=-I m4
 
-SUBDIRS = src test
+SUBDIRS = src test doc
 
 EXTRA_DIST =
 DISTCLEANFILES =
