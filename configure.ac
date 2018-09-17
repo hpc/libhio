@@ -37,7 +37,7 @@ if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && (test -z $CC || test 
     if test ! -n "$LD" ; then
         LD=ld
     fi
-elif test ${MPICC} = "mpicc" ; then
+elif test -n "$MPICC" ; then
     CC=${MPICC}
     CXX=${MPICXX}
     hio_use_mpi=1
