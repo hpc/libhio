@@ -2,6 +2,8 @@
 /*
  * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
+ * Copyright (c) 2019      Triad National Security, LLC. All rights
+ *                         reserved.
  * $COPYRIGHT$
  * 
  * Additional copyrights may follow
@@ -682,7 +684,7 @@ hio_dataset_list_t *hioi_dataset_list_get (hio_context_t context, hio_module_t *
 
 int hioi_dataset_aggregate_statistics (hio_dataset_t dataset) {
   hio_context_t context = hioi_object_context (&dataset->ds_object);
-  uint64_t tmp[7];
+  uint64_t tmp[9];
 
   /* collect statistics now so they can be included in the manifest */
   tmp[0] = dataset->ds_stat.s_bread;
