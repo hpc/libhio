@@ -2,6 +2,8 @@
 #
 # Copyright (c) 2014-2017 Los Alamos National Security, LLC.  All rights
 #                         reserved.
+# Copyright (c) 2019      Triad National Security, LLC. All rights
+#                         reserved.
 # $COPYRIGHT$
 #
 # Additional copyrights may follow
@@ -410,12 +412,12 @@ if [[ ${OSTYPE:0:6} == "darwin" ]]; then
 else
   size="m"
   type aprun > /dev/null 2>&1
-  if [[ $? -eq 0 ]]; then
+  if test -x "$(type -p srun)" ; then
+    mympicmd="srun"
+  elif test -x "$(type -p aprun)" ; then
     # aprun available - must be a Cray
     mympicmd="aprun"
     size="m"
-  elif [[ -n $SLURM_JOB_ID ]]; then 
-    mympicmd="srun"
   else
     # aprun, srun not available - use mpirun
     mympicmd="mpirun"
