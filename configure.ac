@@ -2,6 +2,8 @@
 #
 # Copyright (c) 2014-2018 Los Alamos National Security, LLC. All rights
 #                         reserved.
+# Copyright (c) 2019      Triad National Security, LLC. All rights
+#                         reserved.
 # $COPYRIGHT$
 #
 # Additional copyrights may follow
@@ -10,7 +12,7 @@
 #
 
 AC_PREREQ([2.69])
-AC_INIT([libhio], [1.4.1.2], [hjelmn@lanl.gov])
+AC_INIT([libhio], [1.4.1.3], [hjelmn@lanl.gov])
 AC_CONFIG_SRCDIR([src/hio_context.c])
 AC_CONFIG_HEADERS([src/include/hio_config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -37,7 +39,7 @@ if ( test -n "$XTOS_VERSION" || test -n "$CRAYPE_DIR" ) && (test -z $CC || test 
     if test ! -n "$LD" ; then
         LD=ld
     fi
-elif test -n "$MPICC" ; then
+elif test ! "$MPICC" = "none" ; then
     CC=${MPICC}
     CXX=${MPICXX}
     hio_use_mpi=1

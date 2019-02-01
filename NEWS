@@ -1,7 +1,17 @@
 HIO NEWS
 ========
 
-Last updated 2018-05-16
+Last updated 2019-02-01
+
+Release hio.1.4.1.3
+
+This release fixes a couple of buffer overflows and ensures that we always
+remove an existing dataset (if it exists) if the user passed the
+HIO_FLAG_TRUNC flag on open.
+
+Fixed github bugs:
+
+ - #43: Array bounds overrun
 
 Release hio.1.4.1.2
 
