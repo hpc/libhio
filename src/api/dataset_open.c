@@ -2,6 +2,8 @@
 /*
  * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
+ * Copyright (c) 2019      Triad National Security, LLC. All rights
+ *                         reserved.
  * $COPYRIGHT$
  * 
  * Additional copyrights may follow
@@ -40,16 +42,19 @@ static int hioi_dataset_open_specific (hio_context_t context, hio_module_t *modu
 }
 
 int hio_dataset_open (hio_dataset_t dataset) {
-  hio_context_t context = hioi_object_context ((hio_object_t) dataset);
+  hio_context_t context;
   char data_root[PATH_MAX] = "\0";
   hio_module_t *module = NULL;
   hio_dataset_list_t *list;
-  const int64_t id = dataset->ds_id;
+  int64_t id;
   int rc = HIO_ERR_NOT_FOUND;
 
   if (HIO_OBJECT_NULL == dataset) {
     return HIO_ERR_BAD_PARAM;
   }
+
+  context = hioi_object_context ((hio_object_t) dataset);
+  id = dataset->ds_id;
 
   if (dataset->ds_flags & HIO_FLAG_TRUNC) {
     /* ensure we take the create path later */
