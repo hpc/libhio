@@ -2366,8 +2366,12 @@ static int builtin_posix_component_query (hio_context_t context, const char *dat
   }
 
   if (access (data_root, F_OK)) {
+#if 0
+    /* it might be worthwhile to create the directory if requested. for now just return an error */
     hioi_err_push (hioi_err_errno (errno), &context->c_object, "posix: data root %s does not exist or can not be accessed. directory will be created",
                   data_root);
+#endif
+    return HIO_ERR_NOT_FOUND;
   }
 
   new_module = calloc (1, sizeof (builtin_posix_module_t));
