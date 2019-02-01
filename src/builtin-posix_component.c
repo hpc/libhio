@@ -2,6 +2,8 @@
 /*
  * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved. 
+ * Copyright (c) 2019      Triad National Security, LLC. All rights
+ *                         reserved.
  * $COPYRIGHT$
  * 
  * Additional copyrights may follow
@@ -1589,7 +1591,7 @@ static ssize_t builtin_posix_path_expand (builtin_posix_module_dataset_t *posix_
 
   tmp = strchr (path, '%');
   if (NULL == tmp) {
-    strncat (new_path, path, sizeof (new_path) - current_length);
+    strncat (new_path, path, sizeof (new_path) - current_length - 1);
     *path_out = strdup (new_path);
     return strlen (new_path);
   }
