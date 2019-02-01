@@ -43,6 +43,7 @@ typedef struct builtin_datawarp_module_t {
   builtin_posix_module_t posix_module;
   hio_module_dataset_open_fn_t posix_open;
   hio_module_dataset_unlink_fn_t posix_unlink;
+  hio_module_dataset_unlink_dataset_header_fn_t posix_unlink_dataset_header;
   hio_module_fini_fn_t posix_fini;
   hio_module_compare_fn_t posix_compare;
   char *pfs_path;
@@ -173,11 +174,12 @@ static builtin_datawarp_dataset_backend_data_t *builtin_datawarp_get_dbd (hio_da
   return be_data;
 }
 
-static int builtin_datawarp_revoke_stage (hio_module_t *module, hio_dataset_header_t *header) {
+static int builtin_datawarp_revoke_stage (hio_module_t *module, const hio_dataset_header_t *header) {
   builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   builtin_datawarp_dataset_backend_data_t *ds_data;
+  hio_dataset_header_t tmp_header;
   hio_context_t context = module->context;
-  char *pfs_path, *last_slash, *tmp = header->ds_path;
+  char *pfs_path, *last_slash;
   int rc;
 
   last_slash = strrchr (header->ds_path, '/');
@@ -204,23 +206,25 @@ static int builtin_datawarp_revoke_stage (hio_module_t *module, hio_dataset_head
   }
 
   /* remove the last end-of-job dataset from the burst buffer */
-  (void) builtin_posix_unlink_dir (context, header);
+  (void) datawarp_module->posix_unlink_dataset_header (module, header);
 
   rc = asprintf (&pfs_path, "%s/%s", datawarp_module->pfs_path, last_slash + 1);
   if (0 >= rc) {
     return HIO_ERR_OUT_OF_RESOURCE;
   }
 
-  header->ds_path = pfs_path;
+  memcpy (&tmp_header, header, sizeof (tmp_header));
+  tmp_header.ds_path = pfs_path;
 
   /* ignore error when removing a stage-out directory from the parallel file system */
-  (void) builtin_posix_unlink_dir (module->context, header);
-  header->ds_path = tmp;
+  (void) datawarp_module->posix_unlink_dataset_header (module, &tmp_header);
+  free (pfs_path);
 
   return HIO_SUCCESS;
 }
 
-static int builtin_datawarp_module_dataset_unlink_dir (struct hio_module_t *module, hio_dataset_header_t *header, int stage_mode) {
+static int builtin_datawarp_module_dataset_unlink_dataset_header_mode (struct hio_module_t *module, const hio_dataset_header_t *header, int stage_mode) {
+  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
   int complete = 0, pending, deferred, failed, rc;
 
   hioi_log (module->context, HIO_VERBOSE_DEBUG_MED, "deleting dataset from DataWarp with path %s", header->ds_path);
@@ -241,10 +245,45 @@ static int builtin_datawarp_module_dataset_unlink_dir (struct hio_module_t *modu
 
       /* fall through -- silence static analysis warnings */
   case HIO_DATAWARP_STAGE_MODE_DISABLE:
-    return builtin_posix_unlink_dir (module->context, header);
+    return datawarp_module->posix_unlink_dataset_header (module, header);
   default:
     return builtin_datawarp_revoke_stage (module, header);
   }
+}
+
+static int builtin_datawarp_module_dataset_unlink_dataset_header (struct hio_module_t *module, const hio_dataset_header_t *header) {
+  builtin_datawarp_module_t *datawarp_module = (builtin_datawarp_module_t *) module;
+  builtin_datawarp_dataset_backend_data_t *be_data;
+  builtin_datawarp_resident_dataset_t *rid = NULL, *next;
+  hio_context_t context = module->context;
+  hio_dataset_data_t *ds_data = NULL;
+  int stage_mode;
+  bool found = false;
+
+  (void) hioi_dataset_data_lookup (context, header->ds_name, &ds_data);
+  if (NULL == ds_data) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  be_data = builtin_datawarp_get_dbd (ds_data);
+  if (NULL == be_data) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  hioi_list_foreach_safe (rid, next, be_data->resident_ids, builtin_datawarp_resident_dataset_t, dwrid_list) {
+    if (header->ds_id == rid->header.ds_id) {
+      stage_mode = rid->dwrid_stage_mode;
+      builtin_datawarp_remove_resident (be_data, rid);
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    return HIO_ERR_NOT_FOUND;
+  }
+
+  return builtin_datawarp_module_dataset_unlink_dataset_header_mode (module, header, stage_mode);
 }
 
 static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, const char *name, int64_t set_id) {
@@ -274,32 +313,10 @@ static int builtin_datawarp_module_dataset_unlink (struct hio_module_t *module, 
 
     rc = HIO_ERR_NOT_FOUND;
 
-    (void) hioi_dataset_data_lookup (context, name, &ds_data);
-    if (NULL == ds_data) {
-      break;
-    }
-
-    be_data = builtin_datawarp_get_dbd (ds_data);
-    if (NULL == be_data) {
-      break;
-    }
-
-    hioi_list_foreach_safe (rid, next, be_data->resident_ids, builtin_datawarp_resident_dataset_t, dwrid_list) {
-      if (set_id == rid->header.ds_id) {
-        stage_mode = rid->dwrid_stage_mode;
-        builtin_datawarp_remove_resident (be_data, rid);
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      break;
-    }
-
     for (size_t i = 0 ; i < list->header_count ; ++i) {
       if (list->headers[i].ds_id == set_id) {
-        rc = builtin_datawarp_module_dataset_unlink_dir (module, list->headers + i, stage_mode);
+        rc = builtin_datawarp_module_dataset_unlink_dataset_header_mode (module, list->headers + i, stage_mode);
+        break;
       }
     }
   } while (0);
@@ -327,7 +344,7 @@ static void builtin_datawarp_cleanup (hio_dataset_t dataset, builtin_datawarp_da
     hioi_log (context, HIO_VERBOSE_DEBUG_MED, "deleting dataset %s::%"PRIi64" from datawarp", hioi_object_identifier (dataset),
               ds_id);
 
-    builtin_datawarp_module_dataset_unlink_dir (module, &resident_id->header, resident_id->dwrid_stage_mode);
+    builtin_datawarp_module_dataset_unlink_dataset_header_mode (module, &resident_id->header, resident_id->dwrid_stage_mode);
     builtin_datawarp_remove_resident (be_data, resident_id);
   }
 }
@@ -612,7 +629,7 @@ static int builtin_datawarp_module_dataset_close (hio_dataset_t dataset) {
 
       strncpy (tmp_header.ds_name, hioi_object_identifier (&dataset->ds_object), sizeof (tmp_header.ds_name));
 
-      rc = builtin_posix_unlink_dir (context, &tmp_header);
+      rc = datawarp_module->posix_unlink_dataset_header ((hio_module_t *) datawarp_module, &tmp_header);
       if (HIO_SUCCESS != rc) {
         hioi_log (context, HIO_VERBOSE_WARN, "could not unlink existing file at path %s", pfs_path);
       }
@@ -893,9 +910,11 @@ static int builtin_datawarp_component_query (hio_context_t context, const char *
   new_module->posix_unlink = posix_module->dataset_unlink;
   new_module->posix_fini = posix_module->fini;
   new_module->posix_compare = posix_module->compare;
+  new_module->posix_unlink_dataset_header = posix_module->dataset_unlink_dataset_header;
 
   new_module->posix_module.base.dataset_open = builtin_datawarp_module_dataset_open;
   new_module->posix_module.base.dataset_unlink = builtin_datawarp_module_dataset_unlink;
+  new_module->posix_module.base.dataset_unlink_dataset_header = builtin_datawarp_module_dataset_unlink_dataset_header;
   new_module->posix_module.base.compare = builtin_datawarp_module_compare;
   new_module->posix_module.base.ds_object_size = sizeof (builtin_datawarp_module_dataset_t);
   new_module->posix_module.base.fini = builtin_datawarp_module_fini;

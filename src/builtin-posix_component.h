@@ -2,6 +2,8 @@
 /*
  * Copyright (c) 2014-2018 Los Alamos National Security, LLC.  All rights
  *                         reserved.
+ * Copyright (c) 2019      Triad National Security, LLC. All rights
+ *                         reserved.
  * $COPYRIGHT$
  *
  * Additional copyrights may follow
@@ -103,8 +105,6 @@ typedef struct builtin_posix_module_dataset_t {
 } builtin_posix_module_dataset_t;
 
 extern hio_component_t builtin_posix_component;
-
-int builtin_posix_unlink_dir (hio_context_t context, const hio_dataset_header_t *header);
 
 int builtin_posix_module_dataset_list_internal (struct hio_module_t *module, const char *name, const char *uri,
                                                 int priority, hio_dataset_list_t *list);

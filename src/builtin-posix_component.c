@@ -895,7 +895,6 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
   if (0 == context->c_rank) {
     (void) builtin_posix_dataset_path (posix_dataset, &posix_dataset->base_path);
 
-
     if (!(HIO_FLAG_CREAT & posix_dataset->base.ds_flags)) {
       bool user_defined_dirname = !hioi_config_value_is_default (&posix_dataset->base.ds_object, "dataset_uri");
 
@@ -908,6 +907,15 @@ static int builtin_posix_module_dataset_init (struct hio_module_t *module,
         (void) builtin_posix_dataset_set_default_uri (posix_dataset);
         (void) builtin_posix_dataset_path (posix_dataset, &posix_dataset->base_path);
       }
+    }
+
+    if (posix_dataset->base.ds_flags & HIO_FLAG_TRUNC) {
+      hio_dataset_header_t header = {.ds_id = posix_dataset->base.ds_id,
+                                     .ds_path = posix_dataset->base_path};
+      strcpy (header.ds_context_name, hioi_object_identifier(&context->c_object));
+      strcpy (header.ds_name, hioi_object_identifier(&posix_dataset->base));
+      /* blow away the existing dataset */
+      (void) module->dataset_unlink_dataset_header (module, &header);
     }
   }
 
@@ -1198,13 +1206,6 @@ static int builtin_posix_module_dataset_open (struct hio_module_t *module, hio_d
                      "Use bzip2 compression for dataset manifests", 0);
   }
 
-  if (dataset->ds_flags & HIO_FLAG_TRUNC) {
-    /* blow away the existing dataset */
-    if (0 == context->c_rank) {
-      (void) module->dataset_unlink (module, hioi_object_identifier(dataset), dataset->ds_id);
-    }
-  }
-
   if (0 == context->c_rank) {
     if ((dataset->ds_flags & HIO_FLAG_CREAT) || posix_dataset->ds_simple_layout) {
       rc = builtin_posix_create_dataset_dirs (posix_module, posix_dataset);
@@ -1485,7 +1486,9 @@ static int builtin_posix_unlink_cb (const char *path, const struct stat *sb, int
   return 0;
 }
 
-int builtin_posix_unlink_dir (hio_context_t context, const hio_dataset_header_t *header) {
+static int builtin_posix_unlink_dataset_header (hio_module_t *module, const hio_dataset_header_t *header) {
+  hio_context_t context = module->context;
+
   hioi_log (context, HIO_VERBOSE_DEBUG_LOW, "posix: unlinking existing dataset %s::%" PRId64,
             header->ds_name, header->ds_id);
 
@@ -1532,7 +1535,7 @@ static int builtin_posix_module_dataset_unlink (struct hio_module_t *module, con
 
   for (size_t i = 0 ; i < list->header_count ; ++i) {
     if (list->headers[i].ds_id == set_id) {
-      rc = builtin_posix_unlink_dir (module->context, list->headers + i);
+      rc = builtin_posix_unlink_dataset_header (module, list->headers + i);
       break;
     }
   }
@@ -2327,6 +2330,7 @@ bool builtin_posix_module_compare (hio_module_t *module, const char *data_root) 
 hio_module_t builtin_posix_module_template = {
   .dataset_open   = builtin_posix_module_dataset_open,
   .dataset_unlink = builtin_posix_module_dataset_unlink,
+  .dataset_unlink_dataset_header = builtin_posix_unlink_dataset_header,
 
   .ds_object_size = sizeof (builtin_posix_module_dataset_t),
 

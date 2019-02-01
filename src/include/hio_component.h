@@ -60,6 +60,23 @@ typedef int
 				   const char *name, int64_t set_id);
 
 /**
+ * Remove the specified dataset
+ *
+ * @param[in] module   hio module
+ * @param[in] header   dataset header
+ *
+ * @returns HIO_SUCCESS on success
+ * @returns HIO_ERR_NOT_FOUND if the specified dataset does not exist on the
+ *          data root.
+ * @returns hio error on other failure
+ *
+ * This function removes the specified dataset from the data root associated
+ * with the hio module.
+ */
+typedef int
+(*hio_module_dataset_unlink_dataset_header_fn_t) (struct hio_module_t *module, const hio_dataset_header_t *header);
+
+/**
  * List all dataset identifiers on the data root for a given dataset name
  *
  * @param[in]  module       hio module associated with the dataset element
@@ -134,6 +151,9 @@ typedef struct hio_module_t {
 
   /** reference count */
   atomic_ulong                    ref_count;
+
+  /** delete a dataset/id */
+  hio_module_dataset_unlink_dataset_header_fn_t  dataset_unlink_dataset_header;
 
   /** padding for future expansion */
   uint64_t                        padding[16];
