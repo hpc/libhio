@@ -59,7 +59,7 @@ the above steps in one invocation.  The HIO development team uses it to launch
 builds on remote systems.  You may find it useful; a typical invocation might 
 look like:
 
-./hiobuild -c -s PrgEnv-intel PrgEnv-gnu
+./hiobuild -c -s PrgEnv-intel,PrgEnv-gnu
 
 hiobuild will also create a small script named hiobuild.modules.bash that
 can be sourced to recreate the module environment used for build.
