@@ -3,9 +3,9 @@
 #                     reserved.
 
 AC_DEFUN([HIO_CHECK_JSON],[
-
-AC_ARG_WITH(json, [AS_HELP_STRING([--with-external-json=PATH], [use external json-c. pass yes to use pkgconfig @<:@default=no@:>@])],
-                  [], [with_external_json=no])
+    AC_ARG_WITH(external-json, [AS_HELP_STRING([--with-external-json=PATH], 
+                                      [use external json-c. pass yes to use pkgconfig @<:@default=no@:>@])],
+                  [with_external_json=yes], [with_external_json=no])
 
 if test ! $with_external_json = no ; then
     if test $with_external_json = yes ; then
